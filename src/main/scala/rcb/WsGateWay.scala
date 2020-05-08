@@ -6,9 +6,6 @@ import akka.http.scaladsl.Http
 import akka.stream.scaladsl._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.ws._
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
-import javax.xml.bind.DatatypeConverter
 import play.api.libs.json.JsResult
 
 import scala.concurrent.{Future, Promise}
@@ -31,7 +28,7 @@ class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
 
     val outgoing = {
       val nonce = System.currentTimeMillis()
-      val authMessage = TextMessage(buildOpJson("authKey", apiKey, nonce, getApiSignature(apiSecret, nonce)))
+      val authMessage = TextMessage(buildOpJson("authKey", apiKey, nonce, getBitmexApiSignature(s"GET/realtime$nonce", apiSecret)))
       val subscribeOrderMessage = TextMessage(buildOpJson("subscribe", "order:XBTUSD"))
       Source(List(authMessage, subscribeOrderMessage))
     }
@@ -52,16 +49,6 @@ class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
     // in a real application you would not side effect here
     connected.onComplete(status => log.info(s"WebSocket connection completed, status: $status"))
     Thread.sleep(minSleepInSecs * 1000)  // to capture error messages prior to closing
-
-  }
-
-  def getApiSignature(apiSecret: String, nonce: Long): String = {
-    val keyString = "GET/realtime" + nonce
-    val sha256HMAC = Mac.getInstance("HmacSHA256")
-    val secretKey = new SecretKeySpec(apiSecret.getBytes("UTF-8"), "HmacSHA256")
-    sha256HMAC.init(secretKey)
-    val hash = DatatypeConverter.printHexBinary(sha256HMAC.doFinal(keyString.getBytes))
-    hash
   }
 
   def buildOpJson(op: String, args: Any*): String = {

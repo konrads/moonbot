@@ -1,5 +1,0 @@
-package rcb
-
-class HttpGateway {
-
-}

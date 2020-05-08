@@ -12,10 +12,13 @@ object OrchestratorActor {
   def apply(): Behavior[OrchestratorModel] =
     Behaviors.receive {
       case (context, NotifyWs(ob:OrderBook)) =>
-        context.log.info("got ws message OrderBook: " + ob)
+        context.log.info(s"got ws message OrderBook: $ob")
         Behaviors.same
       case (context, NotifyWs(o:UpdatedOrder)) =>
-        context.log.info("got ws message UpdatedOrder: " + o)
+        context.log.info(s"got ws message UpdatedOrder: $o")
+        Behaviors.same
+      case (context, NotifyWs(msg)) =>
+        context.log.error(s"Unexpected WS message: $msg")
         Behaviors.same
     }
 }

@@ -30,14 +30,12 @@ object WsError { implicit val aFmt: Format[WsError] = Json.format[WsError] }
 case class Ignorable(jsVal: JsValue) extends WsModel
 object Ignorable { implicit val aFmt: Format[Ignorable] = Json.format[Ignorable] }
 
-// case class Funding() extends WsModel
-
 object WsModel {
-  implicit val aReads: Reads[WsModel] = (json: JsValue) => {
+  implicit val aReads: Reads[WsModel] = (json: JsValue) =>
     ((json \ "table").asOpt[String], (json \ "action").asOpt[String]) match {
       case (Some(table), _@Some(_)) if table.startsWith("orderBook") => json.validate[OrderBook]
       case (Some("order"), Some("update")) => json.validate[UpdatedOrder]
-      case (Some(table), Some("partial")) if Seq("order", "funding").contains(table) => JsSuccess(Ignorable(json)) // JsResult.fromTry(Try(Ignorable(json)))  // FIXME: gotta be a better way for success
+      case (Some(table), Some("partial")) if Seq("order", "funding").contains(table) => JsSuccess(Ignorable(json))
       case _ => (json \ "success").asOpt[Boolean] match {
         case Some(_) => json.validate[Success]
         case None => ((json \ "status").asOpt[Int], (json \ "error").asOpt[String]) match {
@@ -49,7 +47,6 @@ object WsModel {
         }
       }
     }
-  }
 
   def asModel(jsonStr: String): JsResult[WsModel] = {
     val parsedJsValue = Json.parse(jsonStr)

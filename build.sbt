@@ -16,16 +16,14 @@ libraryDependencies ++= {
   val scalaTestVsn = "3.1.1"
   Seq(
     // core
-    //"javax.xml.bind"    % "jaxb-api"              % "2.3.1",
-    //"com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVsn,
+    "javax.xml.bind"    % "jaxb-api"              % "2.3.1",
     "com.typesafe.akka" %% "akka-http"            % akkaHttpVsn,
-    //"com.typesafe.akka" %% "akka-actor"           % akkaVsn,
     "com.typesafe.akka" %% "akka-stream"          % akkaVsn,
     "com.typesafe.akka" %% "akka-actor-typed"     % akkaVsn,
     "com.typesafe.akka" %% "akka-slf4j"           % akkaVsn,
-    "ch.qos.logback"    % "logback-classic"       % "1.2.3",
+    "ch.qos.logback"    %  "logback-classic"      % "1.2.3",
     "com.typesafe.play" %% "play-json"            % "2.8.1",
-    //"com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
     "org.ta4j" % "ta4j-core" % "0.13",
     // If testkit used, explicitly declare dependency on akka-streams-testkit in same version as akka-actor
     "org.scalatest"     %% "scalatest"            % scalaTestVsn % Test,
