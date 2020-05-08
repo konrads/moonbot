@@ -48,7 +48,7 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: In
       val data = retriedData(retry)
 
       val expiry = ((System.currentTimeMillis / 1000) + 100).toInt //should be 15
-      val keyString = s"${method}${urlPath}${expiry}${data}"
+      val keyString = s"${method.value}${urlPath}${expiry}${data}"
       val apiSignature = getBitmexApiSignature(keyString, apiSecret)
       val request = HttpRequest(method = method, uri = url, entity = data).withEntity("")
         .withHeaders(RawHeader("api-expires", s"$expiry"), RawHeader("api-key", apiKey), RawHeader("api-signature", apiSignature) )

@@ -1,16 +1,23 @@
 package rcb
 
+import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.rogach.scallop._
 import play.api.libs.json.{JsError, JsResult, JsSuccess}
-import rcb.BotApp.{bitmexApiKey, bitmexApiSecret, bitmexRestRetries, bitmexUrl, bitmexWsUrl, orchestrator}
 
 
 object Cli extends App {
   private val log = Logger("Cli")
 
+  val conf = ConfigFactory.load()
+  val bitmexUrl         = conf.getString("bitmex.url")
+  val bitmexWsUrl       = conf.getString("bitmex.wsUrl")
+  val bitmexApiKey      = conf.getString("bitmex.apiKey")
+  val bitmexApiSecret   = conf.getString("bitmex.apiSecret")
+  val bitmexRestRetries = conf.getInt("bitmex.restRetries")
+
   // playground for RestGateway, WsGateway, etc
-  class Conf extends ScallopConf(args) {
+  class CliConf extends ScallopConf(args) {
     val price   = opt[BigDecimal]()
     val qty     = opt[BigDecimal]()
     val markup  = opt[BigDecimal]()
@@ -18,7 +25,7 @@ object Cli extends App {
     val action  = trailArg[String]()
     verify()
   }
-  val conf = new Conf()
+  val cliConf = new CliConf()
 
   implicit val serviceSystem = akka.actor.ActorSystem()
   implicit val executionContext = serviceSystem.dispatcher
@@ -39,7 +46,7 @@ object Cli extends App {
   }
 
     // validate sets of options
-  (conf.action().toLowerCase, conf.price.toOption, conf.qty.toOption, conf.markup.toOption, conf.orderID.toOption) match {
+  (cliConf.action(), cliConf.price.toOption, cliConf.qty.toOption, cliConf.markup.toOption, cliConf.orderID.toOption) match {
     case ("bid", Some(price), Some(qty), Some(markup), _) =>
       log.info(s"issuing bid: price: $price, qty: $qty, markup: $markup")
       restGateway.placeOrder(qty, price, OrderSide.Buy, markup).onComplete {

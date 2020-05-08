@@ -67,5 +67,3 @@ class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
 
   def close(): Unit = endOfLivePromise.success(None)
 }
-
-
