@@ -24,7 +24,6 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, restRetries: I
 
   // FIXME: consider backoff and retries!
   // FIXME: consider timeouts!
-  // FIXME: marshal response to case class
   // FIXME: keep alive, in htttp and ws?
   // FIXME: reconnections, in here and ws?
 

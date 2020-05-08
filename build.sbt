@@ -8,7 +8,16 @@ scalaVersion := "2.13.1"
 
 sbtVersion := "1.3.2"
 
+test in assembly := {}
+
 mainClass in Compile := Some("rcb.BotApp")
+
+assemblyMergeStrategy in assembly := {
+  case "module-info.class" => MergeStrategy.discard
+  case x =>
+    val oldStrategy = (assemblyMergeStrategy in assembly).value
+    oldStrategy(x)
+}
 
 libraryDependencies ++= {
   val akkaVsn = "2.6.5"
