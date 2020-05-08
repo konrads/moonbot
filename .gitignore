@@ -1,0 +1,6 @@
+.idea
+.DS_Store
+*.private
+target
+project/project
+scala-logging.log
