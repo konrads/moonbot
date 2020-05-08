@@ -32,6 +32,7 @@ libraryDependencies ++= {
     "com.typesafe.akka" %% "akka-slf4j"           % akkaVsn,
     "ch.qos.logback"    %  "logback-classic"      % "1.2.3",
     "com.typesafe.play" %% "play-json"            % "2.8.1",
+    "org.rogach"        %% "scallop"              % "3.4.0",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
     "org.ta4j" % "ta4j-core" % "0.13",
     // If testkit used, explicitly declare dependency on akka-streams-testkit in same version as akka-actor

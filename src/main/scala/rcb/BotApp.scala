@@ -5,8 +5,9 @@ import com.typesafe.scalalogging.Logger
 import play.api.libs.json._
 import akka.actor.typed.{ActorRef, ActorSystem}
 
+
 object BotApp extends App {
-  private val log = Logger[WsGateWay]
+  private val log = Logger("BotApp")
 
   val conf = ConfigFactory.load()
   val bitmexUrl         = conf.getString("bitmex.url")
@@ -16,18 +17,16 @@ object BotApp extends App {
   val bitmexRestRetries = conf.getInt("bitmex.restRetries")
 
   implicit val serviceSystem = akka.actor.ActorSystem()
-  val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, restRetries = bitmexRestRetries)
+  val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, maxRetries = bitmexRestRetries)
   val wsGateway = new WsGateWay(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret)
 
   val orchestrator: ActorRef[OrchestratorModel] = ActorSystem(OrchestratorActor(), "orchestrator-actor")
 
-  val wsMessageConsumer = (jsResult: JsResult[WsModel]) => {
-    jsResult match {
-      case JsSuccess(value:OrderBook,    _) => orchestrator ! NotifyWs(value)
-      case JsSuccess(value:UpdatedOrder, _) => orchestrator ! NotifyWs(value)
-      case JsSuccess(value, _)              => log.info(s"Got orchestrator ignorable message: $value")
-      case s:JsError                        => log.error(s"error!: $s")
-    }
+  val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
+    case JsSuccess(value:OrderBook,    _) => orchestrator ! NotifyWs(value)
+    case JsSuccess(value:UpdatedOrder, _) => orchestrator ! NotifyWs(value)
+    case JsSuccess(value, _)              => log.info(s"Got orchestrator ignorable message: $value")
+    case s:JsError                        => log.error(s"error!: $s")
   }
   wsGateway.run(wsMessageConsumer)
 }

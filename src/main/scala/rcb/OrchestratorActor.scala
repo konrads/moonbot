@@ -8,6 +8,7 @@ sealed trait OrchestratorModel
 case class NotifyWs(msg: WsModel) extends OrchestratorModel
 case class NotifyHttp(msg: String) extends OrchestratorModel
 
+
 object OrchestratorActor {
   def apply(): Behavior[OrchestratorModel] =
     Behaviors.receive {

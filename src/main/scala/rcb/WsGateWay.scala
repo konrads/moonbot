@@ -17,13 +17,19 @@ class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
 
   private var endOfLivePromise: Promise[Option[Message]] = null // for the purpose of killing the WS connection
 
-  def run(wsConsume: (JsResult[WsModel]) => Unit): Unit = {
+  def run(wsConsume: PartialFunction[JsResult[WsModel], Unit]): Unit = {
     import system.dispatcher
 
     val incoming: Sink[Message, Future[Done]] =
       Sink.foreach[Message] {
-        case message: TextMessage.Strict => wsConsume(WsModel.asModel(message.text))
-        case other                       => log.error(s"Unexpected non-text message: $other")
+        case message: TextMessage.Strict =>
+          val asModel = WsModel.asModel(message.text)
+          if (wsConsume.isDefinedAt(asModel))
+            wsConsume(WsModel.asModel(message.text))
+          else
+            log.debug(s"Ignored ws message: $asModel")
+        case other  =>
+          log.error(s"Unexpected non-text message: $other")
       }
 
     val outgoing = {
