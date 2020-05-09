@@ -44,6 +44,12 @@ object UpdatedOrder { implicit val aFmt: Reads[UpdatedOrder] = Json.reads[Update
 case class InsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel
 object InsertOrder { implicit val aFmt: Reads[InsertOrder] = Json.reads[InsertOrder] }
 
+case class TradeData(side: String, size: Int, price: BigDecimal) extends WsModel
+object TradeData { implicit val aFmt: Reads[TradeData] = Json.reads[TradeData] }
+
+case class Trade(data: Seq[TradeData]) extends WsModel
+object Trade { implicit val aFmt: Reads[Trade] = Json.reads[Trade] }
+
 case class WsError(status: Int, error: String) extends WsModel
 object WsError { implicit val aFmt: Reads[WsError] = Json.reads[WsError] }
 
@@ -57,7 +63,8 @@ object WsModel {
       case (Some(table), _@Some(_)) if table.startsWith("orderBook") => json.validate[OrderBook]
       case (Some("order"), Some("insert")) => json.validate[InsertOrder]
       case (Some("order"), Some("update")) => json.validate[UpdatedOrder]
-      case (Some(table), Some("partial")) if Seq("order", "funding").contains(table) => JsSuccess(Ignorable(json))
+      case (Some("trade"), Some("insert")) => json.validate[Trade]
+      case (Some(table), Some("partial")) if Seq("order", "trade").contains(table) => JsSuccess(Ignorable(json))
       case _ => (json \ "success").asOpt[Boolean] match {
         case Some(_) => json.validate[Success]
         case None => ((json \ "status").asOpt[Int], (json \ "error").asOpt[String]) match {

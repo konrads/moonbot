@@ -41,11 +41,16 @@ object Cli extends App {
   val consumeOrder: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value:UpdatedOrder, _) => log.info(s"UpdatedOrder: $value")
     case JsSuccess(value:InsertOrder, _)  => log.info(s"InsertOrder: $value")
+    case JsSuccess(value:Trade,  _)       => log.info(s"Trade: $value")  // Not an order but useful in order monitoring
     case s:JsError                        => log.error(s"error!: $s")
   }
   val consumeOrderBook: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value:OrderBook,  _) => log.info(s"OrderBook: $value")
     case s:JsError                      => log.error(s"error!: $s")
+  }
+  val consumeTrade: PartialFunction[JsResult[WsModel], Unit] = {
+    case JsSuccess(value:Trade,  _) => log.info(s"Trade: $value")
+    case s:JsError                  => log.error(s"error!: $s")
   }
 
     // validate sets of options
@@ -87,6 +92,9 @@ object Cli extends App {
     case ("monitorOrderBook", _, _, _, _, _) =>
       log.info(s"monitoring order book")
       wsGateway.run(consumeOrderBook)
+    case ("monitorTrade", _, _, _, _, _) =>
+      log.info(s"monitoring trade")
+      wsGateway.run(consumeTrade)
     case (action, priceOpt, qtyOpt, markupOpt, orderidOpt, expiryOpt) =>
       log.error(s"Unknown params: action: $action, price: $priceOpt, amount: $qtyOpt, markup: $markupOpt, orderid: $orderidOpt, expiryOpt: $expiryOpt"); sys.exit(-1)
   }
