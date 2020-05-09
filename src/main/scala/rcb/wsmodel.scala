@@ -31,7 +31,7 @@ case class OrderData(orderID: String, price: Option[BigDecimal], ordStatus: Opti
     case (Some("Canceled"), _, Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
     case (Some("Canceled"), _, _)      => OrderLifecycle.Canceled
     case (Some("Filled"), _, _)        => OrderLifecycle.Filled
-    case _ => OrderLifecycle.Open
+    case _                             => OrderLifecycle.Open
   }
 
   override def toString = s"${ScalaRunTime._toString(this)} { lifecycle = $lifecycle }"
