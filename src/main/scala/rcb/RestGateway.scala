@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.RawHeader
+import akka.http.scaladsl.model.headers.{RawHeader, `Content-Type`}
 import akka.util.ByteString
 import com.typesafe.scalalogging.Logger
 import play.api.libs.json.{JsError, JsSuccess}
@@ -18,40 +18,52 @@ case class CreateOrderIssued(orderID: String) extends HttpReply
 case class CancelOrderIssued(orderID: String) extends HttpReply
 
 class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: Int)(implicit system: ActorSystem) {
-  private val log = Logger[WsGateWay]
-  implicit val executionContext = system.dispatcher
-
+  val NON_RETRYABLE_ERRORS = Seq(
+    "Account has insufficient",
+    "Invalid orderQty",
+    "Invalid price tickSize"
+  )
   // FIXME: consider timeouts!
   // FIXME: keep alive, in htttp and ws?
   // FIXME: reconnections, in here and ws?
 
-  // https://blog.colinbreck.com/backoff-and-retry-error-handling-for-akka-streams/
-  def placeOrder(qty: BigDecimal, price: BigDecimal, side: OrderSide, markupIncrease: BigDecimal): Future[RestModel] =
-    sendMsgRetried(
+  // based on: https://blog.colinbreck.com/backoff-and-retry-error-handling-for-akka-streams/
+  private val log = Logger[RestGateway]
+  implicit val executionContext = system.dispatcher
+
+  def placeOrder(qty: BigDecimal, price: BigDecimal, side: OrderSide, markup: BigDecimal, expiryOpt: Option[Int] = None): Future[RestModel] =
+    reqRetried(
       POST,
       "/api/v1/order",
-      (retry: Int) => s"symbol=XBTUSD&ordType=Limit&timeInForce=GoodTillCancel&orderQty=$qty&side=$side&price=${price + markupIncrease * retry * (if (side == OrderSide.Buy) 1 else -1)}")
+      (retry: Int) => s"symbol=XBTUSD&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=${price + markup * retry * (if (side == OrderSide.Buy) -1 else 1)}",
+      expiryOpt)
 
-  def amendOrder(orderID: String, price: BigDecimal): Future[RestModel] =
-    sendMsgRetried(
+  def amendOrder(orderID: String, price: BigDecimal, expiryOpt: Option[Int] = None): Future[RestModel] =
+    reqRetried(
       PUT,
       "/api/v1/order",
-      (retry: Int) => s"orderID=$orderID&price=$price")
+      (retry: Int) => s"orderID=$orderID&price=$price",
+      expiryOpt)
 
-  def cancelOrder(orderID: String): Future[RestModel] =    sendMsgRetried(
+  def cancelOrder(orderID: String, expiryOpt: Option[Int] = None): Future[RestModel] =    reqRetried(
     DELETE,
     "/api/v1/order",
-    (retry: Int) => s"orderID=$orderID")
+    (retry: Int) => s"orderID=$orderID",
+    expiryOpt)
 
-  private def sendMsgRetried(method: HttpMethod, urlPath: String, retriedData: (Int) => String): Future[RestModel] = {
+  private def reqRetried(method: HttpMethod, urlPath: String, retriedData: (Int) => String, expiryOpt: Option[Int] = None): Future[RestModel] = {
     def sendMsg(retry: Int): Future[RestModel] = {
       val data = retriedData(retry)
 
-      val expiry = ((System.currentTimeMillis / 1000) + 100).toInt //should be 15
+      val expiry = expiryOpt.getOrElse((System.currentTimeMillis / 1000 + 100).toInt) //should be 15
       val keyString = s"${method.value}${urlPath}${expiry}${data}"
       val apiSignature = getBitmexApiSignature(keyString, apiSecret)
-      val request = HttpRequest(method = method, uri = url, entity = data).withEntity("")
-        .withHeaders(RawHeader("api-expires", s"$expiry"), RawHeader("api-key", apiKey), RawHeader("api-signature", apiSignature) )
+      val request = HttpRequest(method = method, uri = url + urlPath)
+        .withEntity(ContentTypes.`application/x-www-form-urlencoded`, data)
+        .withHeaders(
+          RawHeader("api-expires",   s"$expiry"),
+          RawHeader("api-key",       apiKey),
+          RawHeader("api-signature", apiSignature))
 
       Http().singleRequest(request)
         .flatMap {
@@ -65,7 +77,12 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: In
             }
           case HttpResponse(s@StatusCodes.BadRequest, _headers, entity, _) =>
             entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-              b => Future.failed(RetryableError(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+              b =>
+                val contents = b.utf8String
+                NON_RETRYABLE_ERRORS.filter(contents.contains) match {
+                  case Nil => Future.failed(RetryableError(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: $contents"))
+                  case s => Future.failed(new Exception(s"${s.mkString(", ")}: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: $contents"))
+                }
             }
           case HttpResponse(status, _headers, entity, _) =>
             entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
@@ -86,5 +103,7 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: In
     retry(sendMsg, 0)
   }
 }
+
+case class MarkupIncreasingError(msg: String) extends Exception(msg)
 
 case class RetryableError(msg: String) extends Exception(msg)

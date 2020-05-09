@@ -21,7 +21,9 @@ object Cli extends App {
     val price   = opt[BigDecimal]()
     val qty     = opt[BigDecimal]()
     val markup  = opt[BigDecimal]()
-    val orderID = opt[String]()
+    val orderid = opt[String]()
+    val expiry  = opt[Int]()
+    val minwssleep = opt[Int](default = Some(10))
     val action  = trailArg[String]()
     verify()
   }
@@ -31,13 +33,14 @@ object Cli extends App {
   implicit val executionContext = serviceSystem.dispatcher
 
   val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, maxRetries = bitmexRestRetries)
-  val wsGateway = new WsGateWay(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret)
+  val wsGateway = new WsGateWay(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, minSleepInSecs = cliConf.minwssleep.toOption)
   val consumeAll: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value, _) => log.info(s"${value.getClass.getSimpleName}: $value")
     case s:JsError           => log.error(s"error!: $s")
   }
   val consumeOrder: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value:UpdatedOrder, _) => log.info(s"UpdatedOrder: $value")
+    case JsSuccess(value:InsertOrder, _)  => log.info(s"InsertOrder: $value")
     case s:JsError                        => log.error(s"error!: $s")
   }
   val consumeOrderBook: PartialFunction[JsResult[WsModel], Unit] = {
@@ -46,45 +49,45 @@ object Cli extends App {
   }
 
     // validate sets of options
-  (cliConf.action(), cliConf.price.toOption, cliConf.qty.toOption, cliConf.markup.toOption, cliConf.orderID.toOption) match {
-    case ("bid", Some(price), Some(qty), Some(markup), _) =>
+  (cliConf.action(), cliConf.price.toOption, cliConf.qty.toOption, cliConf.markup.toOption, cliConf.orderid.toOption, cliConf.expiry.toOption) match {
+    case ("bid", Some(price), Some(qty), Some(markup), _, expiryOpt) =>
       log.info(s"issuing bid: price: $price, qty: $qty, markup: $markup")
-      restGateway.placeOrder(qty, price, OrderSide.Buy, markup).onComplete {
+      wsGateway.run(consumeOrder)
+      restGateway.placeOrder(qty, price, OrderSide.Buy, markup, expiryOpt).onComplete {
         case scala.util.Success(resp) => log.info(s"bid response: $resp")
         case scala.util.Failure(exc)  => log.error(s"bid exception: $exc")
       }
-      wsGateway.run(consumeOrder)
-    case ("ask", Some(price), Some(qty), Some(markup), _) =>
+    case ("ask", Some(price), Some(qty), Some(markup), _, expiryOpt) =>
       log.info(s"issuing ask: price: $price, qty: $qty, markup: $markup")
-      restGateway.placeOrder(qty, price, OrderSide.Sell, markup).onComplete {
+      wsGateway.run(consumeOrder)
+      restGateway.placeOrder(qty, price, OrderSide.Sell, markup, expiryOpt).onComplete {
         case scala.util.Success(resp) => log.info(s"ask response: $resp")
         case scala.util.Failure(exc)  => log.error(s"ask exception: $exc")
       }
+    case ("amend", Some(price), _, _, Some(orderid), expiryOpt) =>
+      log.info(s"amending: price: $price, orderid: $orderid")
       wsGateway.run(consumeOrder)
-    case ("amend", Some(price), _, _, Some(orderID)) =>
-      log.info(s"amending: price: $price, orderID: $orderID")
-      restGateway.amendOrder(orderID, price).onComplete {
+      restGateway.amendOrder(orderid, price, expiryOpt).onComplete {
         case scala.util.Success(resp) => log.info(s"amend response: $resp")
         case scala.util.Failure(exc)  => log.error(s"amend exception: $exc")
       }
+    case ("cancel", _, _, _, Some(orderid), expiryOpt) =>
+      log.info(s"canceling: orderid: $orderid")
       wsGateway.run(consumeOrder)
-    case ("cancel", _, _, _, Some(orderID)) =>
-      log.info(s"canceling: orderID: $orderID")
-      restGateway.cancelOrder(orderID).onComplete {
+      restGateway.cancelOrder(orderid, expiryOpt).onComplete {
         case scala.util.Success(resp) => log.info(s"cancel response: $resp")
         case scala.util.Failure(exc)  => log.error(s"cancel exception: $exc")
       }
-      wsGateway.run(consumeOrder)
-    case ("monitorAll", _, _, _,  _) =>
+    case ("monitorAll", _, _, _,  _, _) =>
       log.info(s"monitoring all ws")
       wsGateway.run(consumeAll)
-    case ("monitorOrder", _, _, _, _) =>
+    case ("monitorOrder", _, _, _, _, _) =>
       log.info(s"monitoring orders")
       wsGateway.run(consumeOrder)
-    case ("monitorOrderBook", _, _, _, _) =>
+    case ("monitorOrderBook", _, _, _, _, _) =>
       log.info(s"monitoring order book")
       wsGateway.run(consumeOrderBook)
-    case (action, priceOpt, qtyOpt, markupOpt, orderIDOpt) =>
-      log.error(s"Unknown params: action: $action, price: $priceOpt, amount: $qtyOpt, markup: $markupOpt, orderID: $orderIDOpt"); sys.exit(-1)
+    case (action, priceOpt, qtyOpt, markupOpt, orderidOpt, expiryOpt) =>
+      log.error(s"Unknown params: action: $action, price: $priceOpt, amount: $qtyOpt, markup: $markupOpt, orderid: $orderidOpt, expiryOpt: $expiryOpt"); sys.exit(-1)
   }
 }

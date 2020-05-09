@@ -12,7 +12,7 @@ import scala.concurrent.{Future, Promise}
 import com.typesafe.scalalogging.Logger
 
 // thanks to: https://doc.akka.io/docs/akka-http/10.0.2/scala/http/client-side/websocket-support.html#websocketclientlayer
-class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, minSleepInSecs: Int = 5)(implicit val system: ActorSystem) {
+class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, minSleepInSecs: Option[Int] = Some(5))(implicit val system: ActorSystem) {
   private val log = Logger[WsGateWay]
 
   private var endOfLivePromise: Promise[Option[Message]] = null // for the purpose of killing the WS connection
@@ -54,7 +54,7 @@ class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
     log.info(s"Sleeping for $minSleepInSecs secs...")
     // in a real application you would not side effect here
     connected.onComplete(status => log.info(s"WebSocket connection completed, status: $status"))
-    Thread.sleep(minSleepInSecs * 1000)  // to capture error messages prior to closing
+    Thread.sleep(minSleepInSecs.getOrElse(5) * 1000)  // to capture error messages prior to closing
   }
 
   def buildOpJson(op: String, args: Any*): String = {
