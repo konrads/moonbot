@@ -16,8 +16,8 @@ package object rcb {
     val Buy, Sell = Value
   }
 
-  object OrderAction extends Enumeration {
-    type OrderAction = Value
-    val Place, Ammend, Cancel = Value
+  object OrderLifecycle extends Enumeration {
+    type OrderLifecycle = Value
+    val NewInactive, NewActive, Canceled, PostOnlyFailure, Filled, Unknown = Value
   }
 }

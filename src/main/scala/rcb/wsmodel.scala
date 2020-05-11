@@ -5,11 +5,6 @@ import play.api.libs.json.Reads._
 
 import scala.runtime.ScalaRunTime
 
-object OrderLifecycle extends Enumeration {
-  type OrderLifecycle = Value
-  val NewInactive, NewActive, Canceled, PostOnlyFailure, Filled, Open = Value
-}
-
 sealed trait WsModel
 
 case class Info(info: String, version: String, timestamp: String, docs: String) extends WsModel
@@ -31,7 +26,7 @@ case class OrderData(orderID: String, price: Option[BigDecimal], ordStatus: Opti
     case (Some("Canceled"), _, Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
     case (Some("Canceled"), _, _)      => OrderLifecycle.Canceled
     case (Some("Filled"), _, _)        => OrderLifecycle.Filled
-    case _                             => OrderLifecycle.Open
+    case _                             => OrderLifecycle.Unknown
   }
 
   override def toString = s"${ScalaRunTime._toString(this)} { lifecycle = $lifecycle }"
@@ -41,8 +36,8 @@ object OrderData { implicit val aFmt: Reads[OrderData] = Json.reads[OrderData] }
 case class UpdatedOrder(action: Option[String], data: Seq[OrderData]) extends WsModel
 object UpdatedOrder { implicit val aFmt: Reads[UpdatedOrder] = Json.reads[UpdatedOrder] }
 
-case class InsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel
-object InsertOrder { implicit val aFmt: Reads[InsertOrder] = Json.reads[InsertOrder] }
+case class InsertedOrder(action: Option[String], data: Seq[OrderData]) extends WsModel
+object InsertedOrder { implicit val aFmt: Reads[InsertedOrder] = Json.reads[InsertedOrder] }
 
 case class TradeData(side: String, size: Int, price: BigDecimal) extends WsModel
 object TradeData { implicit val aFmt: Reads[TradeData] = Json.reads[TradeData] }
@@ -61,7 +56,7 @@ object WsModel {
     // println(s"#### ws json: $json")
     ((json \ "table").asOpt[String], (json \ "action").asOpt[String]) match {
       case (Some(table), _@Some(_)) if table.startsWith("orderBook") => json.validate[OrderBook]
-      case (Some("order"), Some("insert")) => json.validate[InsertOrder]
+      case (Some("order"), Some("insert")) => json.validate[InsertedOrder]
       case (Some("order"), Some("update")) => json.validate[UpdatedOrder]
       case (Some("trade"), Some("insert")) => json.validate[Trade]
       case (Some(table), Some("partial")) if Seq("order", "trade").contains(table) => JsSuccess(Ignorable(json))

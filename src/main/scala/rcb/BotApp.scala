@@ -10,21 +10,36 @@ object BotApp extends App {
   private val log = Logger("BotApp")
 
   val conf = ConfigFactory.load()
+
   val bitmexUrl         = conf.getString("bitmex.url")
   val bitmexWsUrl       = conf.getString("bitmex.wsUrl")
   val bitmexApiKey      = conf.getString("bitmex.apiKey")
   val bitmexApiSecret   = conf.getString("bitmex.apiSecret")
-  val bitmexRestRetries = conf.getInt("bitmex.restRetries")
+  val bitmexRetries     = conf.getInt("bitmex.restRetries")
+  val bitmexRetryBackoffMs  = conf.getLong("bitmex.retryBackoffMs")
+  val bitmexRestSyncTimeout = conf.getInt("bitmex.restSyncTimeout")
 
-  implicit val serviceSystem = akka.actor.ActorSystem()
-  val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, maxRetries = bitmexRestRetries)
-  val wsGateway = new WsGateWay(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret)
+  val graphiteNamespace = conf.getString("graphite.namespace")
+  val graphiteHost      = conf.getString("graphite.host")
+  val graphitePort      = conf.getInt("graphite.port")
 
-  val orchestrator: ActorRef[OrchestratorModel] = ActorSystem(OrchestratorActor(), "orchestrator-actor")
+  val fsmTradeQty         = conf.getInt("fsm.tradeQty")
+  val fsmTradeTimeoutSecs = conf.getInt("fsm.tradeTimeoutSecs")
+  val fsmHoldTimeoutSecs  = conf.getInt("fsm.holdTimeoutSecs")
+
+  implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
+  val restGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, maxRetries=bitmexRetries, retryBackoffMs = bitmexRetryBackoffMs, syncTimeoutSecs = bitmexRestSyncTimeout)
+  val wsGateway = new WsGateWay(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
+
+  val orchestrator = OrchestratorActor(
+    restGateway=restGateway,
+    tradeQty=fsmTradeQty,
+    tradeTimeoutSecs=fsmTradeTimeoutSecs, holdTimeoutSecs=fsmHoldTimeoutSecs, maxRetries=bitmexRetries)
+  val orchestratorActor: ActorRef[ActorEvent] = ActorSystem(orchestrator, "orchestrator-actor")
 
   val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
-    case JsSuccess(value:OrderBook,    _) => orchestrator ! NotifyWs(value)
-    case JsSuccess(value:UpdatedOrder, _) => orchestrator ! NotifyWs(value)
+    case JsSuccess(value:OrderBook,    _) => orchestratorActor ! WsEvent(value)
+    case JsSuccess(value:UpdatedOrder, _) => orchestratorActor ! WsEvent(value)
     case JsSuccess(value, _)              => log.info(s"Got orchestrator ignorable message: $value")
     case s:JsError                        => log.error(s"error!: $s")
   }

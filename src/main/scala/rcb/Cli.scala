@@ -4,6 +4,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.rogach.scallop._
 import play.api.libs.json.{JsError, JsResult, JsSuccess}
+import rcb.BotApp.conf
 
 
 object Cli extends App {
@@ -15,6 +16,8 @@ object Cli extends App {
   val bitmexApiKey      = conf.getString("bitmex.apiKey")
   val bitmexApiSecret   = conf.getString("bitmex.apiSecret")
   val bitmexRestRetries = conf.getInt("bitmex.restRetries")
+  val bitmexRetryBackoffMs  = conf.getLong("bitmex.retryBackoffMs")
+  val bitmexRestSyncTimeout = conf.getInt("bitmex.restSyncTimeout")
 
   // playground for RestGateway, WsGateway, etc
   class CliConf extends ScallopConf(args) {
@@ -32,25 +35,25 @@ object Cli extends App {
   implicit val serviceSystem = akka.actor.ActorSystem()
   implicit val executionContext = serviceSystem.dispatcher
 
-  val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, maxRetries = bitmexRestRetries)
+  val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, maxRetries = bitmexRestRetries, retryBackoffMs = bitmexRetryBackoffMs, syncTimeoutSecs = bitmexRestSyncTimeout)
   val wsGateway = new WsGateWay(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, minSleepInSecs = cliConf.minwssleep.toOption)
   val consumeAll: PartialFunction[JsResult[WsModel], Unit] = {
-    case JsSuccess(value, _) => log.info(s"${value.getClass.getSimpleName}: $value")
-    case s:JsError           => log.error(s"error!: $s")
+    case JsSuccess(value, _) => log.info(s"WS ${value.getClass.getSimpleName}: $value")
+    case s:JsError           => log.error(s"WS error!: $s")
   }
   val consumeOrder: PartialFunction[JsResult[WsModel], Unit] = {
-    case JsSuccess(value:UpdatedOrder, _) => log.info(s"UpdatedOrder: $value")
-    case JsSuccess(value:InsertOrder, _)  => log.info(s"InsertOrder: $value")
-    case JsSuccess(value:Trade,  _)       => log.info(s"Trade: $value")  // Not an order but useful in order monitoring
-    case s:JsError                        => log.error(s"error!: $s")
+    case JsSuccess(value:UpdatedOrder, _) => log.info(s"WS UpdatedOrder: $value")
+    case JsSuccess(value:InsertedOrder, _)  => log.info(s"WS InsertOrder: $value")
+    case JsSuccess(value:Trade,  _)       => log.info(s"WS Trade: $value")  // Not an order but useful in order monitoring
+    case s:JsError                        => log.error(s"WS error!: $s")
   }
   val consumeOrderBook: PartialFunction[JsResult[WsModel], Unit] = {
-    case JsSuccess(value:OrderBook,  _) => log.info(s"OrderBook: $value")
-    case s:JsError                      => log.error(s"error!: $s")
+    case JsSuccess(value:OrderBook,  _) => log.info(s"WS OrderBook: $value")
+    case s:JsError                      => log.error(s"WS error!: $s")
   }
   val consumeTrade: PartialFunction[JsResult[WsModel], Unit] = {
-    case JsSuccess(value:Trade,  _) => log.info(s"Trade: $value")
-    case s:JsError                  => log.error(s"error!: $s")
+    case JsSuccess(value:Trade,  _) => log.info(s"WS Trade: $value")
+    case s:JsError                  => log.error(s"WS error!: $s")
   }
 
     // validate sets of options
@@ -58,30 +61,30 @@ object Cli extends App {
     case ("bid", Some(price), Some(qty), Some(markup), _, expiryOpt) =>
       log.info(s"issuing bid: price: $price, qty: $qty, markup: $markup")
       wsGateway.run(consumeOrder)
-      restGateway.placeOrder(qty, price, OrderSide.Buy, markup, expiryOpt).onComplete {
-        case scala.util.Success(resp) => log.info(s"bid response: $resp")
-        case scala.util.Failure(exc)  => log.error(s"bid exception: $exc")
+      restGateway.placeOrderSync(qty, price, OrderSide.Buy, expiryOpt) match {
+        case scala.util.Success(resp) => log.info(s"REST bid response: $resp")
+        case scala.util.Failure(exc)  => log.error(s"REST bid exception: $exc")
       }
     case ("ask", Some(price), Some(qty), Some(markup), _, expiryOpt) =>
       log.info(s"issuing ask: price: $price, qty: $qty, markup: $markup")
       wsGateway.run(consumeOrder)
-      restGateway.placeOrder(qty, price, OrderSide.Sell, markup, expiryOpt).onComplete {
-        case scala.util.Success(resp) => log.info(s"ask response: $resp")
-        case scala.util.Failure(exc)  => log.error(s"ask exception: $exc")
+      restGateway.placeOrderSync(qty, price, OrderSide.Sell, expiryOpt) match {
+        case scala.util.Success(resp) => log.info(s"REST ask response: $resp")
+        case scala.util.Failure(exc)  => log.error(s"REST ask exception: $exc")
       }
     case ("amend", Some(price), _, _, Some(orderid), expiryOpt) =>
       log.info(s"amending: price: $price, orderid: $orderid")
       wsGateway.run(consumeOrder)
-      restGateway.amendOrder(orderid, price, expiryOpt).onComplete {
-        case scala.util.Success(resp) => log.info(s"amend response: $resp")
-        case scala.util.Failure(exc)  => log.error(s"amend exception: $exc")
+      restGateway.amendOrderSync(orderid, price, expiryOpt) match {
+        case scala.util.Success(resp) => log.info(s"REST amend response: $resp")
+        case scala.util.Failure(exc)  => log.error(s"REST amend exception: $exc")
       }
     case ("cancel", _, _, _, Some(orderid), expiryOpt) =>
       log.info(s"canceling: orderid: $orderid")
       wsGateway.run(consumeOrder)
-      restGateway.cancelOrder(orderid, expiryOpt).onComplete {
-        case scala.util.Success(resp) => log.info(s"cancel response: $resp")
-        case scala.util.Failure(exc)  => log.error(s"cancel exception: $exc")
+      restGateway.cancelOrderSync(orderid, expiryOpt) match {
+        case scala.util.Success(resp) => log.info(s"REST cancel response: $resp")
+        case scala.util.Failure(exc)  => log.error(s"REST cancel exception: $exc")
       }
     case ("monitorAll", _, _, _,  _, _) =>
       log.info(s"monitoring all ws")

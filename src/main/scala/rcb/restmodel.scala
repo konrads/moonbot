@@ -3,10 +3,23 @@ package rcb
 import play.api.libs.json._
 import play.api.libs.json.Reads._
 
+import scala.runtime.ScalaRunTime
+
 
 sealed trait RestModel
 
-case class Order(orderID: String, symbol: String, ordType: String, side: String, price: BigDecimal, orderQty: BigDecimal) extends RestModel
+case class Order(orderID: String, symbol: String, ordType: String, side: String, price: BigDecimal, orderQty: BigDecimal, ordStatus: Option[String], workingIndicator: Option[Boolean], text: Option[String]) extends RestModel {
+  lazy val lifecycle = (ordStatus, workingIndicator, text) match {
+    case (Some("New"), Some(false), _) => OrderLifecycle.NewInactive
+    case (Some("New"), Some(true), _)  => OrderLifecycle.NewActive
+    case (Some("Canceled"), _, Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
+    case (Some("Canceled"), _, _)      => OrderLifecycle.Canceled
+    case (Some("Filled"), _, _)        => OrderLifecycle.Filled
+    case _                             => OrderLifecycle.Unknown
+  }
+
+  override def toString = s"${ScalaRunTime._toString(this)} { lifecycle = $lifecycle }"
+}
 object Order { implicit val aReads: Reads[Order] = Json.reads[Order] }
 
 case class Orders(orders: Seq[Order]) extends RestModel
@@ -23,7 +36,7 @@ object RestModel {
   implicit val aReads: Reads[RestModel] = (json: JsValue) => {
     // println(s"#### rest json: $json")
     json match {
-      case arr@JsArray(_) => ((arr \ "orderID")(0).asOpt[Order]) match {
+      case arr@JsArray(_) => ((arr(0) \ "orderID").asOpt[String]) match {
         case Some(_) => arr.validate[List[Order]].map(x => Orders(x))
         case _ => JsError(s"Unknown json array '$json'")
       }

@@ -10,46 +10,71 @@ import com.typesafe.scalalogging.Logger
 import play.api.libs.json.{JsError, JsSuccess}
 import rcb.OrderSide.OrderSide
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Try
 
 
 sealed trait HttpReply
 case class CreateOrderIssued(orderID: String) extends HttpReply
 case class CancelOrderIssued(orderID: String) extends HttpReply
 
-class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: Int)(implicit system: ActorSystem) {
-  val NON_RETRYABLE_ERRORS = Seq(
-    "Account has insufficient",
-    "Invalid orderQty",
-    "Invalid price tickSize"
-  )
+
+// FIXME: Unmarshall via akka http spray json
+// https://blog.colinbreck.com/backoff-and-retry-error-handling-for-akka-streams/
+// case HttpResponse(StatusCodes.OK, _, entity, _) =>
+//        Unmarshal(entity).to[Response]
+
+class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: Int, retryBackoffMs: Long, syncTimeoutSecs: Int)(implicit system: ActorSystem) {
+  val MARKUP_INDUCING_ERROR = "Order had execInst of ParticipateDoNotInitiate"
+
   // FIXME: consider timeouts!
-  // FIXME: keep alive, in htttp and ws?
-  // FIXME: reconnections, in here and ws?
+  // FIXME: keep alive, in http and ws?
+  // FIXME: reconnections, in http and ws?
 
   // based on: https://blog.colinbreck.com/backoff-and-retry-error-handling-for-akka-streams/
   private val log = Logger[RestGateway]
   implicit val executionContext = system.dispatcher
 
-  def placeOrder(qty: BigDecimal, price: BigDecimal, side: OrderSide, markup: BigDecimal, expiryOpt: Option[Int] = None): Future[RestModel] =
+  def placeOrder(qty: BigDecimal, price: BigDecimal, side: OrderSide, expiryOpt: Option[Int] = None): Future[Order] =
     reqRetried(
       POST,
       "/api/v1/order",
-      (retry: Int) => s"symbol=XBTUSD&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=${price + markup * retry * (if (side == OrderSide.Buy) -1 else 1)}",
-      expiryOpt)
+      (retry: Int) => s"symbol=XBTUSD&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=$price",
+      // (retry: Int) => s"symbol=XBTUSD&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=${price + markup * retry * (if (side == OrderSide.Buy) -1 else 1)}",
+      expiryOpt).map(_.asInstanceOf[Order])
 
-  def amendOrder(orderID: String, price: BigDecimal, expiryOpt: Option[Int] = None): Future[RestModel] =
+  def amendOrder(orderID: String, price: BigDecimal, expiryOpt: Option[Int] = None): Future[Order] =
     reqRetried(
       PUT,
       "/api/v1/order",
       (retry: Int) => s"orderID=$orderID&price=$price",
-      expiryOpt)
+      expiryOpt).map(_.asInstanceOf[Order])
 
-  def cancelOrder(orderID: String, expiryOpt: Option[Int] = None): Future[RestModel] =    reqRetried(
+  def cancelOrder(orderID: String, expiryOpt: Option[Int] = None): Future[Orders] = reqRetried(
     DELETE,
     "/api/v1/order",
     (retry: Int) => s"orderID=$orderID",
-    expiryOpt)
+    expiryOpt).map(_.asInstanceOf[Orders])
+
+  // sync
+  def placeOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide, expiryOpt: Option[Int] = None): Try[Order] =
+    Await.ready(
+      placeOrder(qty, price, side, expiryOpt),
+      Duration(syncTimeoutSecs, SECONDS)
+    ).value.get
+
+  def amendOrderSync(orderID: String, price: BigDecimal, expiryOpt: Option[Int] = None): Try[Order] =
+    Await.ready(
+      amendOrder(orderID, price, expiryOpt),
+      Duration(syncTimeoutSecs, SECONDS)
+    ).value.get
+
+  def cancelOrderSync(orderID: String, expiryOpt: Option[Int] = None): Try[Orders] =
+    Await.ready(
+      cancelOrder(orderID, expiryOpt),
+      Duration(syncTimeoutSecs, SECONDS)
+    ).value.get
 
   private def reqRetried(method: HttpMethod, urlPath: String, retriedData: (Int) => String, expiryOpt: Option[Int] = None): Future[RestModel] = {
     def sendMsg(retry: Int): Future[RestModel] = {
@@ -70,19 +95,14 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: In
           case HttpResponse(StatusCodes.OK, _headers, entity, _) =>
             entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
               b =>
-                RestModel.asModel(b.utf8String) match {
-                  case JsSuccess(value, _) => Future.successful(value)
-                  case JsError(errors) => Future.failed(new Exception(s"Json parsing error: ${errors}"))
-                }
+                  RestModel.asModel(b.utf8String) match {
+                    case JsSuccess(value, _) => Future.successful(value)
+                    case JsError(errors) => Future.failed(new Exception(s"Json parsing error: ${errors}"))
+                  }
             }
           case HttpResponse(s@StatusCodes.BadRequest, _headers, entity, _) =>
             entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-              b =>
-                val contents = b.utf8String
-                NON_RETRYABLE_ERRORS.filter(contents.contains) match {
-                  case Nil => Future.failed(RetryableError(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: $contents"))
-                  case s => Future.failed(new Exception(s"${s.mkString(", ")}: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: $contents"))
-                }
+              b => Future.failed(new Exception(s"BadRequet: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
             }
           case HttpResponse(status, _headers, entity, _) =>
             entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
@@ -93,17 +113,17 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: In
 
     def retry[T](op: (Int) => Future[T], retries: Int)(implicit ec: ExecutionContext): Future[T] =
       op(retries).recoverWith {
-        case RetryableError(msg) if retries < maxRetries =>
-          log.warn(s"Retrying upon $msg")
+        case exc:akka.stream.StreamTcpException if retries < maxRetries =>
+          log.warn(s"$retries: retrying upon $exc: ${exc.getCause}")
+          Thread.sleep(retryBackoffMs)
           retry(op, retries + 1)
         case err =>
+          log.warn(s"###### NOT Retrying upon ${err.getClass} ${err.getMessage} ${err.getCause}")
           Future.failed(err)
       }
 
     retry(sendMsg, 0)
   }
 }
-
-case class MarkupIncreasingError(msg: String) extends Exception(msg)
 
 case class RetryableError(msg: String) extends Exception(msg)
