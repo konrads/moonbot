@@ -7,7 +7,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.{RawHeader, `Content-Type`}
 import akka.util.ByteString
 import com.typesafe.scalalogging.Logger
-import play.api.libs.json.{JsError, JsSuccess}
+import play.api.libs.json.{JsError, JsResult, JsSuccess}
 import rcb.OrderSide.OrderSide
 
 import scala.concurrent.duration._
@@ -25,7 +25,29 @@ case class CancelOrderIssued(orderID: String) extends HttpReply
 // case HttpResponse(StatusCodes.OK, _, entity, _) =>
 //        Unmarshal(entity).to[Response]
 
-class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: Int, retryBackoffMs: Long, syncTimeoutSecs: Int)(implicit system: ActorSystem) {
+/** Trait, for testing purposes */
+trait IRestGateway {
+  // async
+  def placeMarketOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): String
+  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): String
+  def amendOrderAsync(orderID: String, price: BigDecimal): String
+  def cancelOrderAsync(orderID: String): String
+
+  // sync
+  def placeMarketOrderSync(qty: BigDecimal, side: OrderSide): Try[Order]
+  def placeLimitOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide): Try[Order]
+  def amendOrderSync(orderID: String, price: BigDecimal): Try[Order]
+  def cancelOrderSync(orderID: String): Try[Orders]
+}
+
+
+class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: Int, retryBackoffMs: Long, syncTimeoutSecs: Int)(implicit system: ActorSystem) extends IRestGateway {
+  var restConsume: PartialFunction[Try[(String, RestModel)], Unit] = null  // FIXME: hack var for the wire up of asyncs
+
+  def setup(restConsume: PartialFunction[Try[(String, RestModel)], Unit]): Unit = {
+    this.restConsume = restConsume
+  }
+
   val MARKUP_INDUCING_ERROR = "Order had execInst of ParticipateDoNotInitiate"
 
   // FIXME: consider timeouts!
@@ -36,51 +58,84 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: In
   private val log = Logger[RestGateway]
   implicit val executionContext = system.dispatcher
 
-  def placeOrder(qty: BigDecimal, price: BigDecimal, side: OrderSide, expiryOpt: Option[Int] = None): Future[Order] =
+  def placeMarketOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): String = {
+    val clientID = java.util.UUID.randomUUID().toString
+    val resF = placeMarketOrder(qty, side).map(res => (clientID, res)).onComplete(restConsume)
+    clientID
+  }
+
+  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): String = {
+    val clientID = java.util.UUID.randomUUID().toString
+    val resF = placeLimitOrder(qty, price, side).map(res => (clientID, res)).onComplete(restConsume)
+    clientID
+  }
+
+  def amendOrderAsync(orderID: String, price: BigDecimal): String = {
+    val clientID = java.util.UUID.randomUUID().toString
+    val resF = amendOrder(orderID, price).map(res => (clientID, res)).onComplete(restConsume)
+    clientID
+  }
+
+  def cancelOrderAsync(orderID: String): String = {
+    val clientID = java.util.UUID.randomUUID().toString
+    val resF = cancelOrder(orderID).map(res => (clientID, res)).onComplete(restConsume)
+    clientID
+  }
+
+  // sync
+  def placeMarketOrderSync(qty: BigDecimal, side: OrderSide): Try[Order] =
+    Await.ready(
+      placeMarketOrder(qty, side),
+      Duration(syncTimeoutSecs, SECONDS)
+    ).value.get
+
+  def placeLimitOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide): Try[Order] =
+    Await.ready(
+      placeLimitOrder(qty, price, side),
+      Duration(syncTimeoutSecs, SECONDS)
+    ).value.get
+
+  def amendOrderSync(orderID: String, price: BigDecimal): Try[Order] =
+    Await.ready(
+      amendOrder(orderID, price),
+      Duration(syncTimeoutSecs, SECONDS)
+    ).value.get
+
+  def cancelOrderSync(orderID: String): Try[Orders] =
+    Await.ready(
+      cancelOrder(orderID),
+      Duration(syncTimeoutSecs, SECONDS)
+    ).value.get
+
+  private def placeMarketOrder(qty: BigDecimal, side: OrderSide): Future[Order] = ???
+
+  private def placeLimitOrder(qty: BigDecimal, price: BigDecimal, side: OrderSide): Future[Order] =
     reqRetried(
       POST,
       "/api/v1/order",
       (retry: Int) => s"symbol=XBTUSD&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=$price",
       // (retry: Int) => s"symbol=XBTUSD&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=${price + markup * retry * (if (side == OrderSide.Buy) -1 else 1)}",
-      expiryOpt).map(_.asInstanceOf[Order])
+      ).map(_.asInstanceOf[Order])
 
-  def amendOrder(orderID: String, price: BigDecimal, expiryOpt: Option[Int] = None): Future[Order] =
+  private def amendOrder(orderID: String, price: BigDecimal): Future[Order] =
     reqRetried(
       PUT,
       "/api/v1/order",
       (retry: Int) => s"orderID=$orderID&price=$price",
-      expiryOpt).map(_.asInstanceOf[Order])
+      ).map(_.asInstanceOf[Order])
 
-  def cancelOrder(orderID: String, expiryOpt: Option[Int] = None): Future[Orders] = reqRetried(
-    DELETE,
-    "/api/v1/order",
-    (retry: Int) => s"orderID=$orderID",
-    expiryOpt).map(_.asInstanceOf[Orders])
+  private def cancelOrder(orderID: String): Future[Orders] =
+    reqRetried(
+      DELETE,
+      "/api/v1/order",
+      (retry: Int) => s"orderID=$orderID",
+      ).map(_.asInstanceOf[Orders])
 
-  // sync
-  def placeOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide, expiryOpt: Option[Int] = None): Try[Order] =
-    Await.ready(
-      placeOrder(qty, price, side, expiryOpt),
-      Duration(syncTimeoutSecs, SECONDS)
-    ).value.get
-
-  def amendOrderSync(orderID: String, price: BigDecimal, expiryOpt: Option[Int] = None): Try[Order] =
-    Await.ready(
-      amendOrder(orderID, price, expiryOpt),
-      Duration(syncTimeoutSecs, SECONDS)
-    ).value.get
-
-  def cancelOrderSync(orderID: String, expiryOpt: Option[Int] = None): Try[Orders] =
-    Await.ready(
-      cancelOrder(orderID, expiryOpt),
-      Duration(syncTimeoutSecs, SECONDS)
-    ).value.get
-
-  private def reqRetried(method: HttpMethod, urlPath: String, retriedData: (Int) => String, expiryOpt: Option[Int] = None): Future[RestModel] = {
+  private def reqRetried(method: HttpMethod, urlPath: String, retriedData: (Int) => String): Future[RestModel] = {
     def sendMsg(retry: Int): Future[RestModel] = {
       val data = retriedData(retry)
 
-      val expiry = expiryOpt.getOrElse((System.currentTimeMillis / 1000 + 100).toInt) //should be 15
+      val expiry = (System.currentTimeMillis / 1000 + 100).toInt //should be 15
       val keyString = s"${method.value}${urlPath}${expiry}${data}"
       val apiSignature = getBitmexApiSignature(keyString, apiSecret)
       val request = HttpRequest(method = method, uri = url + urlPath)
@@ -104,6 +159,10 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: In
             entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
               b => Future.failed(new Exception(s"BadRequet: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
             }
+            // FIXME: Account for 503:
+            //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Status code  : 503 SERVICE_UNAVAILABLE
+            //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Headers      : [Date:"Sun, 26 Apr 2020 13:21:10 GMT", Content-Type:"application/json; charset=utf-8", Content-Length:"102", Connection:"keep-alive", Set-Cookie:"AWSALBTG=kdTm30cLPGFSnbZOmPyt4j8NjwPP2W/bWJpOMtH5YHeQ8C2NgIpIA9cT0od75ui6e0jTBAom5k2XUPgsjY3eqcO6Ft5aKCbW7dZyX/NoI84swgH3AfQwW+pch/vePpJVKQLG3bq118RKAWkZDyr8qqfCSi7ut7tKxzLe7MxMhk+Cy467UDI=; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/", "AWSALBTGCORS=kdTm30cLPGFSnbZOmPyt4j8NjwPP2W/bWJpOMtH5YHeQ8C2NgIpIA9cT0od75ui6e0jTBAom5k2XUPgsjY3eqcO6Ft5aKCbW7dZyX/NoI84swgH3AfQwW+pch/vePpJVKQLG3bq118RKAWkZDyr8qqfCSi7ut7tKxzLe7MxMhk+Cy467UDI=; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/; SameSite=None; Secure", "AWSALB=rqmeyZQOwEsI/tjLk6BdKq2+9xdxQVGuZ114iqjXh7i0c1JNZd423vfbfE+VYNYeSBm6tICBdF5IJHtBRY/1cNJV/gig/w0jmPMiQexwGOwwXDyt7kur/gDIbYye; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/", "AWSALBCORS=rqmeyZQOwEsI/tjLk6BdKq2+9xdxQVGuZ114iqjXh7i0c1JNZd423vfbfE+VYNYeSBm6tICBdF5IJHtBRY/1cNJV/gig/w0jmPMiQexwGOwwXDyt7kur/gDIbYye; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/; SameSite=None; Secure", X-RateLimit-Limit:"60", X-RateLimit-Remaining:"59", X-RateLimit-Reset:"1587907271", X-Powered-By:"Profit", ETag:"W/"66-qhi7rqXXvlVhEy8FfnYZtT4OszQ"", Strict-Transport-Security:"max-age=31536000; includeSubDomains"]
+            //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Response body: {"error":{"message":"The system is currently overloaded. Please try again later.","name":"HTTPError"}}
           case HttpResponse(status, _headers, entity, _) =>
             entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
               b => Future.failed(new Exception(s"Invalid status: $status, body: ${b.utf8String}"))
@@ -127,3 +186,5 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: In
 }
 
 case class RetryableError(msg: String) extends Exception(msg)
+
+case class TemporarilyUnavailableError(msg: String) extends Exception(msg)
