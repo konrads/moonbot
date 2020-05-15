@@ -43,7 +43,7 @@ trait IRestGateway {
 }
 
 
-class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSecret: String, maxRetries: Int, retryBackoffMs: Long, syncTimeoutMs: Int)(implicit system: ActorSystem) extends IRestGateway {
+class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSecret: String, syncTimeoutMs: Long)(implicit system: ActorSystem) extends IRestGateway {
   val MARKUP_INDUCING_ERROR = "Order had execInst of ParticipateDoNotInitiate"
 
   // FIXME: consider timeouts!
@@ -110,91 +110,74 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
     ).value.get
 
   private def placeStopMarketOrder(qty: BigDecimal, side: OrderSide, price: BigDecimal, clOrdID: Option[String]=None): Future[Order] =
-    reqRetried(
+    sendReq(
       POST,
       "/api/v1/order",
-      (retry: Int) => s"symbol=$symbol&ordType=Stop&timeInForce=GoodTillCancel&stopPx=$price&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
+      s"symbol=$symbol&ordType=Stop&timeInForce=GoodTillCancel&stopPx=$price&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
     ).map(_.asInstanceOf[Order])
 
   private def placeMarketOrder(qty: BigDecimal, side: OrderSide, clOrdID: Option[String]=None): Future[Order] =
-    reqRetried(
+    sendReq(
       POST,
       "/api/v1/order",
-      (retry: Int) => s"symbol=$symbol&ordType=Market&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
+      s"symbol=$symbol&ordType=Market&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
     ).map(_.asInstanceOf[Order])
 
   private def placeLimitOrder(qty: BigDecimal, price: BigDecimal, side: OrderSide, clOrdID: Option[String]=None): Future[Order] =
-    reqRetried(
+    sendReq(
       POST,
       "/api/v1/order",
-      (retry: Int) => s"symbol=$symbol&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=$price" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
-      ).map(_.asInstanceOf[Order])
+      s"symbol=$symbol&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=$price" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
+    ).map(_.asInstanceOf[Order])
 
   private def amendOrder(orderID: Option[String], cliOrdID: Option[String], price: BigDecimal): Future[Order] =
-    reqRetried(
+    sendReq(
       PUT,
       "/api/v1/order",
-      (retry: Int) => s"price=$price" + orderID.map("&orderID=" + _).getOrElse("") + cliOrdID.map("&origClOrdID=" + _).getOrElse(""),
-      ).map(_.asInstanceOf[Order])
+      s"price=$price" + orderID.map("&orderID=" + _).getOrElse("") + cliOrdID.map("&origClOrdID=" + _).getOrElse("")
+    ).map(_.asInstanceOf[Order])
 
   private def cancelOrder(orderID: Option[String], cliOrdID: Option[String]): Future[Orders] =
-    reqRetried(
+    sendReq(
       DELETE,
       "/api/v1/order",
-      (retry: Int) => orderID.map("&orderID=" + _).getOrElse("") + cliOrdID.map("&clOrdID=" + _).getOrElse(""),
-      ).map(_.asInstanceOf[Orders])
+      orderID.map("&orderID=" + _).getOrElse("") + cliOrdID.map("&clOrdID=" + _).getOrElse("")
+    ).map(_.asInstanceOf[Orders])
 
-  private def reqRetried(method: HttpMethod, urlPath: String, retriedData: (Int) => String): Future[RestModel] = {
-    def sendMsg(retry: Int): Future[RestModel] = {
-      val data = retriedData(retry)
+  def sendReq(method: HttpMethod, urlPath: String, data: => String): Future[RestModel] = {
+    val expiry = (System.currentTimeMillis / 1000 + 100).toInt //should be 15
+    val keyString = s"${method.value}${urlPath}${expiry}${data}"
+    val apiSignature = getBitmexApiSignature(keyString, apiSecret)
+    val request = HttpRequest(method = method, uri = url + urlPath)
+      .withEntity(ContentTypes.`application/x-www-form-urlencoded`, data)
+      .withHeaders(
+        RawHeader("api-expires",   s"$expiry"),
+        RawHeader("api-key",       apiKey),
+        RawHeader("api-signature", apiSignature))
 
-      val expiry = (System.currentTimeMillis / 1000 + 100).toInt //should be 15
-      val keyString = s"${method.value}${urlPath}${expiry}${data}"
-      val apiSignature = getBitmexApiSignature(keyString, apiSecret)
-      val request = HttpRequest(method = method, uri = url + urlPath)
-        .withEntity(ContentTypes.`application/x-www-form-urlencoded`, data)
-        .withHeaders(
-          RawHeader("api-expires",   s"$expiry"),
-          RawHeader("api-key",       apiKey),
-          RawHeader("api-signature", apiSignature))
-
-      Http().singleRequest(request)
-        .flatMap {
-          case HttpResponse(StatusCodes.OK, _headers, entity, _) =>
-            entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-              b =>
-                  RestModel.asModel(b.utf8String) match {
-                    case JsSuccess(value, _) => Future.successful(value)
-                    case JsError(errors) => Future.failed(new Exception(s"Json parsing error: ${errors}"))
-                  }
-            }
-          case HttpResponse(s@StatusCodes.BadRequest, _headers, entity, _) =>
-            entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-              b => Future.failed(new Exception(s"BadRequet: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
-            }
-            // FIXME: Account for 503:
-            //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Status code  : 503 SERVICE_UNAVAILABLE
-            //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Headers      : [Date:"Sun, 26 Apr 2020 13:21:10 GMT", Content-Type:"application/json; charset=utf-8", Content-Length:"102", Connection:"keep-alive", Set-Cookie:"AWSALBTG=kdTm30cLPGFSnbZOmPyt4j8NjwPP2W/bWJpOMtH5YHeQ8C2NgIpIA9cT0od75ui6e0jTBAom5k2XUPgsjY3eqcO6Ft5aKCbW7dZyX/NoI84swgH3AfQwW+pch/vePpJVKQLG3bq118RKAWkZDyr8qqfCSi7ut7tKxzLe7MxMhk+Cy467UDI=; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/", "AWSALBTGCORS=kdTm30cLPGFSnbZOmPyt4j8NjwPP2W/bWJpOMtH5YHeQ8C2NgIpIA9cT0od75ui6e0jTBAom5k2XUPgsjY3eqcO6Ft5aKCbW7dZyX/NoI84swgH3AfQwW+pch/vePpJVKQLG3bq118RKAWkZDyr8qqfCSi7ut7tKxzLe7MxMhk+Cy467UDI=; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/; SameSite=None; Secure", "AWSALB=rqmeyZQOwEsI/tjLk6BdKq2+9xdxQVGuZ114iqjXh7i0c1JNZd423vfbfE+VYNYeSBm6tICBdF5IJHtBRY/1cNJV/gig/w0jmPMiQexwGOwwXDyt7kur/gDIbYye; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/", "AWSALBCORS=rqmeyZQOwEsI/tjLk6BdKq2+9xdxQVGuZ114iqjXh7i0c1JNZd423vfbfE+VYNYeSBm6tICBdF5IJHtBRY/1cNJV/gig/w0jmPMiQexwGOwwXDyt7kur/gDIbYye; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/; SameSite=None; Secure", X-RateLimit-Limit:"60", X-RateLimit-Remaining:"59", X-RateLimit-Reset:"1587907271", X-Powered-By:"Profit", ETag:"W/"66-qhi7rqXXvlVhEy8FfnYZtT4OszQ"", Strict-Transport-Security:"max-age=31536000; includeSubDomains"]
-            //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Response body: {"error":{"message":"The system is currently overloaded. Please try again later.","name":"HTTPError"}}
-          case HttpResponse(status, _headers, entity, _) =>
-            entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-              b => Future.failed(new Exception(s"Invalid status: $status, body: ${b.utf8String}"))
-            }
-        }
-    }
-
-    def retry[T](op: (Int) => Future[T], retries: Int)(implicit ec: ExecutionContext): Future[T] =
-      op(retries).recoverWith {
-        case exc:akka.stream.StreamTcpException if retries < maxRetries =>
-          log.warn(s"$retries: retrying upon $exc: ${exc.getCause}")
-          Thread.sleep(retryBackoffMs)
-          retry(op, retries + 1)
-        case err =>
-          log.warn(s"###### NOT Retrying upon ${err.getClass} ${err.getMessage} ${err.getCause}")
-          Future.failed(err)
+    Http().singleRequest(request)
+      .flatMap {
+        case HttpResponse(StatusCodes.OK, _headers, entity, _) =>
+          entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
+            b =>
+              RestModel.asModel(b.utf8String) match {
+                case JsSuccess(value, _) => Future.successful(value)
+                case JsError(errors) => Future.failed(new Exception(s"Json parsing error: ${errors}"))
+              }
+          }
+        case HttpResponse(s@StatusCodes.BadRequest, _headers, entity, _) =>
+          entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
+            b => Future.failed(new Exception(s"BadRequet: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+          }
+        // FIXME: Account for 503:
+        //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Status code  : 503 SERVICE_UNAVAILABLE
+        //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Headers      : [Date:"Sun, 26 Apr 2020 13:21:10 GMT", Content-Type:"application/json; charset=utf-8", Content-Length:"102", Connection:"keep-alive", Set-Cookie:"AWSALBTG=kdTm30cLPGFSnbZOmPyt4j8NjwPP2W/bWJpOMtH5YHeQ8C2NgIpIA9cT0od75ui6e0jTBAom5k2XUPgsjY3eqcO6Ft5aKCbW7dZyX/NoI84swgH3AfQwW+pch/vePpJVKQLG3bq118RKAWkZDyr8qqfCSi7ut7tKxzLe7MxMhk+Cy467UDI=; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/", "AWSALBTGCORS=kdTm30cLPGFSnbZOmPyt4j8NjwPP2W/bWJpOMtH5YHeQ8C2NgIpIA9cT0od75ui6e0jTBAom5k2XUPgsjY3eqcO6Ft5aKCbW7dZyX/NoI84swgH3AfQwW+pch/vePpJVKQLG3bq118RKAWkZDyr8qqfCSi7ut7tKxzLe7MxMhk+Cy467UDI=; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/; SameSite=None; Secure", "AWSALB=rqmeyZQOwEsI/tjLk6BdKq2+9xdxQVGuZ114iqjXh7i0c1JNZd423vfbfE+VYNYeSBm6tICBdF5IJHtBRY/1cNJV/gig/w0jmPMiQexwGOwwXDyt7kur/gDIbYye; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/", "AWSALBCORS=rqmeyZQOwEsI/tjLk6BdKq2+9xdxQVGuZ114iqjXh7i0c1JNZd423vfbfE+VYNYeSBm6tICBdF5IJHtBRY/1cNJV/gig/w0jmPMiQexwGOwwXDyt7kur/gDIbYye; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/; SameSite=None; Secure", X-RateLimit-Limit:"60", X-RateLimit-Remaining:"59", X-RateLimit-Reset:"1587907271", X-Powered-By:"Profit", ETag:"W/"66-qhi7rqXXvlVhEy8FfnYZtT4OszQ"", Strict-Transport-Security:"max-age=31536000; includeSubDomains"]
+        //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Response body: {"error":{"message":"The system is currently overloaded. Please try again later.","name":"HTTPError"}}
+        case HttpResponse(status, _headers, entity, _) =>
+          entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
+            b => Future.failed(new Exception(s"Invalid status: $status, body: ${b.utf8String}"))
+          }
       }
-
-    retry(sendMsg, 0)
   }
 }
 

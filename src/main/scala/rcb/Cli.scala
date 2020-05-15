@@ -5,18 +5,22 @@ import com.typesafe.scalalogging.Logger
 import org.rogach.scallop._
 import play.api.libs.json.{JsError, JsResult, JsSuccess}
 
+import scala.util.{Failure, Success}
+
 
 object Cli extends App {
-  private val log = Logger("Cli")
+  val log = Logger("Cli")
 
   val conf = ConfigFactory.load()
-  val bitmexUrl             = conf.getString("bitmex.url")
-  val bitmexWsUrl           = conf.getString("bitmex.wsUrl")
-  val bitmexApiKey          = conf.getString("bitmex.apiKey")
-  val bitmexApiSecret       = conf.getString("bitmex.apiSecret")
-  val bitmexRestRetries     = conf.getInt("bitmex.restRetries")
-  val bitmexRetryBackoffMs  = conf.getLong("bitmex.retryBackoffMs")
-  val bitmexRestSyncTimeout = conf.getInt("bitmex.restSyncTimeout")
+    .withFallback(ConfigFactory.parseResources("application.conf"))
+    .withFallback(ConfigFactory.parseResources("application.private.conf"))
+    .resolve()
+
+  val bitmexUrl         = conf.getString("bitmex.url")
+  val bitmexWsUrl       = conf.getString("bitmex.wsUrl")
+  val bitmexApiKey      = conf.getString("bitmex.apiKey")
+  val bitmexApiSecret   = conf.getString("bitmex.apiSecret")
+  val restSyncTimeoutMs = conf.getLong("bot.restSyncTimeoutMs")
 
   // playground for RestGateway, WsGateway, etc
   class CliConf extends ScallopConf(args) {
@@ -34,7 +38,7 @@ object Cli extends App {
   implicit val serviceSystem = akka.actor.ActorSystem()
   implicit val executionContext = serviceSystem.dispatcher
 
-  val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, maxRetries = bitmexRestRetries, retryBackoffMs = bitmexRetryBackoffMs, syncTimeoutMs = bitmexRestSyncTimeout)
+  val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
   val wsGateway = new WsGateWay(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, minSleepInSecs = cliConf.minwssleep.toOption)
   val consumeAll: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value, _) => log.info(s"WS ${value.getClass.getSimpleName}: $value")
@@ -63,8 +67,8 @@ object Cli extends App {
       val (clOrdID, resF) = restGateway.placeLimitOrderAsync(qty, price, OrderSide.Buy)
       log.info(s"REST bid request: $clOrdID")
       resF.onComplete {
-        case scala.util.Success(res) => log.info(s"REST bid response: $clOrdID, $res")
-        case scala.util.Failure(exc) => log.error(s"REST bid exception: $clOrdID, $exc")
+        case Success(res) => log.info(s"REST bid response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST bid exception: $clOrdID, $exc")
       }
     case ("ask", Some(price), Some(qty), Some(markup), _, _) =>
       log.info(s"issuing ask: price: $price, qty: $qty, markup: $markup")
@@ -72,8 +76,8 @@ object Cli extends App {
       val (clOrdID, resF) = restGateway.placeLimitOrderAsync(qty, price, OrderSide.Sell)
       log.info(s"REST ask request: $clOrdID")
       resF.onComplete {
-        case scala.util.Success(res) => log.info(s"REST ask response: $clOrdID, $res")
-        case scala.util.Failure(exc) => log.error(s"REST ask exception: $clOrdID, $exc")
+        case Success(res) => log.info(s"REST ask response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST ask exception: $clOrdID, $exc")
       }
     case ("amend", Some(price), _, _, orderIDOpt, cliOrdOpt) =>
       log.info(s"amending: price: $price, orderid: $orderIDOpt")
@@ -81,8 +85,8 @@ object Cli extends App {
       val resF = restGateway.amendOrderAsync(orderIDOpt, cliOrdOpt, price)
       log.info(s"REST amend request: $orderIDOpt")
       resF.onComplete {
-        case scala.util.Success(res) => log.info(s"REST amend response: $orderIDOpt, $cliOrdOpt, $res")
-        case scala.util.Failure(exc) => log.error(s"REST amend exception: $orderIDOpt, $cliOrdOpt, $exc")
+        case Success(res) => log.info(s"REST amend response: $orderIDOpt, $cliOrdOpt, $res")
+        case Failure(exc) => log.error(s"REST amend exception: $orderIDOpt, $cliOrdOpt, $exc")
       }
     case ("cancel", _, _, _, orderIDOpt, cliOrdOpt) =>
       log.info(s"canceling: orderid: $orderIDOpt")
@@ -90,8 +94,8 @@ object Cli extends App {
       val resF = restGateway.cancelOrderAsync(orderIDOpt, cliOrdOpt)
       log.info(s"REST cancel request: $orderIDOpt")
       resF.onComplete {
-        case scala.util.Success(res) => log.info(s"REST cancel response: $orderIDOpt, $cliOrdOpt, $res")
-        case scala.util.Failure(exc) => log.error(s"REST cancel exception: $orderIDOpt, $cliOrdOpt, $exc")
+        case Success(res) => log.info(s"REST cancel response: $orderIDOpt, $cliOrdOpt, $res")
+        case Failure(exc) => log.error(s"REST cancel exception: $orderIDOpt, $cliOrdOpt, $exc")
       }
     case ("monitorAll", _, _, _,  _, _) =>
       log.info(s"monitoring all ws")

@@ -1,6 +1,6 @@
 .idea
 .DS_Store
-*.private
+*.private.conf
 target
 project/project
 scala-logging.log

@@ -4,7 +4,7 @@ import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 
 import scala.concurrent.duration.{Duration, MILLISECONDS}
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 object OrchestratorActor {
   trait PositionOpener {
@@ -90,7 +90,7 @@ object OrchestratorActor {
 //              reqProcessor.onFailure(ctx, TemporarilyUnavailableError("Failed on retries to cancel"))
 //            case (OpenPositionCtx(ledger, _, _), TriggerCancel, _) =>
 //              val canceledCtx = reqProcessor.processCancel(ctx) match {
-//                case scala.util.Success(os) =>
+//                case Success(os) =>
 //                  val ledger2 = os.orders.foldLeft(ledger) { case (ledger, o) => ledger.record(o) }
 //                  actorCtx.self ! TriggerReq
 //                  ctx.copy(ledger = ledger2, orderID = null)
@@ -105,7 +105,7 @@ object OrchestratorActor {
 //            case (OpenPositionCtx(ledger, _, retries), TriggerReq, _) =>
 //              val reissuedCtx =
 //                reqProcessor.processRequest(ctx) match {
-//                  case scala.util.Success(o) =>
+//                  case Success(o) =>
 //                    val ledger2 = ledger.record(o)
 //                    ctx.copy(ledger = ledger2, retries = retries - 1, orderID = o.orderID)
 //                  case Failure(e:TemporarilyUnavailableError) =>
@@ -125,7 +125,7 @@ object OrchestratorActor {
 //          case (actorCtx, TriggerCancel) =>
 //            if (ctx.retries >= 0) {
 //              val canceledCtx = reqProcessor.processCancel(ctx) match {
-//                case scala.util.Success(os) =>
+//                case Success(os) =>
 //                  val ledger2 = os.orders.foldLeft(ctx.ledger) { case (ledger, o) => ledger.record(o) }
 //                  actorCtx.self ! TriggerReq
 //                  ctx.copy(ledger = ledger2, orderID = null)
@@ -144,7 +144,7 @@ object OrchestratorActor {
 //            if (ctx.retries >= 0) {
 //              val reissuedCtx =
 //                reqProcessor.processRequest(ctx) match {
-//                  case scala.util.Success(o) =>
+//                  case Success(o) =>
 //                    val ledger2 = ledger.record(o)
 //                    ctx.copy(ledger = ledger2, retries = retries - 1)
 //                  case Failure(e:TemporarilyUnavailableError) =>
@@ -196,8 +196,8 @@ object OrchestratorActor {
         val ledger2 = ctx.ledger.record(wsData)
         if (ledger2.canOpenLong)
           openLong(ledger2)
-        //        else if (ledger2.canOpenShort)
-        //          openShort(ledger2)
+        else if (ledger2.canOpenShort)
+          openShort(ledger2)
         else
         idle(ctx.copy(ledger = ledger2))
     }
@@ -219,6 +219,26 @@ object OrchestratorActor {
         override def onUnprocessed(l: Ledger, takeProfitID: Option[String], stoplossID: Option[String]): Behavior[ActorEvent] = idle(IdleCtx(l))
         override def openTakeProfit(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty, l.bidPrice + retryCnt * postOnlyPriceAdjAmount, OrderSide.Sell)
         override def openStoploss(takeProfitPrice: BigDecimal, retryCnt: Int): Try[Order] = restGateway.placeStopMarketOrderSync(tradeQty, takeProfitPrice - takeProfitAmount, OrderSide.Sell)
+        override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(orderID), None)
+      })
+
+    def openShort(ledger: Ledger): Behavior[ActorEvent] =
+      openPosition(ledger, maxReqRetries, openPositionTimeoutMs, backoffMs, new PositionOpener {
+        override def onFilled(l: Ledger): Behavior[ActorEvent] = closeLong(l)
+        override def onExpired(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
+        override def onUnprocessed(l: Ledger, orderID: Option[String]): Behavior[ActorEvent] = idle(IdleCtx(l))
+        override def openOrder(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty: BigDecimal, l.askPrice + retryCnt * postOnlyPriceAdjAmount, OrderSide.Sell)
+        override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(orderID), None)
+      })
+
+    def closeShort(ledger: Ledger): Behavior[ActorEvent] =
+      closePosition(ledger, maxReqRetries, openPositionTimeoutMs, backoffMs, new PositionCloser {
+        override def onProfitTake(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
+        override def onStoploss(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
+        override def onExpired(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
+        override def onUnprocessed(l: Ledger, takeProfitID: Option[String], stoplossID: Option[String]): Behavior[ActorEvent] = idle(IdleCtx(l))
+        override def openTakeProfit(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty, l.askPrice + retryCnt * postOnlyPriceAdjAmount, OrderSide.Buy)
+        override def openStoploss(takeProfitPrice: BigDecimal, retryCnt: Int): Try[Order] = restGateway.placeStopMarketOrderSync(tradeQty, takeProfitPrice + takeProfitAmount, OrderSide.Buy)
         override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(orderID), None)
       })
 

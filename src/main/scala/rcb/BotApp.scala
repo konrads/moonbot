@@ -12,20 +12,21 @@ object BotApp extends App {
   private val log = Logger("BotApp")
 
   val conf = ConfigFactory.load()
+    .withFallback(ConfigFactory.parseResources("application.conf"))
+    .withFallback(ConfigFactory.parseResources("application.private.conf"))
+    .resolve()
 
   val bitmexUrl         = conf.getString("bitmex.url")
   val bitmexWsUrl       = conf.getString("bitmex.wsUrl")
   val bitmexApiKey      = conf.getString("bitmex.apiKey")
   val bitmexApiSecret   = conf.getString("bitmex.apiSecret")
-  val bitmexRetries     = conf.getInt("bitmex.restRetries")
-  val bitmexRetryBackoffMs  = conf.getLong("bitmex.retryBackoffMs")
-  val bitmexRestSyncTimeout = conf.getInt("bitmex.restSyncTimeout")
 
   val graphiteNamespace = conf.getString("graphite.namespace")
   val graphiteHost      = conf.getString("graphite.host")
   val graphitePort      = conf.getInt("graphite.port")
 
   val tradeQty               = conf.getInt("bot.tradeQty")
+  val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
   val openPositionTimeoutMs  = conf.getLong("bot.openPositionTimeoutMs")
   val closePositionTimeoutMs = conf.getLong("bot.closePositionTimeoutMs")
   val backoffMs              = conf.getLong("bot.backoffMs")
@@ -36,7 +37,7 @@ object BotApp extends App {
   val postOnlyPriceAdjAmount = conf.getDouble("bot.postOnlyPriceAdjAmount")
 
   implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
-  val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, maxRetries=bitmexRetries, retryBackoffMs = bitmexRetryBackoffMs, syncTimeoutMs = bitmexRestSyncTimeout)
+  val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
   val wsGateway = new WsGateWay(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
 
   val orchestrator = OrchestratorActor(

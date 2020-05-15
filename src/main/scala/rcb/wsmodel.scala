@@ -10,8 +10,8 @@ sealed trait WsModel
 case class Info(info: String, version: String, timestamp: String, docs: String) extends WsModel
 object Info { implicit val aReads: Reads[Info] = Json.reads[Info] }
 
-case class Success(success: Boolean, subscribe: Option[String]) extends WsModel
-object Success { implicit val aFmt: Reads[Success] = Json.reads[Success] }
+case class SuccessConfirmation(success: Boolean, subscribe: Option[String]) extends WsModel
+object SuccessConfirmation { implicit val aFmt: Reads[SuccessConfirmation] = Json.reads[SuccessConfirmation] }
 
 case class OrderBookData(symbol: String, asks: Seq[Seq[BigDecimal]], bids: Seq[Seq[BigDecimal]]) extends WsModel
 object OrderBookData { implicit val aFmt: Reads[OrderBookData] = Json.reads[OrderBookData] }
@@ -61,7 +61,7 @@ object WsModel {
       case (Some("trade"), Some("insert")) => json.validate[Trade]
       case (Some(table), Some("partial")) if Seq("order", "trade").contains(table) => JsSuccess(Ignorable(json))
       case _ => (json \ "success").asOpt[Boolean] match {
-        case Some(_) => json.validate[Success]
+        case Some(_) => json.validate[SuccessConfirmation]
         case None => ((json \ "status").asOpt[Int], (json \ "error").asOpt[String]) match {
           case (Some(_), Some(_)) => json.validate[WsError]
           case _ => (json \ "info").asOpt[String] match {
