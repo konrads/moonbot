@@ -19,7 +19,7 @@ object OrderBookData { implicit val aFmt: Reads[OrderBookData] = Json.reads[Orde
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel
 object OrderBook { implicit val aFmt: Reads[OrderBook] = Json.reads[OrderBook] }
 
-case class OrderData(orderID: String, price: Option[BigDecimal], ordStatus: Option[String], leavesQty: Option[BigDecimal], cumQty: Option[BigDecimal], workingIndicator: Option[Boolean], text: Option[String]) extends WsModel {
+case class OrderData(orderID: String, clOrdID: Option[String], price: Option[BigDecimal], ordStatus: Option[String], leavesQty: Option[BigDecimal], cumQty: Option[BigDecimal], workingIndicator: Option[Boolean], text: Option[String]) extends WsModel {
   lazy val lifecycle = (ordStatus, workingIndicator, text) match {
     case (Some("New"), Some(false), _) => OrderLifecycle.NewInactive
     case (None, Some(true), _)         => OrderLifecycle.NewActive

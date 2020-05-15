@@ -25,18 +25,26 @@ object BotApp extends App {
   val graphiteHost      = conf.getString("graphite.host")
   val graphitePort      = conf.getInt("graphite.port")
 
-  val fsmTradeQty           = conf.getInt("fsm.tradeQty")
-  val fsmRequestTimeoutSecs = conf.getInt("fsm.requestTimeoutSecs")
-  val fsmHoldTimeoutSecs    = conf.getInt("fsm.holdTimeoutSecs")
+  val tradeQty               = conf.getInt("bot.tradeQty")
+  val openPositionTimeoutMs  = conf.getLong("bot.openPositionTimeoutMs")
+  val closePositionTimeoutMs = conf.getLong("bot.closePositionTimeoutMs")
+  val backoffMs              = conf.getLong("bot.backoffMs")
+  val maxReqRetries          = conf.getInt("bot.maxReqRetries")
+  val maxPostOnlyRetries     = conf.getInt("bot.maxPostOnlyRetries")
+  val takeProfitAmount       = conf.getDouble("bot.takeProfitAmount")
+  val stoplossAmount         = conf.getDouble("bot.stoplossAmount")
+  val postOnlyPriceAdjAmount = conf.getDouble("bot.postOnlyPriceAdjAmount")
 
   implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
-  val restGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, maxRetries=bitmexRetries, retryBackoffMs = bitmexRetryBackoffMs, syncTimeoutSecs = bitmexRestSyncTimeout)
+  val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, maxRetries=bitmexRetries, retryBackoffMs = bitmexRetryBackoffMs, syncTimeoutMs = bitmexRestSyncTimeout)
   val wsGateway = new WsGateWay(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
 
   val orchestrator = OrchestratorActor(
     restGateway=restGateway,
-    tradeQty=fsmTradeQty,
-    requestTimeoutSecs=fsmRequestTimeoutSecs, holdTimeoutSecs=fsmHoldTimeoutSecs, maxRetries=bitmexRetries)
+    tradeQty=tradeQty,
+    openPositionTimeoutMs=openPositionTimeoutMs, closePositionTimeoutMs=closePositionTimeoutMs, backoffMs=backoffMs,
+    maxReqRetries=maxReqRetries, maxPostOnlyRetries=maxPostOnlyRetries,
+    takeProfitAmount=takeProfitAmount, stoplossAmount=stoplossAmount, postOnlyPriceAdjAmount=postOnlyPriceAdjAmount)
   val orchestratorActor: ActorRef[ActorEvent] = ActorSystem(orchestrator, "orchestrator-actor")
 
   val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
@@ -46,13 +54,4 @@ object BotApp extends App {
     case e:JsError                        => log.error(s"WS consume error!: $e")
   }
   wsGateway.run(wsMessageConsumer)
-
-  val restMessageConsumer: PartialFunction[Try[(String, JsResult[RestModel])], Unit] = {
-    case scala.util.Success((clientOrderID, JsSuccess(value:Order,  _))) => orchestratorActor ! RestEvent(clientOrderID, value)
-    case scala.util.Success((clientOrderID, JsSuccess(value:Orders, _))) => orchestratorActor ! RestEvent(clientOrderID, value)
-    case scala.util.Success((clientOrderID, JsSuccess(value:, _)))       => log.info(s"Got orchestrator ignorable REST clientOrderID: $clientOrderID, message: $value")
-    case scala.util.Success((clientOrderID, e:JsError))                  => orchestratorActor ! RestEvent(clientOrderID, Error(ErrorDetail(name="JsError", message=e.toString)))  // FIXME
-    case scala.util.Failure(exc)                                         => throw exc
-  }
-  restGateway.run(restMessageConsumer)
 }

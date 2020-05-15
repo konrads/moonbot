@@ -28,107 +28,120 @@ case class CancelOrderIssued(orderID: String) extends HttpReply
 /** Trait, for testing purposes */
 trait IRestGateway {
   // async
-  def placeMarketOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): String
-  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): String
-  def amendOrderAsync(orderID: String, price: BigDecimal): String
-  def cancelOrderAsync(orderID: String): String
+  def placeStopMarketOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): (String, Future[Order])
+  def placeMarketOrderAsync(qty: BigDecimal, side: OrderSide): (String, Future[Order])
+  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): (String, Future[Order])
+  def amendOrderAsync(orderID: Option[String], clOrdID: Option[String], price: BigDecimal): Future[Order]
+  def cancelOrderAsync(orderID: Option[String], clOrdID: Option[String]): Future[Orders]
 
   // sync
+  def placeStopMarketOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide): Try[Order]
   def placeMarketOrderSync(qty: BigDecimal, side: OrderSide): Try[Order]
   def placeLimitOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide): Try[Order]
-  def amendOrderSync(orderID: String, price: BigDecimal): Try[Order]
-  def cancelOrderSync(orderID: String): Try[Orders]
+  def amendOrderSync(orderID: Option[String], clOrdID: Option[String], price: BigDecimal): Try[Order]
+  def cancelOrderSync(orderID: Option[String], clOrdID: Option[String]): Try[Orders]
 }
 
 
-class RestGateway(url: String, apiKey: String, apiSecret: String, maxRetries: Int, retryBackoffMs: Long, syncTimeoutSecs: Int)(implicit system: ActorSystem) extends IRestGateway {
-  var restConsume: PartialFunction[Try[(String, RestModel)], Unit] = null  // FIXME: hack var for the wire up of asyncs
-
-  def setup(restConsume: PartialFunction[Try[(String, RestModel)], Unit]): Unit = {
-    this.restConsume = restConsume
-  }
-
+class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSecret: String, maxRetries: Int, retryBackoffMs: Long, syncTimeoutMs: Int)(implicit system: ActorSystem) extends IRestGateway {
   val MARKUP_INDUCING_ERROR = "Order had execInst of ParticipateDoNotInitiate"
 
   // FIXME: consider timeouts!
-  // FIXME: keep alive, in http and ws?
+  // FIXME: keep alive, i ws?
   // FIXME: reconnections, in http and ws?
 
   // based on: https://blog.colinbreck.com/backoff-and-retry-error-handling-for-akka-streams/
   private val log = Logger[RestGateway]
   implicit val executionContext = system.dispatcher
 
-  def placeMarketOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): String = {
-    val clientID = java.util.UUID.randomUUID().toString
-    val resF = placeMarketOrder(qty, side).map(res => (clientID, res)).onComplete(restConsume)
-    clientID
+  def placeStopMarketOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): (String, Future[Order]) = {
+    val clOrdID = java.util.UUID.randomUUID().toString
+    val resF = placeStopMarketOrder(qty, side, price, Some(clOrdID))
+    (clOrdID, resF)
   }
 
-  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): String = {
-    val clientID = java.util.UUID.randomUUID().toString
-    val resF = placeLimitOrder(qty, price, side).map(res => (clientID, res)).onComplete(restConsume)
-    clientID
+  def placeMarketOrderAsync(qty: BigDecimal, side: OrderSide): (String, Future[Order]) = {
+    val clOrdID = java.util.UUID.randomUUID().toString
+    val resF = placeMarketOrder(qty, side, Some(clOrdID))
+    (clOrdID, resF)
   }
 
-  def amendOrderAsync(orderID: String, price: BigDecimal): String = {
-    val clientID = java.util.UUID.randomUUID().toString
-    val resF = amendOrder(orderID, price).map(res => (clientID, res)).onComplete(restConsume)
-    clientID
+  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): (String, Future[Order]) = {
+    val clOrdID = java.util.UUID.randomUUID().toString
+    val resF = placeLimitOrder(qty, price, side, Some(clOrdID))
+    (clOrdID, resF)
   }
 
-  def cancelOrderAsync(orderID: String): String = {
-    val clientID = java.util.UUID.randomUUID().toString
-    val resF = cancelOrder(orderID).map(res => (clientID, res)).onComplete(restConsume)
-    clientID
-  }
+  def amendOrderAsync(orderID: Option[String], clOrdID: Option[String], price: BigDecimal): Future[Order] =
+    amendOrder(orderID, clOrdID, price)
+
+  def cancelOrderAsync(orderID: Option[String], clOrdID: Option[String]): Future[Orders] =
+    cancelOrder(orderID, clOrdID)
 
   // sync
+  def placeStopMarketOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide): Try[Order] =
+    Await.ready(
+      placeStopMarketOrder(qty, side, price),
+      Duration(syncTimeoutMs, MILLISECONDS)
+    ).value.get
+
   def placeMarketOrderSync(qty: BigDecimal, side: OrderSide): Try[Order] =
     Await.ready(
       placeMarketOrder(qty, side),
-      Duration(syncTimeoutSecs, SECONDS)
+      Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get
 
   def placeLimitOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide): Try[Order] =
     Await.ready(
       placeLimitOrder(qty, price, side),
-      Duration(syncTimeoutSecs, SECONDS)
+      Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get
 
-  def amendOrderSync(orderID: String, price: BigDecimal): Try[Order] =
+  def amendOrderSync(orderID: Option[String], clOrdID: Option[String], price: BigDecimal): Try[Order] =
     Await.ready(
-      amendOrder(orderID, price),
-      Duration(syncTimeoutSecs, SECONDS)
+      amendOrder(orderID, clOrdID, price),
+      Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get
 
-  def cancelOrderSync(orderID: String): Try[Orders] =
+  def cancelOrderSync(orderID: Option[String], clOrdID: Option[String]): Try[Orders] =
     Await.ready(
-      cancelOrder(orderID),
-      Duration(syncTimeoutSecs, SECONDS)
+      cancelOrder(orderID, clOrdID),
+      Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get
 
-  private def placeMarketOrder(qty: BigDecimal, side: OrderSide): Future[Order] = ???
-
-  private def placeLimitOrder(qty: BigDecimal, price: BigDecimal, side: OrderSide): Future[Order] =
+  private def placeStopMarketOrder(qty: BigDecimal, side: OrderSide, price: BigDecimal, clOrdID: Option[String]=None): Future[Order] =
     reqRetried(
       POST,
       "/api/v1/order",
-      (retry: Int) => s"symbol=XBTUSD&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=$price",
-      // (retry: Int) => s"symbol=XBTUSD&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=${price + markup * retry * (if (side == OrderSide.Buy) -1 else 1)}",
+      (retry: Int) => s"symbol=$symbol&ordType=Stop&timeInForce=GoodTillCancel&stopPx=$price&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
+    ).map(_.asInstanceOf[Order])
+
+  private def placeMarketOrder(qty: BigDecimal, side: OrderSide, clOrdID: Option[String]=None): Future[Order] =
+    reqRetried(
+      POST,
+      "/api/v1/order",
+      (retry: Int) => s"symbol=$symbol&ordType=Market&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
+    ).map(_.asInstanceOf[Order])
+
+  private def placeLimitOrder(qty: BigDecimal, price: BigDecimal, side: OrderSide, clOrdID: Option[String]=None): Future[Order] =
+    reqRetried(
+      POST,
+      "/api/v1/order",
+      (retry: Int) => s"symbol=$symbol&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=$price" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
       ).map(_.asInstanceOf[Order])
 
-  private def amendOrder(orderID: String, price: BigDecimal): Future[Order] =
+  private def amendOrder(orderID: Option[String], cliOrdID: Option[String], price: BigDecimal): Future[Order] =
     reqRetried(
       PUT,
       "/api/v1/order",
-      (retry: Int) => s"orderID=$orderID&price=$price",
+      (retry: Int) => s"price=$price" + orderID.map("&orderID=" + _).getOrElse("") + cliOrdID.map("&origClOrdID=" + _).getOrElse(""),
       ).map(_.asInstanceOf[Order])
 
-  private def cancelOrder(orderID: String): Future[Orders] =
+  private def cancelOrder(orderID: Option[String], cliOrdID: Option[String]): Future[Orders] =
     reqRetried(
       DELETE,
       "/api/v1/order",
-      (retry: Int) => s"orderID=$orderID",
+      (retry: Int) => orderID.map("&orderID=" + _).getOrElse("") + cliOrdID.map("&clOrdID=" + _).getOrElse(""),
       ).map(_.asInstanceOf[Orders])
 
   private def reqRetried(method: HttpMethod, urlPath: String, retriedData: (Int) => String): Future[RestModel] = {
