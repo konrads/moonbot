@@ -47,7 +47,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   val MARKUP_INDUCING_ERROR = "Order had execInst of ParticipateDoNotInitiate"
 
   // FIXME: consider timeouts!
-  // FIXME: keep alive, i ws?
+  // FIXME: keep alive, in ws?
   // FIXME: reconnections, in http and ws?
 
   // based on: https://blog.colinbreck.com/backoff-and-retry-error-handling-for-akka-streams/
@@ -113,14 +113,14 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
     sendReq(
       POST,
       "/api/v1/order",
-      s"symbol=$symbol&ordType=Stop&timeInForce=GoodTillCancel&stopPx=$price&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
+      s"symbol=$symbol&ordType=Stop&timeInForce=GoodTillCancel&stopPx=$price&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
 
   private def placeMarketOrder(qty: BigDecimal, side: OrderSide, clOrdID: Option[String]=None): Future[Order] =
     sendReq(
       POST,
       "/api/v1/order",
-      s"symbol=$symbol&ordType=Market&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
+      s"symbol=$symbol&ordType=Market&timeInForce=GoodTillCancel&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
 
   private def placeLimitOrder(qty: BigDecimal, price: BigDecimal, side: OrderSide, clOrdID: Option[String]=None): Future[Order] =
@@ -144,16 +144,25 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       orderID.map("&orderID=" + _).getOrElse("") + cliOrdID.map("&clOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Orders])
 
-  def sendReq(method: HttpMethod, urlPath: String, data: => String): Future[RestModel] = {
-    val expiry = (System.currentTimeMillis / 1000 + 100).toInt //should be 15
+  private def sendReq(method: HttpMethod, urlPath: String, data: => String): Future[RestModel] = {
+    val expiry = System.currentTimeMillis / 1000 + 100 //should be 15
     val keyString = s"${method.value}${urlPath}${expiry}${data}"
     val apiSignature = getBitmexApiSignature(keyString, apiSecret)
+
     val request = HttpRequest(method = method, uri = url + urlPath)
       .withEntity(ContentTypes.`application/x-www-form-urlencoded`, data)
       .withHeaders(
-        RawHeader("api-expires",   s"$expiry"),
+        RawHeader("api-expires",   expiry.toString),
         RawHeader("api-key",       apiKey),
         RawHeader("api-signature", apiSignature))
+
+//    println(s"### expiry       = $expiry")
+//    println(s"### keyString    = $keyString")
+//    println(s"### apiSignature = $apiSignature")
+//    println(s"### apiSecret    = $apiSecret")
+//    println(s"### apiKey       = $apiKey")
+//    println(s"### data         = $data")
+//    println(s"\n### request         = $request\n${request.entity}")
 
     Http().singleRequest(request)
       .flatMap {
@@ -167,16 +176,15 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
           }
         case HttpResponse(s@StatusCodes.BadRequest, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-            b => Future.failed(new Exception(s"BadRequet: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+            b => Future.failed(new Exception(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
         // FIXME: Account for 503:
         //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Status code  : 503 SERVICE_UNAVAILABLE
         //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Headers      : [Date:"Sun, 26 Apr 2020 13:21:10 GMT", Content-Type:"application/json; charset=utf-8", Content-Length:"102", Connection:"keep-alive", Set-Cookie:"AWSALBTG=kdTm30cLPGFSnbZOmPyt4j8NjwPP2W/bWJpOMtH5YHeQ8C2NgIpIA9cT0od75ui6e0jTBAom5k2XUPgsjY3eqcO6Ft5aKCbW7dZyX/NoI84swgH3AfQwW+pch/vePpJVKQLG3bq118RKAWkZDyr8qqfCSi7ut7tKxzLe7MxMhk+Cy467UDI=; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/", "AWSALBTGCORS=kdTm30cLPGFSnbZOmPyt4j8NjwPP2W/bWJpOMtH5YHeQ8C2NgIpIA9cT0od75ui6e0jTBAom5k2XUPgsjY3eqcO6Ft5aKCbW7dZyX/NoI84swgH3AfQwW+pch/vePpJVKQLG3bq118RKAWkZDyr8qqfCSi7ut7tKxzLe7MxMhk+Cy467UDI=; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/; SameSite=None; Secure", "AWSALB=rqmeyZQOwEsI/tjLk6BdKq2+9xdxQVGuZ114iqjXh7i0c1JNZd423vfbfE+VYNYeSBm6tICBdF5IJHtBRY/1cNJV/gig/w0jmPMiQexwGOwwXDyt7kur/gDIbYye; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/", "AWSALBCORS=rqmeyZQOwEsI/tjLk6BdKq2+9xdxQVGuZ114iqjXh7i0c1JNZd423vfbfE+VYNYeSBm6tICBdF5IJHtBRY/1cNJV/gig/w0jmPMiQexwGOwwXDyt7kur/gDIbYye; Expires=Sun, 03 May 2020 13:21:10 GMT; Path=/; SameSite=None; Secure", X-RateLimit-Limit:"60", X-RateLimit-Remaining:"59", X-RateLimit-Reset:"1587907271", X-Powered-By:"Profit", ETag:"W/"66-qhi7rqXXvlVhEy8FfnYZtT4OszQ"", Strict-Transport-Security:"max-age=31536000; includeSubDomains"]
         //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Response body: {"error":{"message":"The system is currently overloaded. Please try again later.","name":"HTTPError"}}
         case HttpResponse(status, _headers, entity, _) =>
-          entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-            b => Future.failed(new Exception(s"Invalid status: $status, body: ${b.utf8String}"))
-          }
+          val contentsF = entity.dataBytes.runFold(ByteString(""))(_ ++ _)
+          contentsF.flatMap(bs => Future.failed(new Exception(s"Invalid status: $status, body: ${bs.utf8String}")))
       }
   }
 }

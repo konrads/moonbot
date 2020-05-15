@@ -24,12 +24,12 @@ object Cli extends App {
 
   // playground for RestGateway, WsGateway, etc
   class CliConf extends ScallopConf(args) {
+    val ordertype  = opt[String](default = Some("limit"))
     val price      = opt[BigDecimal]()
     val qty        = opt[BigDecimal]()
-    val markup     = opt[BigDecimal]()
     val orderid    = opt[String]()
     val clordrid   = opt[String]()
-    val minwssleep = opt[Int](default = Some(10))
+    val minwssleep = opt[Long](default = Some(10))
     val action     = trailArg[String]()
     verify()
   }
@@ -39,7 +39,7 @@ object Cli extends App {
   implicit val executionContext = serviceSystem.dispatcher
 
   val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
-  val wsGateway = new WsGateWay(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, minSleepInSecs = cliConf.minwssleep.toOption)
+  val wsGateway = new WsGateWay(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, minSleepInMs = cliConf.minwssleep.toOption)
   val consumeAll: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value, _) => log.info(s"WS ${value.getClass.getSimpleName}: $value")
     case s:JsError           => log.error(s"WS error!: $s")
@@ -60,26 +60,62 @@ object Cli extends App {
   }
 
     // validate sets of options
-  (cliConf.action(), cliConf.price.toOption, cliConf.qty.toOption, cliConf.markup.toOption, cliConf.orderid.toOption, cliConf.clordrid.toOption) match {
-    case ("bid", Some(price), Some(qty), Some(markup), _, _) =>
-      log.info(s"issuing bid: price: $price, qty: $qty, markup: $markup")
+  (cliConf.action(), cliConf.ordertype.toOption, cliConf.price.toOption, cliConf.qty.toOption, cliConf.orderid.toOption, cliConf.clordrid.toOption) match {
+    case ("bid", Some("limit"), Some(price), Some(qty), _, _) =>
+      log.info(s"issuing limit bid: price: $price, qty: $qty")
       wsGateway.run(consumeOrder)
       val (clOrdID, resF) = restGateway.placeLimitOrderAsync(qty, price, OrderSide.Buy)
-      log.info(s"REST bid request: $clOrdID")
+      log.info(s"REST bid limit request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST bid response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST bid exception: $clOrdID, $exc")
+        case Success(res) => log.info(s"REST limit bid response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST limit bid exception: $clOrdID, $exc")
       }
-    case ("ask", Some(price), Some(qty), Some(markup), _, _) =>
-      log.info(s"issuing ask: price: $price, qty: $qty, markup: $markup")
+    case ("ask", Some("limit"), Some(price), Some(qty), _, _) =>
+      log.info(s"issuing limit ask: price: $price, qty: $qty")
       wsGateway.run(consumeOrder)
       val (clOrdID, resF) = restGateway.placeLimitOrderAsync(qty, price, OrderSide.Sell)
-      log.info(s"REST ask request: $clOrdID")
+      log.info(s"REST limit ask request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST ask response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST ask exception: $clOrdID, $exc")
+        case Success(res) => log.info(s"REST limit ask response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST limit ask exception: $clOrdID, $exc")
       }
-    case ("amend", Some(price), _, _, orderIDOpt, cliOrdOpt) =>
+    case ("bid", Some("market"), _, Some(qty), _, _) =>
+      log.info(s"issuing market bid: qty: $qty")
+      wsGateway.run(consumeOrder)
+      val (clOrdID, resF) = restGateway.placeMarketOrderAsync(qty, OrderSide.Buy)
+      log.info(s"REST market bid request: $clOrdID")
+      resF.onComplete {
+        case Success(res) => log.info(s"REST market bid response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST market bid exception: $clOrdID, $exc")
+      }
+    case ("ask", Some("market"), _, Some(qty), _, _) =>
+      log.info(s"issuing market ask: qty: $qty")
+      wsGateway.run(consumeOrder)
+      val (clOrdID, resF) = restGateway.placeMarketOrderAsync(qty, OrderSide.Sell)
+      log.info(s"REST market ask request: $clOrdID")
+      resF.onComplete {
+        case Success(res) => log.info(s"REST market ask response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST market ask exception: $clOrdID, $exc")
+      }
+    case ("bid", Some("stopMarket"), Some(price), Some(qty), _, _) =>
+      log.info(s"issuing stopMarket bid: price: $price, qty: $qty")
+      wsGateway.run(consumeOrder)
+      val (clOrdID, resF) = restGateway.placeStopMarketOrderAsync(qty, price, OrderSide.Buy)
+      log.info(s"REST bid request: $clOrdID")
+      resF.onComplete {
+        case Success(res) => log.info(s"REST stopMarket bid response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST stopMarket bid exception: $clOrdID, $exc")
+      }
+    case ("ask", Some("stopMarket"), Some(price), Some(qty), _, _) =>
+      log.info(s"issuing stopMarket ask: price: $price, qty: $qty")
+      wsGateway.run(consumeOrder)
+      val (clOrdID, resF) = restGateway.placeStopMarketOrderAsync(qty, price, OrderSide.Sell)
+      log.info(s"REST stopMarket ask request: $clOrdID")
+      resF.onComplete {
+        case Success(res) => log.info(s"REST stopMarket ask response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST stopMarket ask exception: $clOrdID, $exc")
+      }
+    case ("amend", _, Some(price), _, orderIDOpt, cliOrdOpt) =>
       log.info(s"amending: price: $price, orderid: $orderIDOpt")
       wsGateway.run(consumeOrder)
       val resF = restGateway.amendOrderAsync(orderIDOpt, cliOrdOpt, price)
@@ -109,8 +145,8 @@ object Cli extends App {
     case ("monitorTrade", _, _, _, _, _) =>
       log.info(s"monitoring trade")
       wsGateway.run(consumeTrade)
-    case (action, priceOpt, qtyOpt, markupOpt, orderidOpt, cliOrdOpt) =>
-      log.error(s"Unknown params: action: $action, price: $priceOpt, amount: $qtyOpt, markup: $markupOpt, orderid: $orderidOpt, cliOrdOpt: $cliOrdOpt")
+    case (action, orderTypeOpt, priceOpt, qtyOpt, orderidOpt, cliOrdOpt) =>
+      log.error(s"Unknown params: action: $action, orderType: $orderidOpt, price: $priceOpt, amount: $qtyOpt, orderid: $orderidOpt, cliOrdOpt: $cliOrdOpt")
       sys.exit(-1)
   }
 }
