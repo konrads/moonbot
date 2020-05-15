@@ -4,9 +4,9 @@ name := "RebateCaptureBot"
 
 version := "0.1"
 
-scalaVersion := "2.13.1"
+scalaVersion := "2.13.2"
 
-sbtVersion := "1.3.2"
+sbtVersion := "1.3.10"
 
 test in assembly := {}
 

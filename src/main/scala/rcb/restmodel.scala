@@ -10,7 +10,7 @@ sealed trait RestModel
 
 case class Order(orderID: String, clOrdID: Option[String], symbol: String, ordType: String, side: String, price: Option[BigDecimal], stopPx: Option[BigDecimal], orderQty: BigDecimal, ordStatus: Option[String], workingIndicator: Option[Boolean], text: Option[String]) extends RestModel {
   lazy val lifecycle = (ordStatus, workingIndicator, text) match {
-    case (Some("New"), Some(false), _) => OrderLifecycle.NewInactive
+    case (Some("New"), Some(false), _) => OrderLifecycle.NewInactive // immaterial if active or inactive, might change to just New ...
     case (Some("New"), Some(true), _)  => OrderLifecycle.NewActive
     case (Some("Canceled"), _, Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
     case (Some("Canceled"), _, _)      => OrderLifecycle.Canceled

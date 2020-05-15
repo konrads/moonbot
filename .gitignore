@@ -1,5 +1,6 @@
 .idea
 .DS_Store
+Deleteme.*
 *.private.conf
 target
 project/project
