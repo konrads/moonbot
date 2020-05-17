@@ -18,6 +18,6 @@ package object rcb {
 
   object OrderLifecycle extends Enumeration {
     type OrderLifecycle = Value
-    val NewInactive, NewActive, Canceled, PostOnlyFailure, Filled, Unknown = Value
+    val New, Canceled, PostOnlyFailure, Filled, Unknown = Value
   }
 }

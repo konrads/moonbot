@@ -1,5 +1,6 @@
 package rcb
 
+import rcb.OrderLifecycle.OrderLifecycle
 import rcb.OrderSide.OrderSide
 
 // Event
@@ -16,12 +17,12 @@ case object CancelTakeProfit extends ActorEvent
 case object OpenStoploss extends ActorEvent
 case object CancelStoploss extends ActorEvent
 case object Expiry extends ActorEvent
+case object AdjWithMarkup extends ActorEvent
 
 
 // Context
 // FIXME: add ledger, orderbook, trade stats, encountered orders
 sealed trait ActorCtx
-
 case class IdleCtx(ledger: Ledger) extends ActorCtx
-case class OpenPositionCtx(ledger: Ledger, orderID: String=null, retries: Int=0) extends ActorCtx
+case class OpenPositionCtx(ledger: Ledger, orderID: String, markupRetry: Int=0) extends ActorCtx
 case class ClosePositionCtx(ledger: Ledger, takeProfitOrderID: String=null, stoplossOrderID: String, retries: Int=0) extends ActorCtx

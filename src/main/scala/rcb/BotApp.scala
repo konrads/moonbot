@@ -3,9 +3,7 @@ package rcb
 import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
 import play.api.libs.json._
-import akka.actor.typed.{ActorRef, ActorSystem}
-
-import scala.util.Try
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 
 
 object BotApp extends App {
@@ -27,11 +25,11 @@ object BotApp extends App {
 
   val tradeQty               = conf.getInt("bot.tradeQty")
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
-  val openPositionTimeoutMs  = conf.getLong("bot.openPositionTimeoutMs")
-  val closePositionTimeoutMs = conf.getLong("bot.closePositionTimeoutMs")
+  val openPositionExpiryMs   = conf.getLong("bot.openPositionExpiryMs")
+  val closePositionExpiryMs  = conf.getLong("bot.closePositionExpiryMs")
   val backoffMs              = conf.getLong("bot.backoffMs")
-  val maxReqRetries          = conf.getInt("bot.maxReqRetries")
-  val maxPostOnlyRetries     = conf.getInt("bot.maxPostOnlyRetries")
+  val reqRetries             = conf.getInt("bot.maxReqRetries")
+  val markupRetries          = conf.getInt("bot.maxPostOnlyRetries")
   val takeProfitAmount       = conf.getDouble("bot.takeProfitAmount")
   val stoplossAmount         = conf.getDouble("bot.stoplossAmount")
   val postOnlyPriceAdjAmount = conf.getDouble("bot.postOnlyPriceAdjAmount")
@@ -43,14 +41,14 @@ object BotApp extends App {
   val orchestrator = OrchestratorActor(
     restGateway=restGateway,
     tradeQty=tradeQty,
-    openPositionTimeoutMs=openPositionTimeoutMs, closePositionTimeoutMs=closePositionTimeoutMs, backoffMs=backoffMs,
-    maxReqRetries=maxReqRetries, maxPostOnlyRetries=maxPostOnlyRetries,
+    openPositionExpiryMs=openPositionExpiryMs, closePositionExpiryMs=closePositionExpiryMs, backoffMs=backoffMs,
+    reqRetries=reqRetries, markupRetries=markupRetries,
     takeProfitAmount=takeProfitAmount, stoplossAmount=stoplossAmount, postOnlyPriceAdjAmount=postOnlyPriceAdjAmount)
   val orchestratorActor: ActorRef[ActorEvent] = ActorSystem(orchestrator, "orchestrator-actor")
 
   val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value:OrderBook,    _) => orchestratorActor ! WsEvent(value)
-    case JsSuccess(value:UpdatedOrder, _) => orchestratorActor ! WsEvent(value)
+    case JsSuccess(value:UpsertOrder, _) => orchestratorActor ! WsEvent(value)
     case JsSuccess(value, _)              => log.info(s"Got orchestrator ignorable WS message: $value")
     case e:JsError                        => log.error(s"WS consume error!: $e")
   }

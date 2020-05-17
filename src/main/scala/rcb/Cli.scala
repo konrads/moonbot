@@ -45,10 +45,9 @@ object Cli extends App {
     case s:JsError           => log.error(s"WS error!: $s")
   }
   val consumeOrder: PartialFunction[JsResult[WsModel], Unit] = {
-    case JsSuccess(value:UpdatedOrder, _) => log.info(s"WS UpdatedOrder: $value")
-    case JsSuccess(value:InsertedOrder, _)  => log.info(s"WS InsertOrder: $value")
-    case JsSuccess(value:Trade,  _)       => log.info(s"WS Trade: $value")  // Not an order but useful in order monitoring
-    case s:JsError                        => log.error(s"WS error!: $s")
+    case JsSuccess(value:UpsertOrder, _) => log.info(s"WS UpsertOrder: $value")
+    case JsSuccess(value:Trade,  _)      => log.info(s"WS Trade: $value")  // Not an order but useful in order monitoring
+    case s:JsError                       => log.error(s"WS error!: $s")
   }
   val consumeOrderBook: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value:OrderBook,  _) => log.info(s"WS OrderBook: $value")

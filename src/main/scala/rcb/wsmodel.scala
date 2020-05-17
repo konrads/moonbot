@@ -20,24 +20,20 @@ case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) ex
 object OrderBook { implicit val aFmt: Reads[OrderBook] = Json.reads[OrderBook] }
 
 case class OrderData(orderID: String, clOrdID: Option[String], price: Option[BigDecimal], ordStatus: Option[String], leavesQty: Option[BigDecimal], cumQty: Option[BigDecimal], workingIndicator: Option[Boolean], text: Option[String]) extends WsModel {
-  lazy val lifecycle = (ordStatus, workingIndicator, text) match {
-    case (Some("New"), Some(false), _) => OrderLifecycle.NewInactive
-    case (None, Some(true), _)         => OrderLifecycle.NewActive
-    case (Some("Canceled"), _, Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
-    case (Some("Canceled"), _, _)      => OrderLifecycle.Canceled
-    case (Some("Filled"), _, _)        => OrderLifecycle.Filled
-    case _                             => OrderLifecycle.Unknown
+  lazy val lifecycle = (ordStatus, text) match {
+    case (Some("New"), _)      => OrderLifecycle.New
+    case (Some("Canceled"), Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
+    case (Some("Canceled"), _) => OrderLifecycle.Canceled
+    case (Some("Filled"), _)   => OrderLifecycle.Filled
+    case _                     => OrderLifecycle.Unknown
   }
 
   override def toString = s"${ScalaRunTime._toString(this)} { lifecycle = $lifecycle }"
 }
 object OrderData { implicit val aFmt: Reads[OrderData] = Json.reads[OrderData] }
 
-case class UpdatedOrder(action: Option[String], data: Seq[OrderData]) extends WsModel
-object UpdatedOrder { implicit val aFmt: Reads[UpdatedOrder] = Json.reads[UpdatedOrder] }
-
-case class InsertedOrder(action: Option[String], data: Seq[OrderData]) extends WsModel
-object InsertedOrder { implicit val aFmt: Reads[InsertedOrder] = Json.reads[InsertedOrder] }
+case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel
+object UpsertOrder { implicit val aFmt: Reads[UpsertOrder] = Json.reads[UpsertOrder] }
 
 case class TradeData(side: String, size: Int, price: BigDecimal) extends WsModel
 object TradeData { implicit val aFmt: Reads[TradeData] = Json.reads[TradeData] }
@@ -56,8 +52,7 @@ object WsModel {
     // println(s"#### ws json: $json")
     ((json \ "table").asOpt[String], (json \ "action").asOpt[String]) match {
       case (Some(table), _@Some(_)) if table.startsWith("orderBook") => json.validate[OrderBook]
-      case (Some("order"), Some("insert")) => json.validate[InsertedOrder]
-      case (Some("order"), Some("update")) => json.validate[UpdatedOrder]
+      case (Some("order"), _) => json.validate[UpsertOrder]
       case (Some("trade"), Some("insert")) => json.validate[Trade]
       case (Some(table), Some("partial")) if Seq("order", "trade").contains(table) => JsSuccess(Ignorable(json))
       case _ => (json \ "success").asOpt[Boolean] match {

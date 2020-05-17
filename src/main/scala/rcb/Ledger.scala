@@ -7,8 +7,7 @@ case class LedgerOrder(id: String, price: BigDecimal, qty: BigDecimal, lifecycle
 
 class Ledger {
   def record(o: WsModel): Ledger = ???
-  def record(o: InsertedOrder): Ledger = ???
-  def record(o: UpdatedOrder): Ledger = ???
+  def record(o: UpsertOrder): Ledger = ???
   def record(o: Order): Ledger = ???
   def record(o: OrderBook): Ledger = ???
   def record(o: Trade): Ledger = ???

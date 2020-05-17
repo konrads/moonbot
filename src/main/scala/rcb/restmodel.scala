@@ -9,13 +9,13 @@ import scala.runtime.ScalaRunTime
 sealed trait RestModel
 
 case class Order(orderID: String, clOrdID: Option[String], symbol: String, ordType: String, side: String, price: Option[BigDecimal], stopPx: Option[BigDecimal], orderQty: BigDecimal, ordStatus: Option[String], workingIndicator: Option[Boolean], text: Option[String]) extends RestModel {
-  lazy val lifecycle = (ordStatus, workingIndicator, text) match {
-    case (Some("New"), Some(false), _) => OrderLifecycle.NewInactive // immaterial if active or inactive, might change to just New ...
-    case (Some("New"), Some(true), _)  => OrderLifecycle.NewActive
-    case (Some("Canceled"), _, Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
-    case (Some("Canceled"), _, _)      => OrderLifecycle.Canceled
-    case (Some("Filled"), _, _)        => OrderLifecycle.Filled
-    case _                             => OrderLifecycle.Unknown
+  lazy val lifecycle = (ordStatus, text) match {
+    // case (Some("New"), Some(false), _) => OrderLifecycle.NewInactive // immaterial if active or inactive, might change to just New ...
+    case (Some("New"),  _)     => OrderLifecycle.New
+    case (Some("Canceled"), Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
+    case (Some("Canceled"), _) => OrderLifecycle.Canceled
+    case (Some("Filled"), _)   => OrderLifecycle.Filled
+    case _                     => OrderLifecycle.Unknown
   }
 
   override def toString = s"${ScalaRunTime._toString(this)} { lifecycle = $lifecycle }"
