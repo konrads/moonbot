@@ -233,17 +233,26 @@ object OrchestratorActor {
 //    }
 
   def apply(restGateway: IRestGateway,
-            tradeQty: Int,
+            tradeQty: Int, minTradeVol: BigDecimal,
             openPositionExpiryMs: Long, closePositionExpiryMs: Long, backoffMs: Long = 500,
             reqRetries: Int, markupRetries: Int,
             takeProfitAmount: BigDecimal, stoplossAmount: BigDecimal, postOnlyPriceAdjAmount: BigDecimal): Behavior[ActorEvent] = {
+
+    /**
+     * Gather enough WS data to trade, then switch to idle
+     */
+    def init(ctx: InitCtx): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
+      case WsEvent(wsData) =>
+        val ledger2 = ctx.ledger.record(wsData)
+        if (ledger2.isMinimallyFilled)
+          idle(IdleCtx(ledger2))
+        else
+          init(ctx.copy(ledger2))
+    }
+
     /**
      * Idle, ie. not in long or short position:
      * - waits for buy/sell opportunity
-     * - issues limit buy/sell
-     * - awaits
-     *   - if filled, issues limit order & progresses to next state
-     *   - else continues in idle
      */
     def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
       case WsEvent(wsData) =>
@@ -304,6 +313,6 @@ object OrchestratorActor {
         override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(orderID), None)
       })
 
-    idle(IdleCtx(ledger = new Ledger()))
+    init(InitCtx(ledger = Ledger.init(minTradeVol)))
   }
 }

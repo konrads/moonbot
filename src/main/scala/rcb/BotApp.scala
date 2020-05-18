@@ -24,6 +24,7 @@ object BotApp extends App {
   val graphitePort      = conf.getInt("graphite.port")
 
   val tradeQty               = conf.getInt("bot.tradeQty")
+  val minTradeVol            = conf.getInt("bot.minTradeVol")
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
   val openPositionExpiryMs   = conf.getLong("bot.openPositionExpiryMs")
   val closePositionExpiryMs  = conf.getLong("bot.closePositionExpiryMs")
@@ -40,7 +41,7 @@ object BotApp extends App {
 
   val orchestrator = OrchestratorActor(
     restGateway=restGateway,
-    tradeQty=tradeQty,
+    tradeQty=tradeQty, minTradeVol=minTradeVol,
     openPositionExpiryMs=openPositionExpiryMs, closePositionExpiryMs=closePositionExpiryMs, backoffMs=backoffMs,
     reqRetries=reqRetries, markupRetries=markupRetries,
     takeProfitAmount=takeProfitAmount, stoplossAmount=stoplossAmount, postOnlyPriceAdjAmount=postOnlyPriceAdjAmount)

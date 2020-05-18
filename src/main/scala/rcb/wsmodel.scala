@@ -13,7 +13,7 @@ object Info { implicit val aReads: Reads[Info] = Json.reads[Info] }
 case class SuccessConfirmation(success: Boolean, subscribe: Option[String]) extends WsModel
 object SuccessConfirmation { implicit val aFmt: Reads[SuccessConfirmation] = Json.reads[SuccessConfirmation] }
 
-case class OrderBookData(symbol: String, asks: Seq[Seq[BigDecimal]], bids: Seq[Seq[BigDecimal]]) extends WsModel
+case class OrderBookData(symbol: String, timestamp: String, asks: Seq[Seq[BigDecimal]], bids: Seq[Seq[BigDecimal]]) extends WsModel
 object OrderBookData { implicit val aFmt: Reads[OrderBookData] = Json.reads[OrderBookData] }
 
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel
@@ -35,7 +35,7 @@ object OrderData { implicit val aFmt: Reads[OrderData] = Json.reads[OrderData] }
 case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel
 object UpsertOrder { implicit val aFmt: Reads[UpsertOrder] = Json.reads[UpsertOrder] }
 
-case class TradeData(side: String, size: Int, price: BigDecimal) extends WsModel
+case class TradeData(side: String, size: Int, price: BigDecimal, timestamp: String) extends WsModel
 object TradeData { implicit val aFmt: Reads[TradeData] = Json.reads[TradeData] }
 
 case class Trade(data: Seq[TradeData]) extends WsModel
