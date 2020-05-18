@@ -16,6 +16,11 @@ package object rcb {
     val Buy, Sell = Value
   }
 
+  object Sentiment extends Enumeration {
+    type Sentiment = Value
+    val Bull, Bear, Neutral = Value
+  }
+
   object OrderLifecycle extends Enumeration {
     type OrderLifecycle = Value
     val New, Canceled, PostOnlyFailure, Filled, Unknown = Value

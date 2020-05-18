@@ -58,11 +58,14 @@ object OrchestratorActor {
                 case Filled =>
                   timers.cancel(Expiry)
                   positionOpener.onFilled(ledger2)
-                case Canceled | PostOnlyFailure | Filled if ctx.markupRetry == positionOpener.maxMarkupRetries =>
+                case Canceled =>
+                  // presume cancelled due to expiry
                   timers.cancel(Expiry)
-                  positionOpener.onUnprocessed(ledger2, ctx.orderID)
+                  actorCtx.log.error(s"Canceled, due to expiry(?), orderID: ${ctx.orderID}!")
+                  positionOpener.onExpired(ledger2)
                 case PostOnlyFailure if ctx.markupRetry == positionOpener.maxMarkupRetries =>
                   timers.cancel(Expiry)
+                  actorCtx.log.error(s"Maxed retries of PostOnly failures, orderID: ${ctx.orderID}!")
                   positionOpener.onUnprocessed(ledger2, ctx.orderID)
                 case PostOnlyFailure =>
                   // adjust markup and retry
@@ -72,6 +75,7 @@ object OrchestratorActor {
                     case Success(order) =>
                       val ledger3 = ledger2.record(order)
                       timers.startSingleTimer(Expiry, Duration(positionOpener.expiryMs, MILLISECONDS))
+                      // FIXME: deal with potential info from WS data that has arrived already
                       loop(ctx.copy(ledger3, markupRetry=markupRetry2)) // keep retrying
                     case Failure(exc) =>
                       actorCtx.log.error(s"Failed to issue Expire of orderID: ${ctx.orderID}!")
@@ -88,6 +92,7 @@ object OrchestratorActor {
         case Success(o) =>
           timers.startSingleTimer(Expiry, Duration(positionOpener.expiryMs, MILLISECONDS))
           val ctx = OpenPositionCtx(ledger.record(o), o.orderID, markupRetry=positionOpener.maxMarkupRetries)
+          // FIXME: deal with potential info from WS data that has arrived already
           loop(ctx)
         case Failure(exc) =>
           positionOpener.onUnprocessed(ledger, null, Some(exc))
@@ -251,8 +256,7 @@ object OrchestratorActor {
     }
 
     /**
-     * Idle, ie. not in long or short position:
-     * - waits for buy/sell opportunity
+     * Waiting for market conditions to change to volumous bull or bear
      */
     def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
       case WsEvent(wsData) =>
