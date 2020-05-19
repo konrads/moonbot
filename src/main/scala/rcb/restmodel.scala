@@ -8,13 +8,13 @@ import scala.runtime.ScalaRunTime
 
 sealed trait RestModel
 
-case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: String, ordType: String, side: String, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[String]=None, workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends RestModel {
+case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: String, ordType: String, side: OrderSide.Value, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends RestModel {
   lazy val lifecycle = (ordStatus, text) match {
     // case (Some("New"), Some(false), _) => OrderLifecycle.NewInactive // immaterial if active or inactive, might change to just New ...
-    case (Some("New"),  _)     => OrderLifecycle.New
-    case (Some("Canceled"), Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
-    case (Some("Canceled"), _) => OrderLifecycle.Canceled
-    case (Some("Filled"), _)   => OrderLifecycle.Filled
+    case (Some(OrderStatus.New),  _)     => OrderLifecycle.New
+    case (Some(OrderStatus.Canceled), Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
+    case (Some(OrderStatus.Canceled), _) => OrderLifecycle.Canceled
+    case (Some(OrderStatus.Filled), _)   => OrderLifecycle.Filled
     case _                     => OrderLifecycle.Unknown
   }
 

@@ -19,12 +19,12 @@ object OrderBookData { implicit val aFmt: Reads[OrderBookData] = Json.reads[Orde
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel
 object OrderBook { implicit val aFmt: Reads[OrderBook] = Json.reads[OrderBook] }
 
-case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[String]=None, timestamp: String, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: String, workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel {
+case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[OrderStatus.Value]=None, timestamp: String, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: OrderSide.Value, workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel {
   lazy val lifecycle = (ordStatus, text) match {
-    case (Some("New"), _)      => OrderLifecycle.New
-    case (Some("Canceled"), Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
-    case (Some("Canceled"), _) => OrderLifecycle.Canceled
-    case (Some("Filled"), _)   => OrderLifecycle.Filled
+    case (Some(OrderStatus.New), _)      => OrderLifecycle.New
+    case (Some(OrderStatus.Canceled), Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
+    case (Some(OrderStatus.Canceled), _) => OrderLifecycle.Canceled
+    case (Some(OrderStatus.Filled), _)   => OrderLifecycle.Filled
     case _                     => OrderLifecycle.Unknown
   }
 
@@ -35,7 +35,7 @@ object OrderData { implicit val aFmt: Reads[OrderData] = Json.reads[OrderData] }
 case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel
 object UpsertOrder { implicit val aFmt: Reads[UpsertOrder] = Json.reads[UpsertOrder] }
 
-case class TradeData(side: String, size: Int, price: BigDecimal, tickDirection:String, timestamp: String) extends WsModel
+case class TradeData(side: OrderSide.Value, size: Int, price: BigDecimal, tickDirection:String, timestamp: String) extends WsModel
 object TradeData { implicit val aFmt: Reads[TradeData] = Json.reads[TradeData] }
 
 case class Trade(data: Seq[TradeData]) extends WsModel

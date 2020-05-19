@@ -25,7 +25,7 @@ case class Ledger(minTradeVol: BigDecimal, emaWindow: Int, emaSmoothing: BigDeci
         val existing2 = existing.copy(myOrder=true)
         copy(ledgerOrders=ledgerOrders-existing2+existing2, ledgerOrdersById=ledgerOrdersById + (existing2.orderID -> existing2), tick=tick+1)
       case None =>
-        val lo = LedgerOrder(orderID=o.orderID, price=o.price.get, qty=o.orderQty, side=OrderSide.withName(o.side), timestamp=o.timestamp, lifecycle=o.lifecycle, myOrder=true)
+        val lo = LedgerOrder(orderID=o.orderID, price=o.price.get, qty=o.orderQty, side=o.side, timestamp=o.timestamp, lifecycle=o.lifecycle, myOrder=true)
         copy(ledgerOrders=ledgerOrders+lo, ledgerOrdersById=ledgerOrdersById + (lo.orderID -> lo), tick=tick+1)
     }
   // ws
@@ -40,7 +40,7 @@ case class Ledger(minTradeVol: BigDecimal, emaWindow: Int, emaSmoothing: BigDeci
               val lo2 = lo.copy(lifecycle=od.lifecycle)
               (ls - lo2 + lo2, lsById + (lo2.orderID -> lo2))
             case None =>
-              val lo = LedgerOrder(orderID=od.orderID, price=od.price.get, qty=od.orderQty, side=OrderSide.withName(od.side), timestamp=od.timestamp, lifecycle=od.lifecycle)
+              val lo = LedgerOrder(orderID=od.orderID, price=od.price.get, qty=od.orderQty, side=od.side, timestamp=od.timestamp, lifecycle=od.lifecycle)
               (ls + lo, lsById + (lo.orderID -> lo))
           }
       }
