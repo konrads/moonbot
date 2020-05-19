@@ -3,19 +3,49 @@ package rcb
 import rcb.OrderLifecycle.OrderLifecycle
 import rcb.OrderSide.OrderSide
 
+import scala.collection.SortedSet
 
 
-case class LedgerOrder(id: String, price: BigDecimal, qty: BigDecimal, lifecycle: OrderLifecycle, side: OrderSide, exchangeFee: BigDecimal=0)
+
+case class LedgerOrder(orderID: String, price: BigDecimal, qty: BigDecimal, lifecycle: OrderLifecycle, side: OrderSide, timestamp: String, exchangeFee: BigDecimal=0, myOrder: Boolean=false) extends Ordered[LedgerOrder] {
+  import scala.math.Ordered.orderingToOrdered
+  override def compare(that: LedgerOrder): Int = -((this.timestamp, this.orderID) compare (that.timestamp, that.orderID))
+}
 
 case class Ledger(minTradeVol: BigDecimal, emaWindow: Int, emaSmoothing: BigDecimal,
                   bullVolumeScoreThreshold: BigDecimal, bearVolumeScoreThreshold: BigDecimal,
-                  orderBook: OrderBook=null, trades: List[Trade]=Nil, myOrders: Seq[LedgerOrder]=Nil) {
+                  orderBook: OrderBook=null, trades: Seq[Trade]=Nil,
+                  ledgerOrders: SortedSet[LedgerOrder]=SortedSet.empty[LedgerOrder], ledgerOrdersById: Map[String, LedgerOrder]=Map.empty,
+                  tick: Long=0) {
   // rest
   def record(os: Orders): Ledger = os.orders.foldLeft(this)((soFar, o) => soFar.record(o))
-  def record(o: Order): Ledger = ???
+  def record(o: Order): Ledger =
+    ledgerOrdersById.get(o.orderID) match {
+      case Some(existing) =>
+        val existing2 = existing.copy(myOrder=true)
+        copy(ledgerOrders=ledgerOrders-existing2+existing2, ledgerOrdersById=ledgerOrdersById + (existing2.orderID -> existing2), tick=tick+1)
+      case None =>
+        val lo = LedgerOrder(orderID=o.orderID, price=o.price.get, qty=o.orderQty, side=OrderSide.withName(o.side), timestamp=o.timestamp, lifecycle=o.lifecycle, myOrder=true)
+        copy(ledgerOrders=ledgerOrders+lo, ledgerOrdersById=ledgerOrdersById + (lo.orderID -> lo), tick=tick+1)
+    }
   // ws
   def record(data: WsModel): Ledger = data match {
-    case o: UpsertOrder => ???
+    case o: UpsertOrder => {
+      // if doesn't exist, insert new ledger order, else update the lifecycle (maybe more...)
+      val (ledgerOrders2, ledgerOrdersById2) = o.data.foldLeft((ledgerOrders, ledgerOrdersById)) {
+        case ((ls, lsById), od) =>
+          lsById.get(od.orderID) match {
+            case Some(lo) =>
+              // ??? Update just the lifecycle ???
+              val lo2 = lo.copy(lifecycle=od.lifecycle)
+              (ls - lo2 + lo2, lsById + (lo2.orderID -> lo2))
+            case None =>
+              val lo = LedgerOrder(orderID=od.orderID, price=od.price.get, qty=od.orderQty, side=OrderSide.withName(od.side), timestamp=od.timestamp, lifecycle=od.lifecycle)
+              (ls + lo, lsById + (lo.orderID -> lo))
+          }
+      }
+      copy(ledgerOrders=ledgerOrders2, ledgerOrdersById=ledgerOrdersById2)
+    }
     case o: OrderBook => copy(orderBook = o)
     case t: Trade => copy(trades = (t +: trades).take(emaWindow))
     case _ => this
@@ -23,7 +53,6 @@ case class Ledger(minTradeVol: BigDecimal, emaWindow: Int, emaSmoothing: BigDeci
   // def record(o: UpsertOrder): Ledger = ???
   // def record(o: OrderBook): Ledger = copy(orderBook = o)
   // def record(t: Trade): Ledger = copy(trades = (t +: trades).take(emaWindow))
-  def byOrderID(oID: String): Option[LedgerOrder] = ???
   lazy val isMinimallyFilled: Boolean = orderBook != null && trades.nonEmpty
   lazy val sentiment: Sentiment.Value = {
     val (bullTrades, bearTrades) = trades.flatMap(_.data).partition(_.side == "Buy")

@@ -8,7 +8,7 @@ import scala.runtime.ScalaRunTime
 
 sealed trait RestModel
 
-case class Order(orderID: String, clOrdID: Option[String], symbol: String, timestamp: String, ordType: String, side: String, price: Option[BigDecimal], stopPx: Option[BigDecimal], orderQty: BigDecimal, ordStatus: Option[String], workingIndicator: Option[Boolean], text: Option[String]) extends RestModel {
+case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: String, ordType: String, side: String, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[String]=None, workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends RestModel {
   lazy val lifecycle = (ordStatus, text) match {
     // case (Some("New"), Some(false), _) => OrderLifecycle.NewInactive // immaterial if active or inactive, might change to just New ...
     case (Some("New"),  _)     => OrderLifecycle.New

@@ -53,7 +53,7 @@ object OrchestratorActor {
             if (! updatedCtxOrder)
               loop(ctx.copy(ledger2))
             else {
-              val order = ledger2.byOrderID(ctx.orderID).get
+              val order = ledger2.ledgerOrdersById(ctx.orderID)
               order.lifecycle match {
                 case Filled =>
                   timers.cancel(Expiry)
@@ -297,7 +297,7 @@ object OrchestratorActor {
       openPosition(ledger, new PositionOpener {
         override val maxMarkupRetries = markupRetries
         override val expiryMs = openPositionExpiryMs
-        override def onFilled(l: Ledger): Behavior[ActorEvent] = closeLong(l)
+        override def onFilled(l: Ledger): Behavior[ActorEvent] = closeShort(l)
         override def onExpired(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
         override def onUnprocessed(l: Ledger, orderID: String, exc: Option[Throwable]): Behavior[ActorEvent] = idle(IdleCtx(l))
         override def openOrder(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty: BigDecimal, l.askPrice + retryCnt * postOnlyPriceAdjAmount, OrderSide.Sell)
