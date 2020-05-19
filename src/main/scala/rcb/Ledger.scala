@@ -35,12 +35,12 @@ case class Ledger(minTradeVol: BigDecimal, emaWindow: Int, emaSmoothing: BigDeci
       val (ledgerOrders2, ledgerOrdersById2) = o.data.foldLeft((ledgerOrders, ledgerOrdersById)) {
         case ((ls, lsById), od) =>
           lsById.get(od.orderID) match {
-            case Some(lo) =>
-              // ??? Update just the lifecycle ???
+            case Some(lo) if od.ordStatus.isDefined =>
+              // ??? Update just the lifecycle only if have orderStatus ???
               val lo2 = lo.copy(lifecycle=od.lifecycle)
               (ls - lo2 + lo2, lsById + (lo2.orderID -> lo2))
             case None =>
-              val lo = LedgerOrder(orderID=od.orderID, price=od.price.get, qty=od.orderQty, side=od.side, timestamp=od.timestamp, lifecycle=od.lifecycle)
+              val lo = LedgerOrder(orderID=od.orderID, price=od.price.get, qty=od.orderQty.orNull, side=od.side.orNull, timestamp=od.timestamp, lifecycle=od.lifecycle)
               (ls + lo, lsById + (lo.orderID -> lo))
           }
       }

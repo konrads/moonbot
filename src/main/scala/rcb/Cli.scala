@@ -46,16 +46,20 @@ object Cli extends App {
   }
   val consumeOrder: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value:UpsertOrder, _) => log.info(s"WS UpsertOrder: $value")
-    case JsSuccess(value:Trade,  _)      => log.info(s"WS Trade: $value")  // Not an order but useful in order monitoring
     case s:JsError                       => log.error(s"WS error!: $s")
   }
-  val consumeOrderBook: PartialFunction[JsResult[WsModel], Unit] = {
-    case JsSuccess(value:OrderBook,  _) => log.info(s"WS OrderBook: $value")
-    case s:JsError                      => log.error(s"WS error!: $s")
+  val consumeOrderTrade: PartialFunction[JsResult[WsModel], Unit] = {
+    case JsSuccess(value:UpsertOrder, _) => log.info(s"WS UpsertOrder: $value")
+    case JsSuccess(value:Trade,  _)      => log.info(s"WS Trade: $value")
+    case s:JsError                       => log.error(s"WS error!: $s")
   }
   val consumeTrade: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value:Trade,  _) => log.info(s"WS Trade: $value")
     case s:JsError                  => log.error(s"WS error!: $s")
+  }
+  val consumeOrderBook: PartialFunction[JsResult[WsModel], Unit] = {
+    case JsSuccess(value:OrderBook,  _) => log.info(s"WS OrderBook: $value")
+    case s:JsError                      => log.error(s"WS error!: $s")
   }
 
     // validate sets of options
@@ -138,12 +142,15 @@ object Cli extends App {
     case ("monitorOrder", _, _, _, _, _) =>
       log.info(s"monitoring orders")
       wsGateway.run(consumeOrder)
+    case ("monitorTrade", _, _, _, _, _) =>
+      log.info(s"monitoring trades")
+      wsGateway.run(consumeTrade)
+    case ("monitorOrderTrade", _, _, _, _, _) =>
+      log.info(s"monitoring orders & trades")
+      wsGateway.run(consumeOrderTrade)
     case ("monitorOrderBook", _, _, _, _, _) =>
       log.info(s"monitoring order book")
       wsGateway.run(consumeOrderBook)
-    case ("monitorTrade", _, _, _, _, _) =>
-      log.info(s"monitoring trade")
-      wsGateway.run(consumeTrade)
     case (action, orderTypeOpt, priceOpt, qtyOpt, orderidOpt, cliOrdOpt) =>
       log.error(s"Unknown params: action: $action, orderType: $orderidOpt, price: $priceOpt, amount: $qtyOpt, orderid: $orderidOpt, cliOrdOpt: $cliOrdOpt")
       sys.exit(-1)
