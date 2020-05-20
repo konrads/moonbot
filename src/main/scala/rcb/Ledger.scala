@@ -55,7 +55,7 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
               }
               (ls - lo2 + lo2, lsById + (lo2.orderID -> lo2))
             case None =>
-              val lo = LedgerOrder(orderID=od.orderID, price=od.price.get, qty=od.orderQty.orNull, side=od.side.orNull, timestamp=od.timestamp, lifecycle=od.lifecycle)
+              val lo = LedgerOrder(orderID=od.orderID, price=od.stopPx.getOrElse(od.price.getOrElse(-1)), qty=od.orderQty.orNull, side=od.side.orNull, timestamp=od.timestamp, lifecycle=od.lifecycle)
               (ls + lo, lsById + (lo.orderID -> lo))
           }
       }

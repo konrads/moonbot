@@ -144,7 +144,7 @@ object Cli extends App {
       def consumeWs(ledger: Ledger=Ledger()): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
         case WsEvent(wsData) =>
           val ledger2 = ledger.record(wsData)
-          log.info(s"...wsData: $wsData, ${ledger2.myOrders.map(o => s"\n- $o").mkString("\n")}")
+          log.info(s"...wsData: $wsData\n                                ledgerOrders:${ledger2.ledgerOrders.map(o => s"\n                                - $o").mkString}")
           if (ledger2.isMinimallyFilled) {
             if (ledger2.sentimentScore >= 0.25)
               log.info(s"bullish - ${ledger2.sentimentScore}! would buy @ ${ledger2.bidPrice}")
