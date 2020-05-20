@@ -19,13 +19,13 @@ object OrderBookData { implicit val aFmt: Reads[OrderBookData] = Json.reads[Orde
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel
 object OrderBook { implicit val aFmt: Reads[OrderBook] = Json.reads[OrderBook] }
 
-case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordStatus: Option[OrderStatus.Value]=None, timestamp: String, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel {
+case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordStatus: Option[OrderStatus.Value]=None, timestamp: String, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel {
   lazy val lifecycle = (ordStatus, text) match {
     case (Some(OrderStatus.New), _)      => OrderLifecycle.New
     case (Some(OrderStatus.Canceled), Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
     case (Some(OrderStatus.Canceled), _) => OrderLifecycle.Canceled
     case (Some(OrderStatus.Filled), _)   => OrderLifecycle.Filled
-    case _                     => OrderLifecycle.Unknown
+    case _                               => OrderLifecycle.Unknown
   }
 
   override def toString = s"${ScalaRunTime._toString(this)} { lifecycle = $lifecycle }"

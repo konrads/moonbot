@@ -4,14 +4,14 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.{RawHeader, `Content-Type`}
+import akka.http.scaladsl.model.headers.RawHeader
 import akka.util.ByteString
 import com.typesafe.scalalogging.Logger
-import play.api.libs.json.{JsError, JsResult, JsSuccess}
+import play.api.libs.json.{JsError, JsSuccess}
 import rcb.OrderSide.OrderSide
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, Future}
 import scala.util.Try
 
 
@@ -56,7 +56,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
 
   def placeStopMarketOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): (String, Future[Order]) = {
     val clOrdID = java.util.UUID.randomUUID().toString
-    val resF = placeStopMarketOrder(qty, side, price, Some(clOrdID))
+    val resF = placeStopMarketOrder(qty, side, price, clOrdID=Some(clOrdID))
     (clOrdID, resF)
   }
 
@@ -109,11 +109,11 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get
 
-  private def placeStopMarketOrder(qty: BigDecimal, side: OrderSide, price: BigDecimal, clOrdID: Option[String]=None): Future[Order] =
+  private def placeStopMarketOrder(qty: BigDecimal, side: OrderSide, price: BigDecimal, execInst: String="LastPrice", clOrdID: Option[String]=None): Future[Order] =
     sendReq(
       POST,
       "/api/v1/order",
-      s"symbol=$symbol&ordType=Stop&timeInForce=GoodTillCancel&stopPx=$price&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
+      s"symbol=$symbol&ordType=Stop&timeInForce=GoodTillCancel&execInst=$execInst&stopPx=$price&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
 
   private def placeMarketOrder(qty: BigDecimal, side: OrderSide, clOrdID: Option[String]=None): Future[Order] =
@@ -184,7 +184,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
         //        2020-04-26 23:21:10.908  INFO 61619 --- [t-dispatcher-67] .s.LoggingHttpRequestResponseInterceptor : Response body: {"error":{"message":"The system is currently overloaded. Please try again later.","name":"HTTPError"}}
         case HttpResponse(s@StatusCodes.ServiceUnavailable, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-            b => Future.failed(new TemporarilyUnavailableError(s"ServiceUnavailable: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+            b => Future.failed(TemporarilyUnavailableError(s"ServiceUnavailable: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
         case HttpResponse(status, _headers, entity, _) =>
           val contentsF = entity.dataBytes.runFold(ByteString(""))(_ ++ _)

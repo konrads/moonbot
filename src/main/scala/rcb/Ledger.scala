@@ -36,8 +36,24 @@ case class Ledger(minTradeVol: BigDecimal, emaWindow: Int, emaSmoothing: BigDeci
         case ((ls, lsById), od) =>
           lsById.get(od.orderID) match {
             case Some(lo) if od.ordStatus.isDefined =>
-              // ??? Update just the lifecycle only if have orderStatus ???
-              val lo2 = lo.copy(lifecycle=od.lifecycle)
+              val lo2 = (lo.lifecycle, od.ordStatus) match {
+                case (OrderLifecycle.Filled, _) => lo    // ignore, already set, eg. by REST
+                case (OrderLifecycle.Canceled, _) => lo  // ignore, already set, eg. by REST
+                case (_, Some(OrderStatus.New)) =>
+                  lo.copy(
+                    price=od.stopPx.getOrElse(od.price.getOrElse(BigDecimal(-1))),
+                    qty=od.orderQty.getOrElse(BigDecimal(-1)),
+                    lifecycle=od.lifecycle
+                  )
+                case (_, Some(OrderStatus.Canceled)) => lo.copy(lifecycle=od.lifecycle)
+                case (_, Some(OrderStatus.PartiallyFilled)) => lo.copy(lifecycle=od.lifecycle)
+                case (_, Some(OrderStatus.Filled)) => lo.copy(
+                    lifecycle=od.lifecycle,
+                    qty=od.cumQty.getOrElse(BigDecimal(-1)),
+                    price=od.price.getOrElse(BigDecimal(-1))
+                  )
+                case _ => lo
+              }
               (ls - lo2 + lo2, lsById + (lo2.orderID -> lo2))
             case None =>
               val lo = LedgerOrder(orderID=od.orderID, price=od.price.get, qty=od.orderQty.orNull, side=od.side.orNull, timestamp=od.timestamp, lifecycle=od.lifecycle)
@@ -88,6 +104,6 @@ case class Ledger(minTradeVol: BigDecimal, emaWindow: Int, emaSmoothing: BigDeci
 }
 
 object Ledger {
-  def init(minTradeVol: BigDecimal, emaWindow: Int=20, emaSmoothing: BigDecimal=2.0, bullVolumeScoreThreshold: BigDecimal=0.25, bearVolumeScoreThreshold: BigDecimal=0.25) =
+  def init(minTradeVol: BigDecimal, emaWindow: Int=20, emaSmoothing: BigDecimal=2.0, bullVolumeScoreThreshold: BigDecimal=0.75, bearVolumeScoreThreshold: BigDecimal=0.25) =
     Ledger(minTradeVol=minTradeVol, emaWindow=emaWindow, emaSmoothing=emaSmoothing, bullVolumeScoreThreshold=bullVolumeScoreThreshold, bearVolumeScoreThreshold=bearVolumeScoreThreshold)
 }
