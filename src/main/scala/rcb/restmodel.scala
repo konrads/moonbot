@@ -9,7 +9,7 @@ import scala.runtime.ScalaRunTime
 
 sealed trait RestModel
 
-case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: String, ordType: String, side: OrderSide.Value, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends RestModel {
+case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: String, ordType: OrderType.Value, side: OrderSide.Value, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends RestModel {
   lazy val lifecycle = (ordStatus, text) match {
     // case (Some("New"), Some(false), _) => OrderLifecycle.NewInactive // immaterial if active or inactive, might change to just New ...
     case (Some(OrderStatus.New),  _)     => OrderLifecycle.New
@@ -33,20 +33,20 @@ case class Error(error: ErrorDetail) extends RestModel
 object Error { implicit val aReads: Reads[Error] = Json.reads[Error] }
 
 
-case class OrderReq(orderQty: BigDecimal, side: OrderSide, ordType: String, symbol: Option[String]=None,
+case class OrderReq(orderQty: BigDecimal, side: OrderSide, ordType: OrderType.Value, symbol: Option[String]=None,
                     execInst: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None,
                     clOrdID: Option[String]=None, timeInForce: String="GoodTillCancel")
 object OrderReq {
   implicit val aWrites: Writes[OrderReq] = Json.writes[OrderReq]
 
   def asStopMarketOrder(side: OrderSide, orderQty: BigDecimal, price: BigDecimal, clOrdID: Option[String]=None) =
-    OrderReq(ordType="Stop", side=side, orderQty=orderQty, execInst=Some("LastPrice"), stopPx=Some(price), clOrdID=clOrdID)
+    OrderReq(ordType=OrderType.Stop, side=side, orderQty=orderQty, execInst=Some("LastPrice"), stopPx=Some(price), clOrdID=clOrdID)
 
   def asMarketOrder(side: OrderSide, orderQty: BigDecimal, clOrdID: Option[String]=None) =
-    OrderReq(ordType="Market", side=side, orderQty=orderQty, clOrdID=clOrdID)
+    OrderReq(ordType=OrderType.Market, side=side, orderQty=orderQty, clOrdID=clOrdID)
 
   def asLimitOrder(side: OrderSide, orderQty: BigDecimal, price: BigDecimal, clOrdID: Option[String]=None) =
-    OrderReq(ordType="Limit", side=side, orderQty=orderQty, execInst=Some("ParticipateDoNotInitiate"), price=Some(price), clOrdID=clOrdID)
+    OrderReq(ordType=OrderType.Limit, side=side, orderQty=orderQty, execInst=Some("ParticipateDoNotInitiate"), price=Some(price), clOrdID=clOrdID)
 }
 
 case class OrderReqs(orders: Seq[OrderReq])

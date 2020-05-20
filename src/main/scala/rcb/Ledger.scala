@@ -7,7 +7,7 @@ import scala.collection.SortedSet
 
 
 
-case class LedgerOrder(orderID: String, price: BigDecimal, qty: BigDecimal, lifecycle: OrderLifecycle, side: OrderSide, timestamp: String, exchangeFee: BigDecimal=0, myOrder: Boolean=false) extends Ordered[LedgerOrder] {
+case class LedgerOrder(orderID: String, price: BigDecimal, qty: BigDecimal, lifecycle: OrderLifecycle, side: OrderSide, ordType: OrderType.Value=null, timestamp: String, exchangeFee: BigDecimal=0, myOrder: Boolean=false) extends Ordered[LedgerOrder] {
   import scala.math.Ordered.orderingToOrdered
   override def compare(that: LedgerOrder): Int = -((this.timestamp, this.orderID) compare (that.timestamp, that.orderID))
 }
@@ -21,10 +21,10 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
   def record(o: Order): Ledger =
     ledgerOrdersById.get(o.orderID) match {
       case Some(existing) =>
-        val existing2 = existing.copy(myOrder=true)
+        val existing2 = existing.copy(myOrder=true, ordType=o.ordType)
         copy(ledgerOrders=ledgerOrders-existing2+existing2, ledgerOrdersById=ledgerOrdersById + (existing2.orderID -> existing2), tick=tick+1)
       case None =>
-        val lo = LedgerOrder(orderID=o.orderID, price=o.price.get, qty=o.orderQty, side=o.side, timestamp=o.timestamp, lifecycle=o.lifecycle, myOrder=true)
+        val lo = LedgerOrder(orderID=o.orderID, price=o.price.get, qty=o.orderQty, side=o.side, ordType=o.ordType, timestamp=o.timestamp, lifecycle=o.lifecycle, myOrder=true)
         copy(ledgerOrders=ledgerOrders+lo, ledgerOrdersById=ledgerOrdersById + (lo.orderID -> lo), tick=tick+1)
     }
   // ws

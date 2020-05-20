@@ -13,8 +13,8 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     val ws2 = UpsertOrder(Some("update"), data=Seq(
       OrderData(orderID="o2", price=Some(2), orderQty=Some(2), side=Some(OrderSide.Buy), timestamp="2010-01-02", ordStatus=Some(OrderStatus.Canceled), text=Some("had execInst of ParticipateDoNotInitiate")),
     ))
-    val rest1 = Order(orderID="o1", symbol="XBTUSD", price=Some(1), orderQty=1, side=OrderSide.Buy, ordType="Limit", timestamp="2010-01-01", ordStatus=Some(OrderStatus.New))
-    val rest2 = Order(orderID="o2", symbol="XBTUSD", price=Some(2), orderQty=2, side=OrderSide.Buy, ordType="Limit", timestamp="2010-01-01", ordStatus=Some(OrderStatus.Filled))
+    val rest1 = Order(orderID="o1", symbol="XBTUSD", price=Some(1), orderQty=1, side=OrderSide.Buy, ordType=OrderType.Limit, timestamp="2010-01-01", ordStatus=Some(OrderStatus.New))
+    val rest2 = Order(orderID="o2", symbol="XBTUSD", price=Some(2), orderQty=2, side=OrderSide.Buy, ordType=OrderType.Limit, timestamp="2010-01-01", ordStatus=Some(OrderStatus.Filled))
 
     val l = Ledger()
     val l2 = l.record(ws1).record(ws2)

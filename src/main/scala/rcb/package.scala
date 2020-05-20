@@ -18,6 +18,12 @@ package object rcb {
     implicit val aFormat = Json.formatEnum(this)
   }
 
+  object OrderType extends Enumeration {
+    type OrderType = Value
+    val Limit, Stop, Market, StopLimit, MarketIfTouched, LimitIfTouched = Value
+    implicit val aFormat = Json.formatEnum(this)
+  }
+
   object OrderStatus extends Enumeration {
     type OrderStatus = Value
     val New, Canceled, Filled, Rejected, PartiallyFilled, Expired, Stopped = Value
