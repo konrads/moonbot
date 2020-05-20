@@ -19,7 +19,7 @@ object OrderBookData { implicit val aFmt: Reads[OrderBookData] = Json.reads[Orde
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel
 object OrderBook { implicit val aFmt: Reads[OrderBook] = Json.reads[OrderBook] }
 
-case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordStatus: Option[OrderStatus.Value]=None, timestamp: String, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel {
+case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: String, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel {
   lazy val lifecycle = (ordStatus, text) match {
     case (Some(OrderStatus.New), _)      => OrderLifecycle.New
     case (Some(OrderStatus.Canceled), Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
@@ -50,7 +50,7 @@ object Ignorable { implicit val aFmt: Reads[Ignorable] = Json.reads[Ignorable] }
 object WsModel {
   implicit val aReads: Reads[WsModel] = (json: JsValue) => {
     // println(s"#### ws json: $json")
-    ((json \ "table").asOpt[String], (json \ "action").asOpt[String]) match {
+    val res = ((json \ "table").asOpt[String], (json \ "action").asOpt[String]) match {
       case (Some(table), _@Some(_)) if table.startsWith("orderBook") => json.validate[OrderBook]
       case (Some("order"), _) => json.validate[UpsertOrder]
       case (Some("trade"), Some("insert")) => json.validate[Trade]
@@ -65,6 +65,10 @@ object WsModel {
           }
         }
       }
+    }
+    res match {
+      case s:JsSuccess[WsModel] => s
+      case e:JsError => println(s".....Got WSModel unmarshal error:\njson: $json\nerror: $e"); e
     }
   }
 

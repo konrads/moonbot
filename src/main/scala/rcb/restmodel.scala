@@ -57,7 +57,7 @@ object OrderReqs {
 object RestModel {
   implicit val aReads: Reads[RestModel] = (json: JsValue) => {
     // println(s"#### rest json: $json")
-    json match {
+    val res = json match {
       case arr@JsArray(_) => ((arr(0) \ "orderID").asOpt[String]) match {
         case Some(_) => arr.validate[List[Order]].map(x => Orders(x))
         case _ => JsError(s"Unknown json array '$json'")
@@ -69,6 +69,10 @@ object RestModel {
           case None    => JsError(s"Unknown json '$json'")
         }
       }
+    }
+    res match {
+      case s:JsSuccess[WsModel] => s
+      case e:JsError => println(s".....Got RestModel unmarshal error:\njson: $json\nerror: $e"); e
     }
   }
 

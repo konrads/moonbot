@@ -78,7 +78,7 @@ object Cli extends App {
       log.info(s"REST takeProfitAndStoploss request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST takeProfitAndStoploss response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST takeProfitAndStoploss exception: $clOrdID, $exc")
+        case Failure(exc) => log.error(s"REST takeProfitAndStoploss exception: $clOrdID", exc)
       }
     case ("bid", Some("limit"), Some(price), _, _, Some(qty), _, _) =>
       log.info(s"issuing limit bid: price: $price, qty: $qty")
@@ -87,7 +87,7 @@ object Cli extends App {
       log.info(s"REST bid limit request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST limit bid response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST limit bid exception: $clOrdID, $exc")
+        case Failure(exc) => log.error(s"REST limit bid exception: $clOrdID", exc)
       }
     case ("ask", Some("limit"), Some(price), _, _, Some(qty), _, _) =>
       log.info(s"issuing limit ask: price: $price, qty: $qty")
@@ -96,7 +96,7 @@ object Cli extends App {
       log.info(s"REST limit ask request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST limit ask response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST limit ask exception: $clOrdID, $exc")
+        case Failure(exc) => log.error(s"REST limit ask exception: $clOrdID", exc)
       }
     case ("bid", Some("market"), _, _, _, Some(qty), _, _) =>
       log.info(s"issuing market bid: qty: $qty")
@@ -105,7 +105,7 @@ object Cli extends App {
       log.info(s"REST market bid request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST market bid response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST market bid exception: $clOrdID, $exc")
+        case Failure(exc) => log.error(s"REST market bid exception: $clOrdID", exc)
       }
     case ("ask", Some("market"), _, _, _, Some(qty), _, _) =>
       log.info(s"issuing market ask: qty: $qty")
@@ -114,7 +114,7 @@ object Cli extends App {
       log.info(s"REST market ask request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST market ask response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST market ask exception: $clOrdID, $exc")
+        case Failure(exc) => log.error(s"REST market ask exception: $clOrdID", exc)
       }
     case ("bid", Some("stopMarket"), Some(price), _, _, Some(qty), _, _) =>
       log.info(s"issuing stopMarket bid: price: $price, qty: $qty")
@@ -123,7 +123,7 @@ object Cli extends App {
       log.info(s"REST bid request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST stopMarket bid response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST stopMarket bid exception: $clOrdID, $exc")
+        case Failure(exc) => log.error(s"REST stopMarket bid exception: $clOrdID", exc)
       }
     case ("ask", Some("stopMarket"), Some(price), _, _, Some(qty), _, _) =>
       log.info(s"issuing stopMarket ask: price: $price, qty: $qty")
@@ -132,7 +132,7 @@ object Cli extends App {
       log.info(s"REST stopMarket ask request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST stopMarket ask response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST stopMarket ask exception: $clOrdID, $exc")
+        case Failure(exc) => log.error(s"REST stopMarket ask exception: $clOrdID", exc)
       }
     case ("amend", _, Some(price), _, _, _, orderIDOpt, cliOrdOpt) =>
       log.info(s"amending: price: $price, orderid: $orderIDOpt")
@@ -141,7 +141,7 @@ object Cli extends App {
       log.info(s"REST amend request: $orderIDOpt")
       resF.onComplete {
         case Success(res) => log.info(s"REST amend response: $orderIDOpt, $cliOrdOpt, $res")
-        case Failure(exc) => log.error(s"REST amend exception: $orderIDOpt, $cliOrdOpt, $exc")
+        case Failure(exc) => log.error(s"REST amend exception: $orderIDOpt, $cliOrdOpt", exc)
       }
     case ("cancel", _, _, _, _, _, orderIDOpt, cliOrdOpt) =>
       log.info(s"canceling: orderid: $orderIDOpt")
@@ -150,7 +150,7 @@ object Cli extends App {
       log.info(s"REST cancel request: $orderIDOpt")
       resF.onComplete {
         case Success(res) => log.info(s"REST cancel response: $orderIDOpt, $cliOrdOpt, $res")
-        case Failure(exc) => log.error(s"REST cancel exception: $orderIDOpt, $cliOrdOpt, $exc")
+        case Failure(exc) => log.error(s"REST cancel exception: $orderIDOpt, $cliOrdOpt", exc)
       }
     case ("monitorLedger", _, _, _, _, _, _, _) =>
       log.info(s"monitoring ledger")

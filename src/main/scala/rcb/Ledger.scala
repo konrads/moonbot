@@ -34,7 +34,7 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       val (ledgerOrders2, ledgerOrdersById2) = o.data.foldLeft((ledgerOrders, ledgerOrdersById)) {
         case ((ls, lsById), od) =>
           lsById.get(od.orderID) match {
-            case Some(lo) if od.ordStatus.isDefined =>
+            case Some(lo) =>
               val lo2 = (lo.lifecycle, od.ordStatus) match {
                 case (OrderLifecycle.Filled, _) => lo    // ignore, already set, eg. by REST
                 case (OrderLifecycle.Canceled, _) => lo  // ignore, already set, eg. by REST
@@ -42,20 +42,35 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
                   lo.copy(
                     price=od.stopPx.getOrElse(od.price.getOrElse(BigDecimal(-1))),
                     qty=od.orderQty.getOrElse(BigDecimal(-1)),
-                    lifecycle=od.lifecycle
+                    lifecycle=od.lifecycle,
+                    timestamp=od.timestamp,
+                    ordType=od.ordType.getOrElse(lo.ordType)
                   )
-                case (_, Some(OrderStatus.Canceled)) => lo.copy(lifecycle=od.lifecycle)
-                case (_, Some(OrderStatus.PartiallyFilled)) => lo.copy(lifecycle=od.lifecycle)
-                case (_, Some(OrderStatus.Filled)) => lo.copy(
+                case (_, Some(OrderStatus.Canceled)) =>
+                  lo.copy(
+                    lifecycle=od.lifecycle,
+                    timestamp=od.timestamp,
+                    ordType=od.ordType.getOrElse(lo.ordType)
+                  )
+                case (_, Some(OrderStatus.PartiallyFilled)) =>
+                  lo.copy(
+                    lifecycle=od.lifecycle,
+                    timestamp=od.timestamp,
+                    ordType=od.ordType.getOrElse(lo.ordType)
+                  )
+                case (_, Some(OrderStatus.Filled)) =>
+                  lo.copy(
                     lifecycle=od.lifecycle,
                     qty=od.cumQty.getOrElse(BigDecimal(-1)),
-                    price=od.price.getOrElse(BigDecimal(-1))
-                  )
+                    price=od.price.getOrElse(BigDecimal(-1)),
+                    timestamp=od.timestamp,
+                    ordType=od.ordType.getOrElse(lo.ordType)
+                )
                 case _ => lo
               }
               (ls - lo2 + lo2, lsById + (lo2.orderID -> lo2))
             case None =>
-              val lo = LedgerOrder(orderID=od.orderID, price=od.stopPx.getOrElse(od.price.getOrElse(-1)), qty=od.orderQty.orNull, side=od.side.orNull, timestamp=od.timestamp, lifecycle=od.lifecycle)
+              val lo = LedgerOrder(orderID=od.orderID, price=od.stopPx.getOrElse(od.price.getOrElse(-1)), qty=od.orderQty.orNull, side=od.side.orNull, ordType=od.ordType.orNull, timestamp=od.timestamp, lifecycle=od.lifecycle)
               (ls + lo, lsById + (lo.orderID -> lo))
           }
       }
