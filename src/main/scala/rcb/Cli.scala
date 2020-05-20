@@ -1,9 +1,12 @@
 package rcb
 
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
+import akka.actor.typed.scaladsl.Behaviors
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.rogach.scallop._
 import play.api.libs.json.{JsError, JsResult, JsSuccess}
+import rcb.BotApp.orchestrator
 
 import scala.util.{Failure, Success}
 
@@ -62,7 +65,7 @@ object Cli extends App {
     case s:JsError                      => log.error(s"WS error!: $s")
   }
 
-    // validate sets of options
+  // validate sets of options
   (cliConf.action(), cliConf.ordertype.toOption, cliConf.price.toOption, cliConf.qty.toOption, cliConf.orderid.toOption, cliConf.clordrid.toOption) match {
     case ("bid", Some("limit"), Some(price), Some(qty), _, _) =>
       log.info(s"issuing limit bid: price: $price, qty: $qty")
@@ -136,6 +139,30 @@ object Cli extends App {
         case Success(res) => log.info(s"REST cancel response: $orderIDOpt, $cliOrdOpt, $res")
         case Failure(exc) => log.error(s"REST cancel exception: $orderIDOpt, $cliOrdOpt, $exc")
       }
+    case ("monitorLedger", _, _, _,  _, _) =>
+      log.info(s"monitoring ledger")
+      def consumeWs(ledger: Ledger=Ledger()): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
+        case WsEvent(wsData) =>
+          val ledger2 = ledger.record(wsData)
+          log.info(s"...wsData: $wsData, ${ledger2.myOrders.map(o => s"\n- $o").mkString("\n")}")
+          if (ledger2.isMinimallyFilled) {
+            if (ledger2.sentimentScore >= 0.25)
+              log.info(s"bullish - ${ledger2.sentimentScore}! would buy @ ${ledger2.bidPrice}")
+            else if (ledger2.sentimentScore <= -0.25)
+              log.info(s"bearish - ${ledger2.sentimentScore}! would sell @ ${ledger2.askPrice}")
+            else
+              log.info(s"neutral - ${ledger2.sentimentScore}...")
+          } else {
+            log.warn("ledger not yet minimally filled...")
+          }
+          consumeWs(ledger2)
+      }
+      val ledgerMonitorActor: ActorRef[ActorEvent] = ActorSystem(consumeWs(), "ledger-monitor-actor")
+      val consumeAll: PartialFunction[JsResult[WsModel], Unit] = {
+        case JsSuccess(value, _) => ledgerMonitorActor ! WsEvent(value)
+        case s:JsError           => log.error(s"WS error!: $s")
+      }
+      wsGateway.run(consumeAll)
     case ("monitorAll", _, _, _,  _, _) =>
       log.info(s"monitoring all ws")
       wsGateway.run(consumeAll)

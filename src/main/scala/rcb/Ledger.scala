@@ -12,8 +12,7 @@ case class LedgerOrder(orderID: String, price: BigDecimal, qty: BigDecimal, life
   override def compare(that: LedgerOrder): Int = -((this.timestamp, this.orderID) compare (that.timestamp, that.orderID))
 }
 
-case class Ledger(minTradeVol: BigDecimal, emaWindow: Int, emaSmoothing: BigDecimal,
-                  bullVolumeScoreThreshold: BigDecimal, bearVolumeScoreThreshold: BigDecimal,
+case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
                   orderBook: OrderBook=null, trades: Seq[Trade]=Nil,
                   ledgerOrders: SortedSet[LedgerOrder]=SortedSet.empty[LedgerOrder], ledgerOrdersById: Map[String, LedgerOrder]=Map.empty,
                   tick: Long=0) {
@@ -66,44 +65,37 @@ case class Ledger(minTradeVol: BigDecimal, emaWindow: Int, emaSmoothing: BigDeci
     case t: Trade => copy(trades = (t +: trades).take(emaWindow))
     case _ => this
   }
+  lazy val myOrders = ledgerOrders.filter(_.myOrder)
   // def record(o: UpsertOrder): Ledger = ???
   // def record(o: OrderBook): Ledger = copy(orderBook = o)
   // def record(t: Trade): Ledger = copy(trades = (t +: trades).take(emaWindow))
   lazy val isMinimallyFilled: Boolean = orderBook != null && trades.nonEmpty
-  lazy val sentiment: Sentiment.Value = {
-    val (bullTrades, bearTrades) = trades.flatMap(_.data).partition(_.side == "Buy")
-    val bullVolume = ema(bullTrades.map(_.size))
-    val bearVolume = ema(bearTrades.map(_.size))
-    val volumeScore = (bullVolume - bearVolume) / (bullVolume + bearVolume)
-    if (volumeScore > bullVolumeScoreThreshold)
-      Sentiment.Bull
-    else if (volumeScore < bearVolumeScoreThreshold)
-      Sentiment.Bull
-    else
-      Sentiment.Neutral
+  lazy val sentimentScore = {
+    if (trades.isEmpty)
+      // should not get in here...
+      BigDecimal(0.5)
+    else {
+      val (bullTrades, bearTrades) = trades.flatMap(_.data).partition(_.side == OrderSide.Buy)
+      val bullVolume = ema(bullTrades.map(_.size))
+      val bearVolume = ema(bearTrades.map(_.size))
+      val volumeScore = (bullVolume - bearVolume) / (bullVolume + bearVolume)
+      volumeScore
+    }
   }
-  lazy val canOpenLong: Boolean = {
-    val enoughOrderVol = orderBook.data.head.bids.head(1) > minTradeVol
-    enoughOrderVol && sentiment == Sentiment.Bull
-  }
-  lazy val canOpenShort: Boolean = {
-    val enoughOrderVol = orderBook.data.head.asks.head(1) > minTradeVol
-    enoughOrderVol && sentiment == Sentiment.Bear
-  }
+  lazy val orderBookHeadVolume = orderBook.data.head.bids.headOption.map(_(1)).getOrElse(BigDecimal(0))
   lazy val bidPrice: BigDecimal = orderBook.data.head.bids.head.head
   lazy val askPrice: BigDecimal = orderBook.data.head.asks.head.head
 
   // http://stackoverflow.com/questions/24705011/how-to-optimise-a-exponential-moving-average-algorithm-in-php
   private def ema(vals: Seq[BigDecimal]): BigDecimal = {
-    val k = emaSmoothing / (vals.length + 1)
-    val mean = vals.sum / vals.length
-    vals.foldLeft(mean)(
-      (last, s) => (1 - k) * last + k * s
-    )
+    if (vals.isEmpty)
+      0
+    else {
+      val k = emaSmoothing / (vals.length + 1)
+      val mean = vals.sum / vals.length
+      vals.foldLeft(mean)(
+        (last, s) => (1 - k) * last + k * s
+      )
+    }
   }
-}
-
-object Ledger {
-  def init(minTradeVol: BigDecimal, emaWindow: Int=20, emaSmoothing: BigDecimal=2.0, bullVolumeScoreThreshold: BigDecimal=0.75, bearVolumeScoreThreshold: BigDecimal=0.25) =
-    Ledger(minTradeVol=minTradeVol, emaWindow=emaWindow, emaSmoothing=emaSmoothing, bullVolumeScoreThreshold=bullVolumeScoreThreshold, bearVolumeScoreThreshold=bearVolumeScoreThreshold)
 }

@@ -16,7 +16,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     val rest1 = Order(orderID="o1", symbol="XBTUSD", price=Some(1), orderQty=1, side=OrderSide.Buy, ordType="Limit", timestamp="2010-01-01", ordStatus=Some(OrderStatus.New))
     val rest2 = Order(orderID="o2", symbol="XBTUSD", price=Some(2), orderQty=2, side=OrderSide.Buy, ordType="Limit", timestamp="2010-01-01", ordStatus=Some(OrderStatus.Filled))
 
-    val l = Ledger.init(10000)
+    val l = Ledger()
     val l2 = l.record(ws1).record(ws2)
     val l3 = l2.record(rest1).record(rest2)
     println(l3.ledgerOrders.mkString("\n"))

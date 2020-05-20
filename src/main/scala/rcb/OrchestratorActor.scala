@@ -240,8 +240,11 @@ object OrchestratorActor {
   def apply(restGateway: IRestGateway,
             tradeQty: Int, minTradeVol: BigDecimal,
             openPositionExpiryMs: Long, closePositionExpiryMs: Long, backoffMs: Long = 500,
+            bullScoreThreshold: BigDecimal=0.25, bearScoreThreshold: BigDecimal= -0.25,
             reqRetries: Int, markupRetries: Int,
             takeProfitAmount: BigDecimal, stoplossAmount: BigDecimal, postOnlyPriceAdjAmount: BigDecimal): Behavior[ActorEvent] = {
+
+    assert(bullScoreThreshold > bearScoreThreshold, s"bullScoreThreshold ($bullScoreThreshold) <= bearScoreThreshold ($bearScoreThreshold)")
 
     /**
      * Gather enough WS data to trade, then switch to idle
@@ -261,9 +264,9 @@ object OrchestratorActor {
     def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
       case WsEvent(wsData) =>
         val ledger2 = ctx.ledger.record(wsData)
-        if (ledger2.canOpenLong)
+        if (ledger2.orderBookHeadVolume > minTradeVol && ledger2.sentimentScore >= bullScoreThreshold)
           openLong(ledger2)
-        else if (ledger2.canOpenShort)
+        else if (ledger2.orderBookHeadVolume > minTradeVol && ledger2.sentimentScore <= bearScoreThreshold)
           openShort(ledger2)
         else
         idle(ctx.copy(ledger = ledger2))
@@ -317,6 +320,6 @@ object OrchestratorActor {
         override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(orderID), None)
       })
 
-    init(InitCtx(ledger = Ledger.init(minTradeVol)))
+    init(InitCtx(ledger = Ledger()))
   }
 }
