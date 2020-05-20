@@ -1,7 +1,7 @@
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import javax.xml.bind.DatatypeConverter
-import play.api.libs.json.{JsValue, Reads, __}
+import play.api.libs.json.Json
 
 package object rcb {
   def getBitmexApiSignature(keyString: String, apiSecret: String): String = {
@@ -15,22 +15,24 @@ package object rcb {
   object OrderSide extends Enumeration {
     type OrderSide = Value
     val Buy, Sell = Value
-    implicit val aReads: Reads[OrderSide.Value] = (json: JsValue) => json.validate[String].map(OrderSide.withName _)
+    implicit val aFormat = Json.formatEnum(this)
   }
 
   object OrderStatus extends Enumeration {
     type OrderStatus = Value
     val New, Canceled, Filled, Rejected, PartiallyFilled, Expired, Stopped = Value
-    implicit val aReads: Reads[OrderStatus.Value] = (json: JsValue) => json.validate[String].map(OrderStatus.withName _)
+    implicit val aFormat = Json.formatEnum(this)
   }
 
   object Sentiment extends Enumeration {
     type Sentiment = Value
     val Bull, Bear, Neutral = Value
+    implicit val aFormat = Json.formatEnum(this)
   }
 
   object OrderLifecycle extends Enumeration {
     type OrderLifecycle = Value
     val New, Canceled, PostOnlyFailure, Filled, Unknown = Value
+    implicit val aFormat = Json.formatEnum(this)
   }
 }

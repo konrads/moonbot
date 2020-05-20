@@ -280,7 +280,7 @@ object OrchestratorActor {
         override def onExpired(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
         override def onUnprocessed(l: Ledger, orderID: String, exc: Option[Throwable]): Behavior[ActorEvent] = idle(IdleCtx(l))
         override def openOrder(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty: BigDecimal, l.bidPrice - retryCnt * postOnlyPriceAdjAmount, OrderSide.Buy)
-        override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(orderID), None)
+        override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(Seq(orderID)), None)
       })
 
     def closeLong(ledger: Ledger): Behavior[ActorEvent] =
@@ -293,7 +293,7 @@ object OrchestratorActor {
         override def onUnprocessed(l: Ledger, takeProfitID: Option[String], stoplossID: Option[String]): Behavior[ActorEvent] = idle(IdleCtx(l))
         override def openTakeProfit(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty, l.bidPrice + retryCnt * postOnlyPriceAdjAmount, OrderSide.Sell)
         override def openStoploss(takeProfitPrice: BigDecimal, retryCnt: Int): Try[Order] = restGateway.placeStopMarketOrderSync(tradeQty, takeProfitPrice - takeProfitAmount, OrderSide.Sell)
-        override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(orderID), None)
+        override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(Seq(orderID)), None)
       })
 
     def openShort(ledger: Ledger): Behavior[ActorEvent] =
@@ -304,7 +304,7 @@ object OrchestratorActor {
         override def onExpired(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
         override def onUnprocessed(l: Ledger, orderID: String, exc: Option[Throwable]): Behavior[ActorEvent] = idle(IdleCtx(l))
         override def openOrder(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty: BigDecimal, l.askPrice + retryCnt * postOnlyPriceAdjAmount, OrderSide.Sell)
-        override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(orderID), None)
+        override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(Seq(orderID)), None)
       })
 
     def closeShort(ledger: Ledger): Behavior[ActorEvent] =
@@ -317,7 +317,7 @@ object OrchestratorActor {
         override def onUnprocessed(l: Ledger, takeProfitID: Option[String], stoplossID: Option[String]): Behavior[ActorEvent] = idle(IdleCtx(l))
         override def openTakeProfit(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty, l.askPrice + retryCnt * postOnlyPriceAdjAmount, OrderSide.Buy)
         override def openStoploss(takeProfitPrice: BigDecimal, retryCnt: Int): Try[Order] = restGateway.placeStopMarketOrderSync(tradeQty, takeProfitPrice + takeProfitAmount, OrderSide.Buy)
-        override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(orderID), None)
+        override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(Seq(orderID)), None)
       })
 
     init(InitCtx(ledger = Ledger()))

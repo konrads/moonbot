@@ -2,6 +2,7 @@ package rcb
 
 import play.api.libs.json._
 import play.api.libs.json.Reads._
+import rcb.OrderSide.OrderSide
 
 import scala.runtime.ScalaRunTime
 
@@ -15,7 +16,7 @@ case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, 
     case (Some(OrderStatus.Canceled), Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
     case (Some(OrderStatus.Canceled), _) => OrderLifecycle.Canceled
     case (Some(OrderStatus.Filled), _)   => OrderLifecycle.Filled
-    case _                     => OrderLifecycle.Unknown
+    case _                               => OrderLifecycle.Unknown
   }
 
   override def toString = s"${ScalaRunTime._toString(this)} { lifecycle = $lifecycle }"
@@ -31,6 +32,27 @@ object ErrorDetail { implicit val aReads: Reads[ErrorDetail] = Json.reads[ErrorD
 case class Error(error: ErrorDetail) extends RestModel
 object Error { implicit val aReads: Reads[Error] = Json.reads[Error] }
 
+
+case class OrderReq(orderQty: BigDecimal, side: OrderSide, ordType: String, symbol: Option[String]=None,
+                    execInst: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None,
+                    clOrdID: Option[String]=None, timeInForce: String="GoodTillCancel")
+object OrderReq {
+  implicit val aWrites: Writes[OrderReq] = Json.writes[OrderReq]
+
+  def asStopMarketOrder(side: OrderSide, orderQty: BigDecimal, price: BigDecimal, clOrdID: Option[String]=None) =
+    OrderReq(ordType="Stop", side=side, orderQty=orderQty, execInst=Some("LastPrice"), stopPx=Some(price), clOrdID=clOrdID)
+
+  def asMarketOrder(side: OrderSide, orderQty: BigDecimal, clOrdID: Option[String]=None) =
+    OrderReq(ordType="Market", side=side, orderQty=orderQty, clOrdID=clOrdID)
+
+  def asLimitOrder(side: OrderSide, orderQty: BigDecimal, price: BigDecimal, clOrdID: Option[String]=None) =
+    OrderReq(ordType="Limit", side=side, orderQty=orderQty, execInst=Some("ParticipateDoNotInitiate"), price=Some(price), clOrdID=clOrdID)
+}
+
+case class OrderReqs(orders: Seq[OrderReq])
+object OrderReqs {
+  implicit val aWrites: Writes[OrderReqs] = Json.writes[OrderReqs]
+}
 
 object RestModel {
   implicit val aReads: Reads[RestModel] = (json: JsValue) => {

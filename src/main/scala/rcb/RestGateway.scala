@@ -7,7 +7,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.util.ByteString
 import com.typesafe.scalalogging.Logger
-import play.api.libs.json.{JsError, JsSuccess}
+import play.api.libs.json.{JsError, JsSuccess, Json}
 import rcb.OrderSide.OrderSide
 
 import scala.concurrent.duration._
@@ -28,18 +28,20 @@ case class CancelOrderIssued(orderID: String) extends HttpReply
 /** Trait, for testing purposes */
 trait IRestGateway {
   // async
+  def placeBulkOrdersAsync(orderReqs: OrderReqs): (String, Future[Orders])
   def placeStopMarketOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): (String, Future[Order])
   def placeMarketOrderAsync(qty: BigDecimal, side: OrderSide): (String, Future[Order])
   def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): (String, Future[Order])
   def amendOrderAsync(orderID: Option[String], clOrdID: Option[String], price: BigDecimal): Future[Order]
-  def cancelOrderAsync(orderID: Option[String], clOrdID: Option[String]): Future[Orders]
+  def cancelOrderAsync(orderID: Option[Seq[String]], clOrdID: Option[Seq[String]]): Future[Orders]
 
   // sync
+  def placeBulkOrdersSync(orderReqs: OrderReqs): Try[Orders]
   def placeStopMarketOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide): Try[Order]
   def placeMarketOrderSync(qty: BigDecimal, side: OrderSide): Try[Order]
   def placeLimitOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide): Try[Order]
   def amendOrderSync(orderID: Option[String], clOrdID: Option[String], price: BigDecimal): Try[Order]
-  def cancelOrderSync(orderID: Option[String], clOrdID: Option[String]): Try[Orders]
+  def cancelOrderSync(orderID: Option[Seq[String]], clOrdID: Option[Seq[String]]): Try[Orders]
 }
 
 
@@ -53,6 +55,12 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   // based on: https://blog.colinbreck.com/backoff-and-retry-error-handling-for-akka-streams/
   private val log = Logger[RestGateway]
   implicit val executionContext = system.dispatcher
+
+  def placeBulkOrdersAsync(orderReqs: OrderReqs): (String, Future[Orders]) = {
+    val clOrdID = java.util.UUID.randomUUID().toString
+    val resF = placeBulkOrders(orderReqs)
+    (clOrdID, resF)
+  }
 
   def placeStopMarketOrderAsync(qty: BigDecimal, price: BigDecimal, side: OrderSide): (String, Future[Order]) = {
     val clOrdID = java.util.UUID.randomUUID().toString
@@ -75,10 +83,16 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   def amendOrderAsync(orderID: Option[String], clOrdID: Option[String], price: BigDecimal): Future[Order] =
     amendOrder(orderID, clOrdID, price)
 
-  def cancelOrderAsync(orderID: Option[String], clOrdID: Option[String]): Future[Orders] =
+  def cancelOrderAsync(orderID: Option[Seq[String]], clOrdID: Option[Seq[String]]): Future[Orders] =
     cancelOrder(orderID, clOrdID)
 
   // sync
+  def placeBulkOrdersSync(orderReqs: OrderReqs): Try[Orders] =
+    Await.ready(
+      placeBulkOrders(orderReqs),
+      Duration(syncTimeoutMs, MILLISECONDS)
+    ).value.get
+
   def placeStopMarketOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide): Try[Order] =
     Await.ready(
       placeStopMarketOrder(qty, side, price),
@@ -103,7 +117,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get
 
-  def cancelOrderSync(orderID: Option[String], clOrdID: Option[String]): Try[Orders] =
+  def cancelOrderSync(orderID: Option[Seq[String]], clOrdID: Option[Seq[String]]): Try[Orders] =
     Await.ready(
       cancelOrder(orderID, clOrdID),
       Duration(syncTimeoutMs, MILLISECONDS)
@@ -131,6 +145,15 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       s"symbol=$symbol&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate&orderQty=$qty&side=$side&price=$price" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
     ).map(_.asInstanceOf[Order])
 
+  private def placeBulkOrders(orderReqs: OrderReqs): Future[Orders] =
+    // https://www.reddit.com/r/BitMEX/comments/gmultr/webserver_disconnects_after_placing_order/
+    sendReq(
+      POST,
+      "/api/v1/order/bulk",
+      Json.stringify(Json.toJson[OrderReqs](OrderReqs(orderReqs.orders.map(_.copy(symbol=Some(symbol)))))),
+      contentType=ContentTypes.`application/json`,
+    ).map(_.asInstanceOf[Orders])
+
   private def amendOrder(orderID: Option[String], cliOrdID: Option[String], price: BigDecimal): Future[Order] =
     sendReq(
       PUT,
@@ -138,20 +161,20 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       s"price=$price" + orderID.map("&orderID=" + _).getOrElse("") + cliOrdID.map("&origClOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
 
-  private def cancelOrder(orderID: Option[String], cliOrdID: Option[String]): Future[Orders] =
+  private def cancelOrder(orderID: Option[Seq[String]], cliOrdID: Option[Seq[String]]): Future[Orders] =
     sendReq(
       DELETE,
       "/api/v1/order",
-      orderID.map("&orderID=" + _).getOrElse("") + cliOrdID.map("&clOrdID=" + _).getOrElse("")
+      orderID.map("&orderID=" + _.mkString(",")).getOrElse("") + cliOrdID.map("&clOrdID=" + _.mkString(",")).getOrElse("")
     ).map(_.asInstanceOf[Orders])
 
-  private def sendReq(method: HttpMethod, urlPath: String, data: => String): Future[RestModel] = {
+  private def sendReq(method: HttpMethod, urlPath: String, data: => String, contentType: ContentType.NonBinary=ContentTypes.`application/x-www-form-urlencoded`): Future[RestModel] = {
     val expiry = System.currentTimeMillis / 1000 + 100 //should be 15
     val keyString = s"${method.value}${urlPath}${expiry}${data}"
     val apiSignature = getBitmexApiSignature(keyString, apiSecret)
 
-    val request = HttpRequest(method = method, uri = url + urlPath)
-      .withEntity(ContentTypes.`application/x-www-form-urlencoded`, data)
+    val request = HttpRequest(method=method, uri=url + urlPath)
+      .withEntity(contentType, data)
       .withHeaders(
         RawHeader("api-expires",   expiry.toString),
         RawHeader("api-key",       apiKey),
