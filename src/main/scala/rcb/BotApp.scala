@@ -27,7 +27,6 @@ object BotApp extends App {
   val minTradeVol            = conf.getInt("bot.minTradeVol")
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
   val openPositionExpiryMs   = conf.getLong("bot.openPositionExpiryMs")
-  val closePositionExpiryMs  = conf.getLong("bot.closePositionExpiryMs")
   val backoffMs              = conf.getLong("bot.backoffMs")
   val reqRetries             = conf.getInt("bot.maxReqRetries")
   val markupRetries          = conf.getInt("bot.maxPostOnlyRetries")
@@ -42,9 +41,9 @@ object BotApp extends App {
   val orchestrator = OrchestratorActor(
     restGateway=restGateway,
     tradeQty=tradeQty, minTradeVol=minTradeVol,
-    openPositionExpiryMs=openPositionExpiryMs, closePositionExpiryMs=closePositionExpiryMs, backoffMs=backoffMs,
+    openPositionExpiryMs=openPositionExpiryMs, backoffMs=backoffMs,
     reqRetries=reqRetries, markupRetries=markupRetries,
-    takeProfitAmount=takeProfitAmount, stoplossAmount=stoplossAmount, postOnlyPriceAdjAmount=postOnlyPriceAdjAmount)
+    takeProfitMargin=takeProfitAmount, stoplossMargin=stoplossAmount, postOnlyPriceAdj=postOnlyPriceAdjAmount)
   val orchestratorActor: ActorRef[ActorEvent] = ActorSystem(orchestrator, "orchestrator-actor")
 
   val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
