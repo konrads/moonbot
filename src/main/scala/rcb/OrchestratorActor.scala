@@ -2,12 +2,11 @@ package rcb
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
-
-import scala.concurrent.duration.{Duration, MILLISECONDS}
-import scala.util.{Failure, Success, Try}
 import rcb.OrderLifecycle._
 
 import scala.collection.Set
+import scala.concurrent.duration.{Duration, MILLISECONDS, _}
+import scala.util.{Failure, Success, Try}
 
 object OrchestratorActor {
   trait PositionOpener {
@@ -27,11 +26,14 @@ object OrchestratorActor {
     def cancelOrders(orderIDs: Seq[String]): Try[Orders]                             // how to cancel order
   }
 
-  def openPosition(ledger: Ledger, positionOpener: PositionOpener): Behavior[ActorEvent] =
+  def openPosition(ledger: Ledger, positionOpener: PositionOpener, metrics: Option[Metrics]=None): Behavior[ActorEvent] =
     Behaviors.withTimers[ActorEvent] { timers =>
 
       def loop(ctx: OpenPositionCtx): Behavior[ActorEvent] =
         Behaviors.receivePartial[ActorEvent] {
+          case (_, Instrument) =>
+            metrics.foreach(metrics => metrics.gauge(ctx.ledger.metrics()))
+            Behaviors.same
           case (actorCtx, Expiry) =>
             // expiry timeout, cancel!
             positionOpener.cancelOrder(ctx.orderID) match {
@@ -93,41 +95,44 @@ object OrchestratorActor {
       }
     }
 
-  def closePosition(ledger: Ledger, positionCloser: PositionCloser): Behavior[ActorEvent] =
+  def closePosition(ledger: Ledger, positionCloser: PositionCloser, metrics: Option[Metrics]=None): Behavior[ActorEvent] =
     Behaviors.withTimers[ActorEvent] { timers =>
       // trigger issue first expiry
       timers.startSingleTimer(OpenTakeProfit, Duration(0, MILLISECONDS))
 
       def loop(ctx: ClosePositionCtx): Behavior[ActorEvent] =
         Behaviors.receivePartial[ActorEvent] {
-        case (actorCtx, WsEvent(data:UpsertOrder)) =>
-          val ledger2 = ledger.record(data)
-          val los = data.data.map(od => ledger.ledgerOrdersById(od.orderID))
-          val haveFilled = los.exists(_.lifecycle == OrderLifecycle.Filled)
-          val haveNewOnly = los.map(_.lifecycle).toSet == Set(OrderLifecycle.New)
-          val haveCanceled = los.exists(_.lifecycle == OrderLifecycle.Canceled)
-          if (haveNewOnly)
-            // keep waiting
-            loop(ctx.copy(ledger2))
-          else if (haveFilled && haveCanceled)
-            // 1 filled, other canceled
-            positionCloser.onDone(ledger2)
-          else if (haveFilled)
-            // 1 filled, other not yet canceled
-            positionCloser.cancelOrders(los.map(_.orderID)) match {
-              case Success(os) =>
-                val ledger3 = ledger2.record(os)
-                val haveCanceledOnly = los.map(_.lifecycle).toSet == Set(OrderLifecycle.Canceled)
-                if (haveCanceledOnly)
-                  positionCloser.onDone(ledger3)
-                else
-                  loop(ctx.copy(ledger3))
-              case Failure(exc) =>
-                actorCtx.log.error(s"Failed to close position, relevantOrderIDs: ${ctx.relevantOrderIDs}", exc)
-                positionCloser.onUnprocessed(ledger2, Some(exc))
-            }
-          else
-            loop(ctx.copy(ledger2))
+          case (_, Instrument) =>
+            metrics.foreach(metrics => metrics.gauge(ctx.ledger.metrics()))
+            Behaviors.same
+          case (actorCtx, WsEvent(data:UpsertOrder)) =>
+            val ledger2 = ledger.record(data)
+            val los = data.data.map(od => ledger.ledgerOrdersById(od.orderID))
+            val haveFilled = los.exists(_.lifecycle == OrderLifecycle.Filled)
+            val haveNewOnly = los.map(_.lifecycle).toSet == Set(OrderLifecycle.New)
+            val haveCanceled = los.exists(_.lifecycle == OrderLifecycle.Canceled)
+            if (haveNewOnly)
+              // keep waiting
+              loop(ctx.copy(ledger2))
+            else if (haveFilled && haveCanceled)
+              // 1 filled, other canceled
+              positionCloser.onDone(ledger2)
+            else if (haveFilled)
+              // 1 filled, other not yet canceled
+              positionCloser.cancelOrders(los.map(_.orderID)) match {
+                case Success(os) =>
+                  val ledger3 = ledger2.record(os)
+                  val haveCanceledOnly = los.map(_.lifecycle).toSet == Set(OrderLifecycle.Canceled)
+                  if (haveCanceledOnly)
+                    positionCloser.onDone(ledger3)
+                  else
+                    loop(ctx.copy(ledger3))
+                case Failure(exc) =>
+                  actorCtx.log.error(s"Failed to close position, relevantOrderIDs: ${ctx.relevantOrderIDs}", exc)
+                  positionCloser.onUnprocessed(ledger2, Some(exc))
+              }
+            else
+              loop(ctx.copy(ledger2))
         }
 
       // initial request
@@ -146,26 +151,33 @@ object OrchestratorActor {
             openPositionExpiryMs: Long, backoffMs: Long = 500,
             bullScoreThreshold: BigDecimal=0.25, bearScoreThreshold: BigDecimal= -0.25,
             reqRetries: Int, markupRetries: Int,
-            takeProfitMargin: BigDecimal, stoplossMargin: BigDecimal, postOnlyPriceAdj: BigDecimal): Behavior[ActorEvent] = {
+            takeProfitMargin: BigDecimal, stoplossMargin: BigDecimal, postOnlyPriceAdj: BigDecimal,
+            metrics: Option[Metrics]=None): Behavior[ActorEvent] = {
 
     assert(bullScoreThreshold > bearScoreThreshold, s"bullScoreThreshold ($bullScoreThreshold) <= bearScoreThreshold ($bearScoreThreshold)")
 
     /**
      * Gather enough WS data to trade, then switch to idle
      */
-    def init(ctx: InitCtx): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
-      case WsEvent(wsData) =>
-        val ledger2 = ctx.ledger.record(wsData)
-        if (ledger2.isMinimallyFilled)
-          idle(IdleCtx(ledger2))
-        else
-          init(ctx.copy(ledger2))
+    def init(ctx: InitCtx): Behavior[ActorEvent] = Behaviors.withTimers[ActorEvent] { timers =>
+      Behaviors.receiveMessagePartial[ActorEvent] {
+        case WsEvent(wsData) =>
+          val ledger2 = ctx.ledger.record(wsData)
+          if (ledger2.isMinimallyFilled) {
+            timers.startTimerAtFixedRate(Instrument, 1.minute)
+            idle(IdleCtx(ledger2))
+          } else
+            init(ctx.copy(ledger2))
+      }
     }
 
     /**
      * Waiting for market conditions to change to volumous bull or bear
      */
     def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
+      case Instrument =>
+        metrics.foreach(metrics => metrics.gauge(ctx.ledger.metrics()))
+        Behaviors.same
       case WsEvent(wsData) =>
         val ledger2 = ctx.ledger.record(wsData)
         if (ledger2.orderBookHeadVolume > minTradeVol && ledger2.sentimentScore >= bullScoreThreshold)
@@ -173,7 +185,7 @@ object OrchestratorActor {
         else if (ledger2.orderBookHeadVolume > minTradeVol && ledger2.sentimentScore <= bearScoreThreshold)
           openShort(ledger2)
         else
-        idle(ctx.copy(ledger = ledger2))
+          idle(ctx.copy(ledger = ledger2))
     }
 
     def openLong(ledger: Ledger): Behavior[ActorEvent] =
@@ -185,7 +197,7 @@ object OrchestratorActor {
         override def onUnprocessed(l: Ledger, orderID: String, exc: Option[Throwable]): Behavior[ActorEvent] = idle(IdleCtx(l))
         override def openOrder(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty, l.bidPrice - retryCnt * postOnlyPriceAdj, OrderSide.Buy)
         override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(Seq(orderID)), None)
-      })
+      }, metrics)
 
     def closeLong(ledger: Ledger, openPrice: BigDecimal): Behavior[ActorEvent] =
       closePosition(ledger, new PositionCloser {
@@ -196,7 +208,7 @@ object OrchestratorActor {
           OrderReq.asStopMarketOrder(OrderSide.Sell, tradeQty, openPrice - stoplossMargin)))
         )
         def cancelOrders(orderIDs: Seq[String]): Try[Orders] = restGateway.cancelOrderSync(Some(orderIDs), None)
-      })
+      }, metrics)
 
     def openShort(ledger: Ledger): Behavior[ActorEvent] =
       openPosition(ledger, new PositionOpener {
@@ -207,7 +219,7 @@ object OrchestratorActor {
         override def onUnprocessed(l: Ledger, orderID: String, exc: Option[Throwable]): Behavior[ActorEvent] = idle(IdleCtx(l))
         override def openOrder(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty, l.askPrice + retryCnt * postOnlyPriceAdj, OrderSide.Sell)
         override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(Seq(orderID)), None)
-      })
+      }, metrics)
 
     def closeShort(ledger: Ledger, openPrice: BigDecimal): Behavior[ActorEvent] =
       closePosition(ledger, new PositionCloser {
@@ -218,7 +230,7 @@ object OrchestratorActor {
           OrderReq.asStopMarketOrder(OrderSide.Buy, tradeQty, openPrice + stoplossMargin)))
         )
         def cancelOrders(orderIDs: Seq[String]): Try[Orders] = restGateway.cancelOrderSync(Some(orderIDs), None)
-      })
+      }, metrics)
 
     init(InitCtx(ledger = Ledger()))
   }

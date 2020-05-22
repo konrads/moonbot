@@ -58,7 +58,7 @@ object RestModel {
   implicit val aReads: Reads[RestModel] = (json: JsValue) => {
     // println(s"#### rest json: $json")
     val res = json match {
-      case arr@JsArray(_) => ((arr(0) \ "orderID").asOpt[String]) match {
+      case arr@JsArray(_) => (arr(0) \ "orderID").asOpt[String] match {
         case Some(_) => arr.validate[List[Order]].map(x => Orders(x))
         case _ => JsError(s"Unknown json array '$json'")
       }

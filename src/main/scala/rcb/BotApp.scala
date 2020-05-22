@@ -3,7 +3,7 @@ package rcb
 import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
 import play.api.libs.json._
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
+import akka.actor.typed.{ActorRef, ActorSystem}
 
 
 object BotApp extends App {
@@ -19,10 +19,10 @@ object BotApp extends App {
   val bitmexApiKey      = conf.getString("bitmex.apiKey")
   val bitmexApiSecret   = conf.getString("bitmex.apiSecret")
 
-  val graphiteNamespace = conf.getString("graphite.namespace")
   val graphiteHost      = conf.getString("graphite.host")
   val graphitePort      = conf.getInt("graphite.port")
 
+  val namespace              = conf.getString("bot.namespace")
   val tradeQty               = conf.getInt("bot.tradeQty")
   val minTradeVol            = conf.getInt("bot.minTradeVol")
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
@@ -37,18 +37,20 @@ object BotApp extends App {
   implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
   val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
   val wsGateway = new WsGateWay(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
+  val metrics = Metrics(graphiteHost, graphitePort, namespace)
 
   val orchestrator = OrchestratorActor(
     restGateway=restGateway,
     tradeQty=tradeQty, minTradeVol=minTradeVol,
     openPositionExpiryMs=openPositionExpiryMs, backoffMs=backoffMs,
     reqRetries=reqRetries, markupRetries=markupRetries,
-    takeProfitMargin=takeProfitAmount, stoplossMargin=stoplossAmount, postOnlyPriceAdj=postOnlyPriceAdjAmount)
+    takeProfitMargin=takeProfitAmount, stoplossMargin=stoplossAmount, postOnlyPriceAdj=postOnlyPriceAdjAmount,
+    metrics=Some(metrics))
   val orchestratorActor: ActorRef[ActorEvent] = ActorSystem(orchestrator, "orchestrator-actor")
 
   val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value:OrderBook,    _) => orchestratorActor ! WsEvent(value)
-    case JsSuccess(value:UpsertOrder, _) => orchestratorActor ! WsEvent(value)
+    case JsSuccess(value:UpsertOrder, _)  => orchestratorActor ! WsEvent(value)
     case JsSuccess(value, _)              => log.info(s"Got orchestrator ignorable WS message: $value")
     case e:JsError                        => log.error(s"WS consume error!: $e")
   }

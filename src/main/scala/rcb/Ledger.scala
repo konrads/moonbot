@@ -100,6 +100,16 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
   lazy val orderBookHeadVolume = orderBook.data.head.bids.headOption.map(_(1)).getOrElse(BigDecimal(0))
   lazy val bidPrice: BigDecimal = orderBook.data.head.bids.head.head
   lazy val askPrice: BigDecimal = orderBook.data.head.asks.head.head
+  def pandl(makerRebate: BigDecimal=.00025, takerFee: BigDecimal=.00075): BigDecimal =
+    ledgerOrders.filter(_.myOrder).map {
+      case LedgerOrder(_, price, qty, OrderLifecycle.Filled, OrderSide.Buy, OrderType.Limit, _, _, true)  => -qty * price * (1 + makerRebate)
+      case LedgerOrder(_, price, qty, OrderLifecycle.Filled, OrderSide.Buy, _, _, _, true)                => -qty * price * (1 - takerFee)
+      case LedgerOrder(_, price, qty, OrderLifecycle.Filled, OrderSide.Sell, OrderType.Limit, _, _, true) =>  qty * price * (1 + makerRebate)
+      case LedgerOrder(_, price, qty, OrderLifecycle.Filled, OrderSide.Sell, _, _, _, true)               =>  qty * price * (1 - takerFee)
+      case _                                                                                              => BigDecimal(0)
+    }.sum
+  def metrics(makerRebate: BigDecimal=.00025, takerFee: BigDecimal=.00075): Map[String, BigDecimal] =
+    Map("price" -> (bidPrice + askPrice) / 2, "pandl" -> pandl(makerRebate=makerRebate, takerFee=takerFee))
 
   // http://stackoverflow.com/questions/24705011/how-to-optimise-a-exponential-moving-average-algorithm-in-php
   private def ema(vals: Seq[BigDecimal]): BigDecimal = {

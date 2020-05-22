@@ -7,14 +7,9 @@ case class WsEvent(data: WsModel) extends ActorEvent
 
 // case class RestEvent(data: RestModel) extends ActorEvent
 
-case object OpenOrder extends ActorEvent
-case object CancelOrder extends ActorEvent
 case object OpenTakeProfit extends ActorEvent
-case object CancelTakeProfit extends ActorEvent
-case object OpenStoploss extends ActorEvent
-case object CancelStoploss extends ActorEvent
 case object Expiry extends ActorEvent
-case object AdjWithMarkup extends ActorEvent
+case object Instrument extends ActorEvent
 
 
 // Context
