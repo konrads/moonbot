@@ -160,11 +160,16 @@ object OrchestratorActor {
      * Gather enough WS data to trade, then switch to idle
      */
     def init(ctx: InitCtx): Behavior[ActorEvent] = Behaviors.withTimers[ActorEvent] { timers =>
-      Behaviors.receiveMessagePartial[ActorEvent] {
-        case WsEvent(wsData) =>
+      Behaviors.receivePartial[ActorEvent] {
+        case (actorCtx, WsEvent(wsData)) =>
           val ledger2 = ctx.ledger.record(wsData)
           if (ledger2.isMinimallyFilled) {
             timers.startTimerAtFixedRate(Instrument, 1.minute)
+            actorCtx.log.info(
+              """
+                |#########################################
+                |# Ledger minimally filled, ready to go! #
+                |#########################################"""".stripMargin)
             idle(IdleCtx(ledger2))
           } else
             init(ctx.copy(ledger2))

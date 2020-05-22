@@ -34,6 +34,38 @@ object BotApp extends App {
   val stoplossMargin         = conf.getDouble("bot.stoplossMargin")
   val postOnlyPriceAdj       = conf.getDouble("bot.postOnlyPriceAdj")
 
+  log.info(
+    s"""
+      |
+      | ███▄ ▄███▓ ▒█████   ▒█████   ███▄    █     ▄▄▄▄    ▒█████  ▄▄▄█████▓
+      |▓██▒▀█▀ ██▒▒██▒  ██▒▒██▒  ██▒ ██ ▀█   █    ▓█████▄ ▒██▒  ██▒▓  ██▒ ▓▒
+      |▓██    ▓██░▒██░  ██▒▒██░  ██▒▓██  ▀█ ██▒   ▒██▒ ▄██▒██░  ██▒▒ ▓██░ ▒░
+      |▒██    ▒██ ▒██   ██░▒██   ██░▓██▒  ▐▌██▒   ▒██░█▀  ▒██   ██░░ ▓██▓ ░
+      |▒██▒   ░██▒░ ████▓▒░░ ████▓▒░▒██░   ▓██░   ░▓█  ▀█▓░ ████▓▒░  ▒██▒ ░
+      |░ ▒░   ░  ░░ ▒░▒░▒░ ░ ▒░▒░▒░ ░ ▒░   ▒ ▒    ░▒▓███▀▒░ ▒░▒░▒░   ▒ ░░
+      |░  ░      ░  ░ ▒ ▒░   ░ ▒ ▒░ ░ ░░   ░ ▒░   ▒░▒   ░   ░ ▒ ▒░     ░
+      |░      ░   ░ ░ ░ ▒  ░ ░ ░ ▒     ░   ░ ░     ░    ░ ░ ░ ░ ▒    ░
+      |       ░       ░ ░      ░ ░           ░     ░          ░ ░
+      |                                                 ░
+      |
+      |Initialized with params...
+      |• bitmexUrl:            $bitmexUrl
+      |• bitmexWsUrl:          $bitmexWsUrl
+      |• graphiteHost:         $graphiteHost
+      |• graphitePort:         $graphitePort
+      |• namespace:            $namespace
+      |• tradeQty:             $tradeQty
+      |• minTradeVol:          $minTradeVol
+      |• restSyncTimeoutMs:    $restSyncTimeoutMs
+      |• openPositionExpiryMs: $openPositionExpiryMs
+      |• backoffMs:            $backoffMs
+      |• reqRetries:           $reqRetries
+      |• markupRetries:        $markupRetries
+      |• takeProfitMargin:     $takeProfitMargin
+      |• stoplossMargin:       $stoplossMargin
+      |• postOnlyPriceAdj:     $postOnlyPriceAdj
+      |""".stripMargin)
+
   implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
   val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
   val wsGateway = new WsGateWay(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
@@ -49,10 +81,8 @@ object BotApp extends App {
   val orchestratorActor: ActorRef[ActorEvent] = ActorSystem(orchestrator, "orchestrator-actor")
 
   val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
-    case JsSuccess(value:OrderBook,    _) => orchestratorActor ! WsEvent(value)
-    case JsSuccess(value:UpsertOrder, _)  => orchestratorActor ! WsEvent(value)
-    case JsSuccess(value, _)              => log.info(s"Got orchestrator ignorable WS message: $value")
-    case e:JsError                        => log.error("WS consume error!", e)
+    case JsSuccess(value, _) => orchestratorActor ! WsEvent(value)
+    case e:JsError           => log.error("WS consume error!", e)
   }
   wsGateway.run(wsMessageConsumer)
 }
