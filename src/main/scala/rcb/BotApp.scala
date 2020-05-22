@@ -28,11 +28,11 @@ object BotApp extends App {
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
   val openPositionExpiryMs   = conf.getLong("bot.openPositionExpiryMs")
   val backoffMs              = conf.getLong("bot.backoffMs")
-  val reqRetries             = conf.getInt("bot.maxReqRetries")
-  val markupRetries          = conf.getInt("bot.maxPostOnlyRetries")
-  val takeProfitAmount       = conf.getDouble("bot.takeProfitAmount")
-  val stoplossAmount         = conf.getDouble("bot.stoplossAmount")
-  val postOnlyPriceAdjAmount = conf.getDouble("bot.postOnlyPriceAdjAmount")
+  val reqRetries             = conf.getInt("bot.reqRetries")
+  val markupRetries          = conf.getInt("bot.markupRetries")
+  val takeProfitMargin       = conf.getDouble("bot.takeProfitMargin")
+  val stoplossMargin         = conf.getDouble("bot.stoplossMargin")
+  val postOnlyPriceAdj       = conf.getDouble("bot.postOnlyPriceAdj")
 
   implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
   val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
@@ -44,7 +44,7 @@ object BotApp extends App {
     tradeQty=tradeQty, minTradeVol=minTradeVol,
     openPositionExpiryMs=openPositionExpiryMs, backoffMs=backoffMs,
     reqRetries=reqRetries, markupRetries=markupRetries,
-    takeProfitMargin=takeProfitAmount, stoplossMargin=stoplossAmount, postOnlyPriceAdj=postOnlyPriceAdjAmount,
+    takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,
     metrics=Some(metrics))
   val orchestratorActor: ActorRef[ActorEvent] = ActorSystem(orchestrator, "orchestrator-actor")
 
@@ -52,7 +52,7 @@ object BotApp extends App {
     case JsSuccess(value:OrderBook,    _) => orchestratorActor ! WsEvent(value)
     case JsSuccess(value:UpsertOrder, _)  => orchestratorActor ! WsEvent(value)
     case JsSuccess(value, _)              => log.info(s"Got orchestrator ignorable WS message: $value")
-    case e:JsError                        => log.error(s"WS consume error!: $e")
+    case e:JsError                        => log.error("WS consume error!", e)
   }
   wsGateway.run(wsMessageConsumer)
 }

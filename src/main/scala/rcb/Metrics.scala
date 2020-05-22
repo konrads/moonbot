@@ -11,7 +11,7 @@ import com.typesafe.scalalogging.Logger
 // inspired by:
 // https://github.com/datasift/dropwizard-scala/blob/master/metrics/src/main/scala/com/datasift/dropwizard/scala/metrics.scala
 // https://gist.github.com/jkpl/1789f1feeb86f8314f32966ecf0940fa
-case class Metrics(host: String, port: Int, prefix: String, addJvmMetrics: Boolean=false) {
+case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: Boolean=false) {
   private val log = Logger[Metrics]
   private val graphite = new Graphite(new InetSocketAddress(host, port))
   private val osBean = ManagementFactory.getPlatformMXBean(classOf[OperatingSystemMXBean])
