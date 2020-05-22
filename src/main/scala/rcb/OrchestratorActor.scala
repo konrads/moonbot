@@ -79,7 +79,7 @@ object OrchestratorActor {
                       positionOpener.onUnprocessed(ledger2, ctx.orderID, Some(exc))
                   }
                 case other =>
-                  actorCtx.log.debug(s"In idle, ignoring WSEvent: $other")
+                  actorCtx.log.debug(s"openPosition, ignoring: $other")
                   loop(ctx.copy(ledger2))
               }
             }
@@ -165,6 +165,7 @@ object OrchestratorActor {
     def init(ctx: InitCtx): Behavior[ActorEvent] = Behaviors.withTimers[ActorEvent] { timers =>
       Behaviors.receivePartial[ActorEvent] {
         case (actorCtx, WsEvent(wsData)) =>
+          actorCtx.log.debug(s"init, received: $wsData")
           val ledger2 = ctx.ledger.record(wsData)
           if (ledger2.isMinimallyFilled) {
             timers.startTimerAtFixedRate(Instrument, 1.minute)
@@ -185,11 +186,12 @@ object OrchestratorActor {
     /**
      * Waiting for market conditions to change to volumous bull or bear
      */
-    def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
-      case Instrument =>
+    def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receivePartial[ActorEvent] {
+      case (_, Instrument) =>
         metrics.foreach(metrics => metrics.gauge(ctx.ledger.metrics()))
         Behaviors.same
-      case WsEvent(wsData) =>
+      case (actorCtx, WsEvent(wsData)) =>
+        actorCtx.log.debug(s"idle, received: $wsData")
         val ledger2 = ctx.ledger.record(wsData)
         if (ledger2.orderBookHeadVolume > minTradeVol && ledger2.sentimentScore >= bullScoreThreshold)
           openLong(ledger2)
