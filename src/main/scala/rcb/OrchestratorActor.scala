@@ -2,7 +2,7 @@ package rcb
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
-import rcb.OrderLifecycle._
+import com.typesafe.scalalogging.Logger
 
 import scala.collection.Set
 import scala.concurrent.duration.{Duration, MILLISECONDS, _}
@@ -26,14 +26,15 @@ object OrchestratorActor {
     def cancelOrders(orderIDs: Seq[String]): Try[Orders]                             // how to cancel order
   }
 
-  def openPosition(ledger: Ledger, positionOpener: PositionOpener, metrics: Option[Metrics]=None): Behavior[ActorEvent] =
+  def openPosition(ledger: Ledger, positionOpener: PositionOpener, metrics: Option[Metrics]=None)(implicit log: Logger): Behavior[ActorEvent] =
     Behaviors.withTimers[ActorEvent] { timers =>
 
       def loop(ctx: OpenPositionCtx): Behavior[ActorEvent] =
         Behaviors.receivePartial[ActorEvent] {
           case (_, Instrument) =>
-            metrics.foreach(metrics => metrics.gauge(ctx.ledger.metrics()))
-            Behaviors.same
+            val ledger2 = ctx.ledger.withMetrics()
+            ledger2.ledgerMetrics.foreach(lm => metrics.foreach(m => m.gauge(lm.metrics))) // FIXME: fugly
+            loop(ctx.copy(ledger2))
           case (actorCtx, Expiry) =>
             // expiry timeout, cancel!
             positionOpener.cancelOrder(ctx.orderID) match {
@@ -55,15 +56,16 @@ object OrchestratorActor {
               order.lifecycle match {
                 case OrderLifecycle.Filled =>
                   timers.cancel(Expiry)
+                  actorCtx.log.info(s"Filled orderID: ${ctx.orderID}!")
                   positionOpener.onFilled(ledger2, order.price)
                 case OrderLifecycle.Canceled =>
                   // presume cancelled due to expiry
                   timers.cancel(Expiry)
-                  actorCtx.log.error(s"Canceled, due to expiry(?), orderID: ${ctx.orderID}!")
+                  actorCtx.log.error(s"Canceled, due to expiry(?), orderID: ${ctx.orderID}")
                   positionOpener.onExpired(ledger2)
                 case OrderLifecycle.PostOnlyFailure if ctx.markupRetry == positionOpener.maxMarkupRetries =>
                   timers.cancel(Expiry)
-                  actorCtx.log.error(s"Maxed retries of PostOnly failures, orderID: ${ctx.orderID}!")
+                  actorCtx.log.error(s"Maxed retries of PostOnly failures, orderID: ${ctx.orderID}")
                   positionOpener.onUnprocessed(ledger2, ctx.orderID)
                 case OrderLifecycle.PostOnlyFailure =>
                   // adjust markup and retry
@@ -72,10 +74,11 @@ object OrchestratorActor {
                   positionOpener.openOrder(ledger2, markupRetry2) match {
                     case Success(order) =>
                       val ledger3 = ledger2.record(order)
+                      actorCtx.log.info(s"Retrying due to PostOnly orderID: ${ctx.orderID}")
                       timers.startSingleTimer(Expiry, Duration(positionOpener.expiryMs, MILLISECONDS))
                       loop(ctx.copy(ledger3, markupRetry=markupRetry2)) // keep retrying
                     case Failure(exc) =>
-                      actorCtx.log.error(s"Failed to issue Expire of orderID: ${ctx.orderID}!")
+                      actorCtx.log.error(s"Failed to issue Expire of orderID: ${ctx.orderID}")
                       positionOpener.onUnprocessed(ledger2, ctx.orderID, Some(exc))
                   }
                 case other =>
@@ -90,15 +93,17 @@ object OrchestratorActor {
       // initial request
       positionOpener.openOrder(ledger, 0) match {
         case Success(o) =>
+          log.info(s"Initial position opening, orderID: ${o.orderID}")
           timers.startSingleTimer(Expiry, Duration(positionOpener.expiryMs, MILLISECONDS))
           val ctx = OpenPositionCtx(ledger.record(o), o.orderID, markupRetry=positionOpener.maxMarkupRetries)
           loop(ctx)
         case Failure(exc) =>
+          log.info(s"Initial position opening failure!", exc)
           positionOpener.onUnprocessed(ledger, null, Some(exc))
       }
     }
 
-  def closePosition(ledger: Ledger, positionCloser: PositionCloser, metrics: Option[Metrics]=None): Behavior[ActorEvent] =
+  def closePosition(ledger: Ledger, positionCloser: PositionCloser, metrics: Option[Metrics]=None)(implicit log: Logger): Behavior[ActorEvent] =
     Behaviors.withTimers[ActorEvent] { timers =>
       // trigger issue first expiry
       timers.startSingleTimer(OpenTakeProfit, Duration(0, MILLISECONDS))
@@ -106,8 +111,9 @@ object OrchestratorActor {
       def loop(ctx: ClosePositionCtx): Behavior[ActorEvent] =
         Behaviors.receivePartial[ActorEvent] {
           case (_, Instrument) =>
-            metrics.foreach(metrics => metrics.gauge(ctx.ledger.metrics()))
-            Behaviors.same
+            val ledger2 = ctx.ledger.withMetrics()
+            ledger2.ledgerMetrics.foreach(lm => metrics.foreach(m => m.gauge(lm.metrics))) // FIXME: fugly
+            loop(ctx.copy(ledger2))
           case (actorCtx, WsEvent(data:UpsertOrder)) =>
             val ledger2 = ledger.record(data)
             val los = data.data.map(od => ledger.ledgerOrdersById(od.orderID))
@@ -117,18 +123,20 @@ object OrchestratorActor {
             if (haveNewOnly)
               // keep waiting
               loop(ctx.copy(ledger2))
-            else if (haveFilled && haveCanceled)
+            else if (haveFilled && haveCanceled) {
               // 1 filled, other canceled
+              actorCtx.log.info(s"Closed position: ${los.map(o => o.orderID -> o.lifecycle)}")
               positionCloser.onDone(ledger2)
-            else if (haveFilled)
+            } else if (haveFilled)
               // 1 filled, other not yet canceled
               positionCloser.cancelOrders(los.map(_.orderID)) match {
                 case Success(os) =>
                   val ledger3 = ledger2.record(os)
                   val haveCanceledOnly = los.map(_.lifecycle).toSet == Set(OrderLifecycle.Canceled)
-                  if (haveCanceledOnly)
+                  if (haveCanceledOnly) {
+                    actorCtx.log.info(s"Closed position (2): ${los.map(o => o.orderID -> o.lifecycle)}")
                     positionCloser.onDone(ledger3)
-                  else
+                  } else
                     loop(ctx.copy(ledger3))
                 case Failure(exc) =>
                   actorCtx.log.error(s"Failed to close position, relevantOrderIDs: ${ctx.relevantOrderIDs}", exc)
@@ -141,9 +149,11 @@ object OrchestratorActor {
       // initial request
       positionCloser.openOrders(ledger) match {
         case Success(os) =>
+          log.info(s"Initial position closing, orderID: ${os.orders.map(_.orderID).mkString(", ")}")
           val ctx = ClosePositionCtx(ledger.record(os), os.orders.map(_.orderID))
           loop(ctx)
         case Failure(exc) =>
+          log.info(s"Initial position closing failure", exc)
           positionCloser.onUnprocessed(ledger, Some(exc))
       }
       loop(ClosePositionCtx(ledger=ledger))
@@ -155,7 +165,7 @@ object OrchestratorActor {
             bullScoreThreshold: BigDecimal=0.25, bearScoreThreshold: BigDecimal= -0.25,
             reqRetries: Int, markupRetries: Int,
             takeProfitMargin: BigDecimal, stoplossMargin: BigDecimal, postOnlyPriceAdj: BigDecimal,
-            metrics: Option[Metrics]=None): Behavior[ActorEvent] = {
+            metrics: Option[Metrics]=None)(implicit log: Logger): Behavior[ActorEvent] = {
 
     assert(bullScoreThreshold > bearScoreThreshold, s"bullScoreThreshold ($bullScoreThreshold) <= bearScoreThreshold ($bearScoreThreshold)")
 
@@ -188,8 +198,9 @@ object OrchestratorActor {
      */
     def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receivePartial[ActorEvent] {
       case (_, Instrument) =>
-        metrics.foreach(metrics => metrics.gauge(ctx.ledger.metrics()))
-        Behaviors.same
+        val ledger2 = ctx.ledger.withMetrics()
+        ledger2.ledgerMetrics.foreach(lm => metrics.foreach(m => m.gauge(lm.metrics))) // FIXME: fugly
+        idle(ctx.copy(ledger2))
       case (actorCtx, WsEvent(wsData)) =>
         actorCtx.log.debug(s"idle, received: $wsData")
         val ledger2 = ctx.ledger.record(wsData)

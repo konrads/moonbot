@@ -12,20 +12,22 @@ case class LedgerOrder(orderID: String, price: BigDecimal, qty: BigDecimal, life
   override def compare(that: LedgerOrder): Int = -((this.timestamp, this.orderID) compare (that.timestamp, that.orderID))
 }
 
+case class LedgerMetrics(metrics: Map[String, BigDecimal], lastOrderTimestamp: Option[String], prevPandl: BigDecimal=0)
+
 case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
                   orderBook: OrderBook=null, trades: Seq[Trade]=Nil,
                   ledgerOrders: SortedSet[LedgerOrder]=SortedSet.empty[LedgerOrder], ledgerOrdersById: Map[String, LedgerOrder]=Map.empty,
-                  tick: Long=0) {
+                  ledgerMetrics: Option[LedgerMetrics]=None) {
   // rest
   def record(os: Orders): Ledger = os.orders.foldLeft(this)((soFar, o) => soFar.record(o))
   def record(o: Order): Ledger =
     ledgerOrdersById.get(o.orderID) match {
       case Some(existing) =>
         val existing2 = existing.copy(myOrder=true, ordType=o.ordType)
-        copy(ledgerOrders=ledgerOrders-existing2+existing2, ledgerOrdersById=ledgerOrdersById + (existing2.orderID -> existing2), tick=tick+1)
+        copy(ledgerOrders=ledgerOrders-existing2+existing2, ledgerOrdersById=ledgerOrdersById + (existing2.orderID -> existing2))
       case None =>
         val lo = LedgerOrder(orderID=o.orderID, price=o.price.get, qty=o.orderQty, side=o.side, ordType=o.ordType, timestamp=o.timestamp, lifecycle=o.lifecycle, myOrder=true)
-        copy(ledgerOrders=ledgerOrders+lo, ledgerOrdersById=ledgerOrdersById + (lo.orderID -> lo), tick=tick+1)
+        copy(ledgerOrders=ledgerOrders+lo, ledgerOrdersById=ledgerOrdersById + (lo.orderID -> lo))
     }
   // ws
   def record(data: WsModel): Ledger = data match {
@@ -100,16 +102,33 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
   lazy val orderBookHeadVolume = orderBook.data.head.bids.headOption.map(_(1)).getOrElse(BigDecimal(0))
   lazy val bidPrice: BigDecimal = orderBook.data.head.bids.head.head
   lazy val askPrice: BigDecimal = orderBook.data.head.asks.head.head
-  def pandl(makerRebate: BigDecimal=.00025, takerFee: BigDecimal=.00075): BigDecimal =
-    ledgerOrders.filter(_.myOrder).map {
-      case LedgerOrder(_, price, qty, OrderLifecycle.Filled, OrderSide.Buy, OrderType.Limit, _, _, true)  => -qty * price * (1 + makerRebate)
-      case LedgerOrder(_, price, qty, OrderLifecycle.Filled, OrderSide.Buy, _, _, _, true)                => -qty * price * (1 - takerFee)
-      case LedgerOrder(_, price, qty, OrderLifecycle.Filled, OrderSide.Sell, OrderType.Limit, _, _, true) =>  qty * price * (1 + makerRebate)
-      case LedgerOrder(_, price, qty, OrderLifecycle.Filled, OrderSide.Sell, _, _, _, true)               =>  qty * price * (1 - takerFee)
-      case _                                                                                              => BigDecimal(0)
-    }.sum
-  def metrics(makerRebate: BigDecimal=.00025, takerFee: BigDecimal=.00075): Map[String, BigDecimal] =
-    Map("price" -> (bidPrice + askPrice) / 2, "pandl" -> pandl(makerRebate=makerRebate, takerFee=takerFee))
+  def withMetrics(makerRebate: BigDecimal=.00025, takerFee: BigDecimal=.00075): Ledger = {
+    val lastOrderTimestampOpt = ledgerMetrics.flatMap(_.lastOrderTimestamp)
+    val prevPandl = ledgerMetrics.map(_.prevPandl).getOrElse(BigDecimal(0))
+    val currOrders = ledgerOrders.filter(o => o.myOrder && o.lifecycle == OrderLifecycle.Filled).dropWhile(_.side == OrderSide.Sell)
+    val currOrders2 = lastOrderTimestampOpt match {
+      case Some(lastOrderTimestamp) => currOrders.takeWhile(_.timestamp > lastOrderTimestamp)
+      case _ => currOrders
+    }
+    if (currOrders2.isEmpty)
+      this
+    else {
+      val pandl = currOrders2.map {
+        case LedgerOrder(_, price, qty, _, OrderSide.Buy, OrderType.Limit, _, _, true)  => -qty * price * (1 + makerRebate)
+        case LedgerOrder(_, price, qty, _, OrderSide.Buy, _, _, _, true)                => -qty * price * (1 - takerFee)
+        case LedgerOrder(_, price, qty, _, OrderSide.Sell, OrderType.Limit, _, _, true) =>  qty * price * (1 + makerRebate)
+        case LedgerOrder(_, price, qty, _, OrderSide.Sell, _, _, _, true)               =>  qty * price * (1 - takerFee)
+        case _                                                                          => BigDecimal(0)
+      }.sum
+
+      val metrics = LedgerMetrics(
+        Map("price" -> (bidPrice + askPrice) / 2, "pandl" -> pandl, "pandlDelta" -> (pandl - prevPandl)),
+        Some(currOrders2.head.timestamp),
+        pandl
+      )
+      copy(ledgerMetrics=Some(metrics))
+    }
+  }
 
   // http://stackoverflow.com/questions/24705011/how-to-optimise-a-exponential-moving-average-algorithm-in-php
   private def ema(vals: Seq[BigDecimal]): BigDecimal = {

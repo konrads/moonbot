@@ -7,7 +7,7 @@ import akka.actor.typed.{ActorRef, ActorSystem}
 
 
 object BotApp extends App {
-  private val log = Logger("BotApp")
+  private implicit val log = Logger("BotApp")
 
   val conf = ConfigFactory.load()
     .withFallback(ConfigFactory.parseResources("application.conf"))
