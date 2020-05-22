@@ -35,11 +35,11 @@ case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: 
       graphite.connect()
       for { (k, v) <- gauges2 } yield graphite.send(s"$prefix.$k", v.toString, now)
     } catch {
-      case exc: IOException => log.error(s"Failed to send graphite metrics: ${gauges.mkString(", ")}", exc)
+      case exc: IOException => log.warn(s"Failed to send graphite metrics: ${gauges.mkString(", ")}", exc)
     } finally {
       try graphite.close()
       catch {
-        case exc: IOException => log.error(s"Failed to close graphite connection: ${gauges.mkString(", ")}", exc)
+        case exc: IOException => log.warn(s"Failed to close graphite connection: ${gauges.mkString(", ")}", exc)
       }
     }
   }

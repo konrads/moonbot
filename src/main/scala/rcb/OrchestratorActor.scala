@@ -53,19 +53,19 @@ object OrchestratorActor {
             else {
               val order = ledger2.ledgerOrdersById(ctx.orderID)
               order.lifecycle match {
-                case Filled =>
+                case OrderLifecycle.Filled =>
                   timers.cancel(Expiry)
                   positionOpener.onFilled(ledger2, order.price)
-                case Canceled =>
+                case OrderLifecycle.Canceled =>
                   // presume cancelled due to expiry
                   timers.cancel(Expiry)
                   actorCtx.log.error(s"Canceled, due to expiry(?), orderID: ${ctx.orderID}!")
                   positionOpener.onExpired(ledger2)
-                case PostOnlyFailure if ctx.markupRetry == positionOpener.maxMarkupRetries =>
+                case OrderLifecycle.PostOnlyFailure if ctx.markupRetry == positionOpener.maxMarkupRetries =>
                   timers.cancel(Expiry)
                   actorCtx.log.error(s"Maxed retries of PostOnly failures, orderID: ${ctx.orderID}!")
                   positionOpener.onUnprocessed(ledger2, ctx.orderID)
-                case PostOnlyFailure =>
+                case OrderLifecycle.PostOnlyFailure =>
                   // adjust markup and retry
                   timers.cancel(Expiry)
                   val markupRetry2 = ctx.markupRetry + 1
@@ -78,6 +78,9 @@ object OrchestratorActor {
                       actorCtx.log.error(s"Failed to issue Expire of orderID: ${ctx.orderID}!")
                       positionOpener.onUnprocessed(ledger2, ctx.orderID, Some(exc))
                   }
+                case other =>
+                  actorCtx.log.debug(s"In idle, ignoring WSEvent: $other")
+                  loop(ctx.copy(ledger2))
               }
             }
           case (_, WsEvent(data:OrderBook)) => loop(ctx.copy(ledger.record(data)))
@@ -165,11 +168,14 @@ object OrchestratorActor {
           val ledger2 = ctx.ledger.record(wsData)
           if (ledger2.isMinimallyFilled) {
             timers.startTimerAtFixedRate(Instrument, 1.minute)
+            // border from: https://www.asciiart.eu/art-and-design/borders
             actorCtx.log.info(
               """
-                |#########################################
-                |# Ledger minimally filled, ready to go! #
-                |#########################################"""".stripMargin)
+                |.-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-.
+                ||                                             |
+                ||   Ledger minimally filled, ready to go!     |
+                ||                                             |
+                |`-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-'""".stripMargin)
             idle(IdleCtx(ledger2))
           } else
             init(ctx.copy(ledger2))
