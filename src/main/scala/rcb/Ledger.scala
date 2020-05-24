@@ -7,8 +7,7 @@ import rcb.OrderStatus._
 import scala.collection.SortedSet
 
 
-
-case class LedgerOrder(orderID: String, price: BigDecimal, qty: BigDecimal, ordStatus: OrderStatus, side: OrderSide, ordType: OrderType.Value=null, timestamp: String, exchangeFee: BigDecimal=0, myOrder: Boolean=false) extends Ordered[LedgerOrder] {
+case class LedgerOrder(orderID: String, price: BigDecimal, qty: BigDecimal, ordStatus: OrderStatus, side: OrderSide, ordType: OrderType.Value=null, timestamp: String, myOrder: Boolean=false) extends Ordered[LedgerOrder] {
   import scala.math.Ordered.orderingToOrdered
   override def compare(that: LedgerOrder): Int = -((this.timestamp, this.orderID) compare (that.timestamp, that.orderID))
 }
@@ -103,10 +102,12 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
   lazy val orderBookHeadVolume = orderBook.data.head.bids.headOption.map(_(1)).getOrElse(BigDecimal(0))
   lazy val bidPrice: BigDecimal = orderBook.data.head.bids.head.head
   lazy val askPrice: BigDecimal = orderBook.data.head.asks.head.head
+
   def withMetrics(makerRebate: BigDecimal=.00025, takerFee: BigDecimal=.00075): Ledger = {
     val lastOrderTimestampOpt = ledgerMetrics.flatMap(_.lastOrderTimestamp)
     val prevPandl = ledgerMetrics.map(_.prevPandl).getOrElse(BigDecimal(0))
-    val currOrders = ledgerOrders.filter(o => o.myOrder && o.ordStatus == OrderStatus.Filled).dropWhile(_.side == OrderSide.Sell)
+    val currOrders = ledgerOrders.filter(o => o.myOrder && o.ordStatus == OrderStatus.Filled)
+      .dropWhile(_.side == OrderSide.Buy).toList.reverse.dropWhile(_.side == OrderSide.Sell).reverse  // take only full buy/sell legs
     val currOrders2 = lastOrderTimestampOpt match {
       case Some(lastOrderTimestamp) => currOrders.takeWhile(_.timestamp > lastOrderTimestamp)
       case _ => currOrders
@@ -115,11 +116,11 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       this
     else {
       val pandl = currOrders2.map {
-        case LedgerOrder(_, price, qty, _, OrderSide.Buy, OrderType.Limit, _, _, true)  => -qty * price * (1 + makerRebate)
-        case LedgerOrder(_, price, qty, _, OrderSide.Buy, _, _, _, true)                => -qty * price * (1 - takerFee)
-        case LedgerOrder(_, price, qty, _, OrderSide.Sell, OrderType.Limit, _, _, true) =>  qty * price * (1 + makerRebate)
-        case LedgerOrder(_, price, qty, _, OrderSide.Sell, _, _, _, true)               =>  qty * price * (1 - takerFee)
-        case _                                                                          => BigDecimal(0)
+        case LedgerOrder(_, price, qty, _, OrderSide.Buy, OrderType.Limit, _, true)  => -qty * price * (1 + makerRebate)
+        case LedgerOrder(_, price, qty, _, OrderSide.Buy, _, _, true)                => -qty * price * (1 - takerFee)
+        case LedgerOrder(_, price, qty, _, OrderSide.Sell, OrderType.Limit, _, true) =>  qty * price * (1 + makerRebate)
+        case LedgerOrder(_, price, qty, _, OrderSide.Sell, _, _, true)               =>  qty * price * (1 - takerFee)
+        case _                                                                       => BigDecimal(0)
       }.sum
 
       val metrics = LedgerMetrics(
