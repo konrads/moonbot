@@ -190,9 +190,18 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
                 case JsError(errors) => Future.failed(new Exception(s"Json parsing error: ${errors}"))
               }
           }
+        case HttpResponse(s@StatusCodes.Forbidden, _headers, entity, _) =>
+          // need to deal with getting banned for too many api calls
+          // FIXME: check what response i get on this in text, throw: BackoffRequiredError
+          ???
         case HttpResponse(s@StatusCodes.BadRequest, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-            b => Future.failed(new Exception(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+            b =>
+              val bStr = b.utf8String
+              if (bStr.contains("Account has insufficient Available Balance"))
+                Future.failed(new AccountHasInsufficientBalanceError(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+              else
+                Future.failed(new Exception(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
         case HttpResponse(s@StatusCodes.ServiceUnavailable, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
@@ -205,4 +214,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   }
 }
 
-case class TemporarilyUnavailableError(msg: String) extends Exception(msg)
+sealed trait RecoverableError
+case class TemporarilyUnavailableError(msg: String) extends Exception(msg) with RecoverableError
+
+case class AccountHasInsufficientBalanceError(msg: String) extends Exception(msg)

@@ -4,23 +4,10 @@ import play.api.libs.json._
 import play.api.libs.json.Reads._
 import rcb.OrderSide.OrderSide
 
-import scala.runtime.ScalaRunTime
-
 
 sealed trait RestModel
 
-case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: String, ordType: OrderType.Value, side: OrderSide.Value, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends RestModel {
-  lazy val lifecycle = (ordStatus, text) match {
-    // case (Some("New"), Some(false), _) => OrderLifecycle.NewInactive // immaterial if active or inactive, might change to just New ...
-    case (Some(OrderStatus.New),  _)     => OrderLifecycle.New
-    case (Some(OrderStatus.Canceled), Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
-    case (Some(OrderStatus.Canceled), _) => OrderLifecycle.Canceled
-    case (Some(OrderStatus.Filled), _)   => OrderLifecycle.Filled
-    case _                               => OrderLifecycle.Unknown
-  }
-
-  override def toString = s"${ScalaRunTime._toString(this)} { lifecycle = $lifecycle }"
-}
+case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: String, ordType: OrderType.Value, side: OrderSide.Value, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends RestModel
 object Order { implicit val aReads: Reads[Order] = Json.reads[Order] }
 
 case class Orders(orders: Seq[Order]) extends RestModel
@@ -64,6 +51,11 @@ object RestModel {
       }
       case _ => (json \ "orderID").asOpt[String] match {
         case Some(_) => json.validate[Order]
+          .map(o => o.copy(ordStatus =
+            if (o.ordStatus.contains(OrderStatus.Canceled) && o.text.exists(_.contains("had execInst of ParticipateDoNotInitiate")))
+              Some(OrderStatus.PostOnlyFailure)
+            else
+              o.ordStatus))
         case None    => (json \ "error").asOpt[JsValue] match {
           case Some(_) => json.validate[Error]
           case None    => JsError(s"Unknown json '$json'")
@@ -71,7 +63,7 @@ object RestModel {
       }
     }
     res match {
-      case s:JsSuccess[WsModel] => s
+      case s:JsSuccess[RestModel] => s
       case e:JsError => println(s".....Got RestModel unmarshal error:\njson: $json\nerror: $e"); e
     }
   }

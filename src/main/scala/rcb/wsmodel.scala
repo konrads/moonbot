@@ -3,7 +3,6 @@ package rcb
 import play.api.libs.json._
 import play.api.libs.json.Reads._
 
-import scala.runtime.ScalaRunTime
 
 sealed trait WsModel
 
@@ -19,17 +18,7 @@ object OrderBookData { implicit val aFmt: Reads[OrderBookData] = Json.reads[Orde
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel
 object OrderBook { implicit val aFmt: Reads[OrderBook] = Json.reads[OrderBook] }
 
-case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: String, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel {
-  lazy val lifecycle = (ordStatus, text) match {
-    case (Some(OrderStatus.New), _)      => OrderLifecycle.New
-    case (Some(OrderStatus.Canceled), Some(cancelMsg)) if cancelMsg.contains("had execInst of ParticipateDoNotInitiate") => OrderLifecycle.PostOnlyFailure
-    case (Some(OrderStatus.Canceled), _) => OrderLifecycle.Canceled
-    case (Some(OrderStatus.Filled), _)   => OrderLifecycle.Filled
-    case _                               => OrderLifecycle.Unknown
-  }
-
-  override def toString = s"${ScalaRunTime._toString(this)} { lifecycle = $lifecycle }"
-}
+case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: String, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel
 object OrderData { implicit val aFmt: Reads[OrderData] = Json.reads[OrderData] }
 
 case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel
@@ -53,6 +42,11 @@ object WsModel {
     val res = ((json \ "table").asOpt[String], (json \ "action").asOpt[String]) match {
       case (Some(table), _@Some(_)) if table.startsWith("orderBook") => json.validate[OrderBook]
       case (Some("order"), _) => json.validate[UpsertOrder]
+        .map(o => o.copy(data = o.data.map(od => od.copy(ordStatus =
+          if (od.ordStatus.contains(OrderStatus.Canceled) && od.text.exists(_.contains("had execInst of ParticipateDoNotInitiate")))
+            Some(OrderStatus.PostOnlyFailure)
+          else
+            od.ordStatus))))
       case (Some("trade"), Some("insert")) => json.validate[Trade]
       case (Some(table), Some("partial")) if Seq("order", "trade").contains(table) => JsSuccess(Ignorable(json))
       case _ => (json \ "success").asOpt[Boolean] match {
