@@ -1,15 +1,17 @@
 package rcb
 
-import akka.actor.ActorSystem
 import akka.Done
+import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.stream.scaladsl._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.ws._
+import akka.stream.scaladsl._
+import com.typesafe.scalalogging.Logger
 import play.api.libs.json.JsResult
 
+import scala.concurrent.duration._
 import scala.concurrent.{Future, Promise}
-import com.typesafe.scalalogging.Logger
+import scala.util.{Failure, Success}
 
 // thanks to: https://doc.akka.io/docs/akka-http/10.0.2/scala/http/client-side/websocket-support.html#websocketclientlayer
 class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, minSleepInMs: Option[Long] = Some(5000))(implicit val system: ActorSystem) {
@@ -28,6 +30,17 @@ class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
             wsConsume(WsModel.asModel(message.text))
           else
             log.debug(s"Ignored ws message: $asModel")
+        case message: TextMessage =>
+          message.toStrict(30.seconds).onComplete {
+            case Success(message) =>
+              val asModel = WsModel.asModel(message.text)
+              if (wsConsume.isDefinedAt(asModel))
+                wsConsume(WsModel.asModel(message.text))
+              else
+                log.debug(s"Ignored ws message: $asModel")
+            case Failure(exc) =>
+              log.error(s"Unexpected error on ws message fetch", exc)
+          }
         case other  =>
           log.error(s"Unexpected non-text message: $other")
       }

@@ -116,23 +116,23 @@ object Cli extends App {
         case Success(res) => log.info(s"REST market ask response: $clOrdID, $res")
         case Failure(exc) => log.error(s"REST market ask exception: $clOrdID", exc)
       }
-    case ("bid", Some("stopMarket"), Some(price), _, _, Some(qty), _, _) =>
-      log.info(s"issuing stopMarket bid: price: $price, qty: $qty")
+    case ("bid", Some("stop"), Some(price), _, _, Some(qty), _, _) =>
+      log.info(s"issuing stop bid: price: $price, qty: $qty")
       wsGateway.run(consumeOrder)
       val (clOrdID, resF) = restGateway.placeStopMarketOrderAsync(qty, price, OrderSide.Buy)
       log.info(s"REST bid request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST stopMarket bid response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST stopMarket bid exception: $clOrdID", exc)
+        case Success(res) => log.info(s"REST stop bid response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST stop bid exception: $clOrdID", exc)
       }
-    case ("ask", Some("stopMarket"), Some(price), _, _, Some(qty), _, _) =>
-      log.info(s"issuing stopMarket ask: price: $price, qty: $qty")
+    case ("ask", Some("stop"), Some(price), _, _, Some(qty), _, _) =>
+      log.info(s"issuing stop ask: price: $price, qty: $qty")
       wsGateway.run(consumeOrder)
       val (clOrdID, resF) = restGateway.placeStopMarketOrderAsync(qty, price, OrderSide.Sell)
-      log.info(s"REST stopMarket ask request: $clOrdID")
+      log.info(s"REST stop ask request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST stopMarket ask response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST stopMarket ask exception: $clOrdID", exc)
+        case Success(res) => log.info(s"REST stop ask response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST stop ask exception: $clOrdID", exc)
       }
     case ("amend", _, Some(price), _, _, _, orderIDOpt, cliOrdOpt) =>
       log.info(s"amending: price: $price, orderid: $orderIDOpt")

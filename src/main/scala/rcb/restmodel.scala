@@ -63,7 +63,7 @@ object RestModel {
       }
     }
     res match {
-      case s:JsSuccess[RestModel] => s
+      case s:JsSuccess[_] => s
       case e:JsError => println(s".....Got RestModel unmarshal error:\njson: $json\nerror: $e"); e
     }
   }

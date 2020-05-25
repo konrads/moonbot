@@ -26,7 +26,7 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
         val existing2 = existing.copy(myOrder=true, ordType=o.ordType)
         copy(ledgerOrders=ledgerOrders-existing2+existing2, ledgerOrdersById=ledgerOrdersById + (existing2.orderID -> existing2))
       case None =>
-        val lo = LedgerOrder(orderID=o.orderID, price=o.price.get, qty=o.orderQty, side=o.side, ordType=o.ordType, timestamp=o.timestamp, ordStatus=o.ordStatus.getOrElse(OrderStatus.New), myOrder=true)
+        val lo = LedgerOrder(orderID=o.orderID, qty=o.orderQty, price=o.stopPx.getOrElse(o.price.orNull), side=o.side, ordType=o.ordType, timestamp=o.timestamp, ordStatus=o.ordStatus.getOrElse(OrderStatus.New), myOrder=true)
         copy(ledgerOrders=ledgerOrders+lo, ledgerOrdersById=ledgerOrdersById + (lo.orderID -> lo))
     }
   // ws
@@ -42,8 +42,8 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
                 case (Canceled, _) => lo  // ignore, already set, eg. by REST
                 case (_, Some(s@New)) =>
                   lo.copy(
-                    price=od.stopPx.getOrElse(od.price.getOrElse(BigDecimal(-1))),
-                    qty=od.orderQty.getOrElse(BigDecimal(-1)),
+                    price=od.stopPx.getOrElse(od.price.getOrElse(lo.price)),
+                    qty=od.orderQty.getOrElse(lo.qty),
                     ordStatus=s,
                     timestamp=od.timestamp,
                     ordType=od.ordType.getOrElse(lo.ordType)
@@ -63,8 +63,8 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
                 case (_, Some(s@Filled)) =>
                   lo.copy(
                     ordStatus=s,
-                    qty=od.cumQty.getOrElse(BigDecimal(-1)),
-                    price=od.price.getOrElse(BigDecimal(-1)),
+                    qty=od.cumQty.getOrElse(lo.qty),
+                    price=od.avgPx.getOrElse(od.price.getOrElse(lo.price)),
                     timestamp=od.timestamp,
                     ordType=od.ordType.getOrElse(lo.ordType)
                 )
@@ -72,7 +72,8 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
               }
               (ls - lo2 + lo2, lsById + (lo2.orderID -> lo2))
             case None =>
-              val lo = LedgerOrder(orderID=od.orderID, price=od.stopPx.getOrElse(od.price.getOrElse(-1)), qty=od.orderQty.orNull, side=od.side.orNull, ordType=od.ordType.orNull, timestamp=od.timestamp, ordStatus=od.ordStatus.getOrElse(OrderStatus.New))
+              // expecting REST to fill in the initial order...
+              val lo = LedgerOrder(orderID=od.orderID, price=od.stopPx.getOrElse(od.avgPx.getOrElse(od.price.getOrElse(-1))), qty=od.orderQty.orNull, side=od.side.orNull, ordType=od.ordType.orNull, timestamp=od.timestamp, ordStatus=od.ordStatus.getOrElse(OrderStatus.New))
               (ls + lo, lsById + (lo.orderID -> lo))
           }
       }

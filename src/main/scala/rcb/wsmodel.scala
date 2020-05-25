@@ -18,7 +18,7 @@ object OrderBookData { implicit val aFmt: Reads[OrderBookData] = Json.reads[Orde
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel
 object OrderBook { implicit val aFmt: Reads[OrderBook] = Json.reads[OrderBook] }
 
-case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: String, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel
+case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, avgPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: String, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel
 object OrderData { implicit val aFmt: Reads[OrderData] = Json.reads[OrderData] }
 
 case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel
@@ -61,7 +61,7 @@ object WsModel {
       }
     }
     res match {
-      case s:JsSuccess[WsModel] => s
+      case s:JsSuccess[_] => s
       case e:JsError => println(s".....Got WSModel unmarshal error:\njson: $json\nerror: $e"); e
     }
   }

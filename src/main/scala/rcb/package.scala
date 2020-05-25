@@ -26,7 +26,7 @@ package object rcb {
 
   object OrderStatus extends Enumeration {
     type OrderStatus = Value
-    val New, Canceled, Filled, Rejected, PartiallyFilled, Expired, Stopped, PostOnlyFailure /* derived status! */ = Value
+    val New, Canceled, Filled, Rejected, PartiallyFilled, Expired, Stopped, PostOnlyFailure /* synthetic status! */ = Value
     implicit val aFormat = Json.formatEnum(this)
   }
 
