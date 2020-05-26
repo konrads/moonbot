@@ -1,5 +1,7 @@
 package rcb
 
+import java.util.concurrent.TimeoutException
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.HttpMethods._
@@ -91,19 +93,19 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
     Await.ready(
       placeBulkOrders(orderReqs),
       Duration(syncTimeoutMs, MILLISECONDS)
-    ).value.get
+    ).value.get  // FIXME: not wrapping in recoverable error...
 
   def placeStopMarketOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide): Try[Order] =
     Await.ready(
       placeStopMarketOrder(qty, side, price),
       Duration(syncTimeoutMs, MILLISECONDS)
-    ).value.get
+    ).value.get  // FIXME: not wrapping in recoverable error...
 
   def placeMarketOrderSync(qty: BigDecimal, side: OrderSide): Try[Order] =
     Await.ready(
       placeMarketOrder(qty, side),
       Duration(syncTimeoutMs, MILLISECONDS)
-    ).value.get
+    ).value.get  // FIXME: not wrapping in recoverable error...
 
   def placeLimitOrderSync(qty: BigDecimal, price: BigDecimal, side: OrderSide): Try[Order] =
     Await.ready(
@@ -115,13 +117,13 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
     Await.ready(
       amendOrder(orderID, clOrdID, price),
       Duration(syncTimeoutMs, MILLISECONDS)
-    ).value.get
+    ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on amendOrderSync orderID: $orderID, clOrdID: $clOrdID") }.value.get
 
   def cancelOrderSync(orderID: Option[Seq[String]], clOrdID: Option[Seq[String]]): Try[Orders] =
     Await.ready(
       cancelOrder(orderID, clOrdID),
       Duration(syncTimeoutMs, MILLISECONDS)
-    ).value.get
+    ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on amendOrderSync orderID: ${orderID.getOrElse(Nil).mkString(", ")}, clOrdID: ${clOrdID.getOrElse(Nil).mkString(", ")}") }.value.get
 
   // LastPrice trigger as described in: https://www.reddit.com/r/BitMEX/comments/8pi7j7/bitmex_api_how_to_switch_sl_trigger_to_last_price/
   private def placeStopMarketOrder(qty: BigDecimal, side: OrderSide, price: BigDecimal, execInst: String="LastPrice", clOrdID: Option[String]=None): Future[Order] =
@@ -216,5 +218,6 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
 
 sealed trait RecoverableError
 case class TemporarilyUnavailableError(msg: String) extends Exception(msg) with RecoverableError
+case class TimeoutError(msg: String) extends Exception(msg) with RecoverableError
 
 case class AccountHasInsufficientBalanceError(msg: String) extends Exception(msg)

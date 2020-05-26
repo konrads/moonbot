@@ -71,6 +71,8 @@ object BotApp extends App {
   val wsGateway = new WsGateWay(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
   val metrics = Metrics(graphiteHost, graphitePort, namespace)
 
+  // FIXME: need to setup actor guardian (supervisor?) to restart!
+
   val orchestrator = OrchestratorActor(
     restGateway=restGateway,
     tradeQty=tradeQty, minTradeVol=minTradeVol,

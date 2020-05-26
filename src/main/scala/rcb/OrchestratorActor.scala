@@ -43,7 +43,7 @@ object OrchestratorActor {
           (ctx, wsEvent) match {
             case (_, Instrument) =>
               val ledger2 = ctx.ledger.withMetrics()
-              ledger2.ledgerMetrics.foreach(lm => metrics.foreach(m => m.gauge(lm.metrics))) // FIXME: fugly
+              metrics.foreach(_.gauge(ledger2.ledgerMetrics.map(_.metrics).getOrElse(Map.empty)))
               loop(ctx.copy(ledger2))
             case (_, Expiry) if ctx.orderID != null => // need to cancel first
               actorCtx.self ! Cancel(ctx.orderID)
@@ -61,7 +61,7 @@ object OrchestratorActor {
                       timers.cancelAll()
                       positionOpener.onFilled(ledger2, order.price)
                     case Canceled =>
-                      actorCtx.log.info(s"${positionOpener.desc}: Expired orderID: ${order.orderID}")
+                      actorCtx.log.info(s"${positionOpener.desc}: Expired (and canceled) orderID: ${order.orderID}")
                       timers.cancelAll()
                       positionOpener.onExpired(ledger2)
                     case _ =>
@@ -158,7 +158,7 @@ object OrchestratorActor {
           (ctx, wsEvent) match {
             case (_, Instrument) =>
               val ledger2 = ctx.ledger.withMetrics()
-              ledger2.ledgerMetrics.foreach(lm => metrics.foreach(m => m.gauge(lm.metrics))) // FIXME: fugly
+              metrics.foreach(_.gauge(ledger2.ledgerMetrics.map(_.metrics).getOrElse(Map.empty)))
               loop(ctx.copy(ledger2))
             case (_, Cancel(orderIDs@_*)) => // no limit on retries
               positionCloser.cancelOrders(orderIDs) match {
@@ -167,7 +167,8 @@ object OrchestratorActor {
                   val orders = orderIDs.map(ledger2.ledgerOrdersById)
                   val orderStatuses = orders.map(_.ordStatus).toSet
                   if (orderStatuses == Set(Filled, Canceled)) {
-                    actorCtx.log.info(s"${positionCloser.desc}: Got a fill and cancel in orderIDs: ${orderIDs.mkString(", ")}")
+                    val orderDescs = orders.map(o => s"${o.orderID}:${o.ordType}:${o.side} @ ${o.price} = ${o.ordStatus}")
+                    actorCtx.log.info(s"${positionCloser.desc}: Got a fill and cancel in orderIDs: ${orderDescs.mkString(", ")}")
                     timers.cancelAll()
                     positionCloser.onDone(ledger2)
                   } else
@@ -198,17 +199,30 @@ object OrchestratorActor {
               val ledger2 = ledger.record(data)
               val orders = orderIDs.map(ledger2.ledgerOrdersById)
               val orderStatuses = orders.map(_.ordStatus).toSet
-              if (orderStatuses == Set(Canceled)) {
-                actorCtx.log.info(s"${positionCloser.desc}: Got a cancel only on orderIDs: ${orderIDs.mkString(", ")} - unexpcted!")
+              if (orderStatuses.contains(Canceled)) {
+                val orderDescs = orders.map(o => s"${o.orderID}:${o.ordType}:${o.side} @ ${o.price} = ${o.ordStatus}")
+                actorCtx.log.warn(s"${positionCloser.desc}: Got an external cancel on orderIDs: ${orderDescs.mkString(", ")} - unexpected!")
                 timers.cancelAll()
                 positionCloser.onExternalCancels(ledger, orderIDs)
-              } else if (orderStatuses == Set(Filled, Canceled)) {
-                actorCtx.log.info(s"${positionCloser.desc}: Got a fill and cancel o orderIDs: ${orderIDs.mkString(", ")} - closing position!")
-                timers.cancelAll()
-                positionCloser.onDone(ledger2)
               } else if (orderStatuses.contains(Filled)) {
                 actorCtx.self ! Cancel(orderIDs:_*)  // FIXME: hack, canceling even the filled order
                 loop(ctx.copy(ledger=ledger2))
+              } else
+                loop(ctx.copy(ledger=ledger2))
+            case (ClosePositionCtx(ledger, orderIDs, Cancelling), WsEvent(data)) =>
+              val ledger2 = ledger.record(data)
+              val orders = orderIDs.map(ledger2.ledgerOrdersById)
+              val orderStatuses = orders.map(_.ordStatus).toSet
+              if (orderStatuses == Set(Canceled)) {
+                val orderDescs = orders.map(o => s"${o.orderID}:${o.ordType}:${o.side} @ ${o.price} = ${o.ordStatus}")
+                actorCtx.log.warn(s"${positionCloser.desc}: Got cancel only on orderIDs: ${orderDescs.mkString(", ")} - unexpected!")
+                timers.cancelAll()
+                positionCloser.onExternalCancels(ledger, orderIDs)
+              } else if (orderStatuses == Set(Filled, Canceled)) {
+                val orderDescs = orders.map(o => s"${o.orderID}:${o.ordType}:${o.side} @ ${o.price} = ${o.ordStatus}")
+                actorCtx.log.info(s"${positionCloser.desc}: Got a fill and cancel in orderIDs: ${orderDescs.mkString(", ")} - closing position!")
+                timers.cancelAll()
+                positionCloser.onDone(ledger2)
               } else
                 loop(ctx.copy(ledger=ledger2))
             case (ctx, data) =>
@@ -221,15 +235,16 @@ object OrchestratorActor {
       positionCloser.openOrders(initLedger) match {
         case Success(os) =>
           val orderIDs = os.orders.map(_.orderID)
-          log.info(s"Initial position opening, orderID: ${orderIDs.mkString(", ")}")
+          val orderDescs = os.orders.map(o => s"${o.orderID}:${o.ordType}:${o.side} @ ${o.price.getOrElse("???")} = ${o.ordStatus.get}")
+          log.info(s"${positionCloser.desc}: Initial position closing, orderID: ${orderDescs.mkString(", ")}")
           val ctx = ClosePositionCtx(initLedger.record(os), orderIDs)
           loop(ctx)
         case Failure(exc:RecoverableError) =>
-          log.warn(s"Initial position opening recoverable error", exc) // FIXME inelegant way of re-starting failed request
+          log.warn(s"${positionCloser.desc}: Initial position closing recoverable error", exc) // FIXME inelegant way of re-starting failed request
           timers.startSingleTimer(Issue, 0.microseconds)
           loop(ClosePositionCtx(initLedger, null))
         case Failure(exc) =>
-          log.info(s"Initial position opening failure!", exc)
+          log.info(s"${positionCloser.desc}: Initial position closing failure!", exc)
           positionCloser.onIrrecoverableError(initLedger, Nil, exc)
       }
     }
@@ -274,7 +289,7 @@ object OrchestratorActor {
     def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receivePartial[ActorEvent] {
       case (_, Instrument) =>
         val ledger2 = ctx.ledger.withMetrics()
-        ledger2.ledgerMetrics.foreach(lm => metrics.foreach(m => m.gauge(lm.metrics))) // FIXME: fugly
+        metrics.foreach(_.gauge(ledger2.ledgerMetrics.map(_.metrics).getOrElse(Map.empty)))
         idle(ctx.copy(ledger2))
       case (actorCtx, WsEvent(wsData)) =>
         actorCtx.log.debug(s"idle, received: $wsData")

@@ -3,6 +3,7 @@ package rcb
 import org.scalatest.{FlatSpec, Inside}
 import org.scalatest.matchers.should.Matchers
 
+
 object ModelsSpec {
   def wsOrderNew(orderID: String, side: OrderSide.Value, price: BigDecimal, orderQty: BigDecimal, ordType: OrderType.Value, timestamp: String) = ordType match {
     case OrderType.Limit =>

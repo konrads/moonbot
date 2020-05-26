@@ -28,18 +28,21 @@ case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: 
         ("os.cpu.process"   -> osBean.getProcessCpuLoad) +
         ("os.cpu.system"    -> osBean.getSystemCpuLoad) +
         ("os.memory.free"   -> osBean.getFreePhysicalMemorySize)
-    } else gauges
+    } else
+      gauges
 
-    val now = System.currentTimeMillis()
-    try {
-      graphite.connect()
-      for { (k, v) <- gauges2 } yield graphite.send(s"$prefix.$k", v.toString, now)
-    } catch {
-      case exc: IOException => log.warn(s"Failed to send graphite metrics: ${gauges.mkString(", ")}", exc)
-    } finally {
-      try graphite.close()
-      catch {
-        case exc: IOException => log.warn(s"Failed to close graphite connection: ${gauges.mkString(", ")}", exc)
+    if (gauges.nonEmpty) {
+      val now = System.currentTimeMillis()
+      try {
+        graphite.connect()
+        for { (k, v) <- gauges2 } yield graphite.send(s"$prefix.$k", v.toString, now)
+      } catch {
+        case exc: IOException => log.warn(s"Failed to send graphite metrics: ${gauges.mkString(", ")}", exc)
+      } finally {
+        try graphite.close()
+        catch {
+          case exc: IOException => log.warn(s"Failed to close graphite connection: ${gauges.mkString(", ")}", exc)
+        }
       }
     }
   }
