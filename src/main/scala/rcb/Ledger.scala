@@ -23,8 +23,8 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
   def record(o: Order): Ledger =
     ledgerOrdersById.get(o.orderID) match {
       case Some(existing) =>
-        val existing2 = existing.copy(myOrder=true, ordType=o.ordType)
-        copy(ledgerOrders=ledgerOrders-existing2+existing2, ledgerOrdersById=ledgerOrdersById + (existing2.orderID -> existing2))
+        val existing2 = existing.copy(myOrder=true, ordStatus=o.ordStatus.get, timestamp=o.timestamp)
+        copy(ledgerOrders=ledgerOrders-existing+existing2, ledgerOrdersById=ledgerOrdersById + (existing2.orderID -> existing2))
       case None =>
         val lo = LedgerOrder(orderID=o.orderID, qty=o.orderQty, price=o.stopPx.getOrElse(o.price.orNull), side=o.side, ordType=o.ordType, timestamp=o.timestamp, ordStatus=o.ordStatus.getOrElse(OrderStatus.New), myOrder=true)
         copy(ledgerOrders=ledgerOrders+lo, ledgerOrdersById=ledgerOrdersById + (lo.orderID -> lo))
@@ -54,6 +54,12 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
                     timestamp=od.timestamp,
                     ordType=od.ordType.getOrElse(lo.ordType)
                   )
+                case (_, Some(s@PostOnlyFailure)) =>
+                  lo.copy(
+                    ordStatus=s,
+                    timestamp=od.timestamp,
+                    ordType=od.ordType.getOrElse(lo.ordType)
+                  )
                 case (_, Some(s@PartiallyFilled)) =>
                   lo.copy(
                     ordStatus=s,
@@ -70,7 +76,7 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
                 )
                 case _ => lo
               }
-              (ls - lo2 + lo2, lsById + (lo2.orderID -> lo2))
+              (ls - lo + lo2, lsById + (lo2.orderID -> lo2))
             case None =>
               // expecting REST to fill in the initial order...
               val lo = LedgerOrder(orderID=od.orderID, price=od.stopPx.getOrElse(od.avgPx.getOrElse(od.price.getOrElse(-1))), qty=od.orderQty.orNull, side=od.side.orNull, ordType=od.ordType.orNull, timestamp=od.timestamp, ordStatus=od.ordStatus.getOrElse(OrderStatus.New))
@@ -100,25 +106,26 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       volumeScore
     }
   }
-  lazy val orderBookHeadVolume = orderBook.data.head.bids.headOption.map(_(1)).getOrElse(BigDecimal(0))
-  lazy val bidPrice: BigDecimal = orderBook.data.head.bids.head.head
-  lazy val askPrice: BigDecimal = orderBook.data.head.asks.head.head
+  lazy val orderBookHeadVolume: BigDecimal = orderBook.data.headOption.map(_.bids.headOption.map(_(1)).getOrElse(BigDecimal(0))).getOrElse(0)
+  lazy val bidPrice: BigDecimal = orderBook.data.headOption.map(_.bids.head.head).getOrElse(0)
+  lazy val askPrice: BigDecimal = orderBook.data.headOption.map(_.asks.head.head).getOrElse(0)
 
   def withMetrics(makerRebate: BigDecimal=.00025, takerFee: BigDecimal=.00075): Ledger = {
     val lastOrderTimestampOpt = ledgerMetrics.flatMap(_.lastOrderTimestamp)
     val prevPandl = ledgerMetrics.map(_.prevPandl).getOrElse(BigDecimal(0))
     val currOrders = ledgerOrders.filter(o => o.myOrder && o.ordStatus == OrderStatus.Filled)
-      .dropWhile(_.side == OrderSide.Buy).toList.reverse.dropWhile(_.side == OrderSide.Sell).reverse  // take only full buy/sell legs
-    val currOrders2 = lastOrderTimestampOpt match {
-      case Some(lastOrderTimestamp) => currOrders.takeWhile(_.timestamp > lastOrderTimestamp)
-      case _ => currOrders
+    val firstSide = currOrders.last.side // note: in descending
+    val currOrders2 = currOrders.dropWhile(_.side == firstSide) // eliminate unfinished buy/sell legs
+    val currOrders3 = lastOrderTimestampOpt match {
+      case Some(lastOrderTimestamp) => currOrders2.takeWhile(_.timestamp > lastOrderTimestamp)
+      case _ => currOrders2
     }
-    if (currOrders2.isEmpty)
+    if (currOrders3.isEmpty)
       this
     else {
-      val pandl = currOrders2.map {
-        case LedgerOrder(_, price, qty, _, OrderSide.Buy, OrderType.Limit, _, true)  => -qty * price * (1 + makerRebate)
-        case LedgerOrder(_, price, qty, _, OrderSide.Buy, _, _, true)                => -qty * price * (1 - takerFee)
+      val pandl = currOrders3.map {
+        case LedgerOrder(_, price, qty, _, OrderSide.Buy, OrderType.Limit, _, true)  => -qty * price * (1 - makerRebate)
+        case LedgerOrder(_, price, qty, _, OrderSide.Buy, _, _, true)                => -qty * price * (1 + takerFee)
         case LedgerOrder(_, price, qty, _, OrderSide.Sell, OrderType.Limit, _, true) =>  qty * price * (1 + makerRebate)
         case LedgerOrder(_, price, qty, _, OrderSide.Sell, _, _, true)               =>  qty * price * (1 - takerFee)
         case _                                                                       => BigDecimal(0)
@@ -126,7 +133,7 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
 
       val metrics = LedgerMetrics(
         Map("price" -> (bidPrice + askPrice) / 2, "pandl" -> pandl, "pandlDelta" -> (pandl - prevPandl)),
-        Some(currOrders2.head.timestamp),
+        Some(currOrders3.head.timestamp),
         pandl
       )
       copy(ledgerMetrics=Some(metrics))
