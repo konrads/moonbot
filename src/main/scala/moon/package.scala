@@ -3,7 +3,7 @@ import javax.crypto.spec.SecretKeySpec
 import javax.xml.bind.DatatypeConverter
 import play.api.libs.json.Json
 
-package object rcb {
+package object moon {
   def getBitmexApiSignature(keyString: String, apiSecret: String): String = {
     val sha256HMAC = Mac.getInstance("HmacSHA256")
     val secretKey = new SecretKeySpec(apiSecret.getBytes("UTF-8"), "HmacSHA256")

@@ -1,4 +1,4 @@
-package rcb
+package moon
 
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.actor.typed.scaladsl.Behaviors
@@ -6,7 +6,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.rogach.scallop._
 import play.api.libs.json.{JsError, JsResult, JsSuccess}
-import rcb.BotApp.orchestrator
+import moon.BotApp.orchestrator
 
 import scala.util.{Failure, Success}
 

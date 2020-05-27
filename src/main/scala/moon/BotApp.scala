@@ -1,4 +1,4 @@
-package rcb
+package moon
 
 import com.typesafe.config._
 import com.typesafe.scalalogging.Logger

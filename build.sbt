@@ -1,6 +1,6 @@
 import sbt.Keys.libraryDependencies
 
-name := "RebateCaptureBot"
+name := "MoonBot"
 
 version := "0.1"
 
@@ -10,7 +10,7 @@ sbtVersion := "1.3.10"
 
 test in assembly := {}
 
-mainClass in Compile := Some("rcb.BotApp")
+mainClass in Compile := Some("moon.BotApp")
 
 assemblyMergeStrategy in assembly := {
   case "module-info.class" => MergeStrategy.discard

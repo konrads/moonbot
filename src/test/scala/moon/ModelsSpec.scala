@@ -1,4 +1,4 @@
-package rcb
+package moon
 
 import org.scalatest.{FlatSpec, Inside}
 import org.scalatest.matchers.should.Matchers

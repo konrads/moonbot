@@ -1,4 +1,4 @@
-package rcb
+package moon
 
 import java.util.concurrent.TimeoutException
 
@@ -10,7 +10,7 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.util.ByteString
 import com.typesafe.scalalogging.Logger
 import play.api.libs.json.{JsError, JsSuccess, Json}
-import rcb.OrderSide.OrderSide
+import moon.OrderSide.OrderSide
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}

@@ -1,8 +1,8 @@
-package rcb
+package moon
 
 import play.api.libs.json._
 import play.api.libs.json.Reads._
-import rcb.OrderSide.OrderSide
+import moon.OrderSide.OrderSide
 
 
 sealed trait RestModel
