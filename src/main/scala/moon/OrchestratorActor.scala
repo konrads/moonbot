@@ -41,7 +41,7 @@ object OrchestratorActor {
       def loop(ctx: OpenPositionCtx): Behavior[ActorEvent] =
         Behaviors.receivePartial[ActorEvent] { case (actorCtx, wsEvent) =>
           (ctx, wsEvent) match {
-            case (_, Instrument) =>
+            case (_, SendMetrics) =>
               val ledger2 = ctx.ledger.withMetrics()
               metrics.foreach(_.gauge(ledger2.ledgerMetrics.map(_.metrics).getOrElse(Map.empty)))
               loop(ctx.copy(ledger2))
@@ -138,7 +138,7 @@ object OrchestratorActor {
               val ledger2 = ctx.ledger.record(data)
               loop(ctx.copy(ledger=ledger2))
 //            case (ctx, data) =>
-//              actorCtx.log.error(s"### ${positionOpener.desc}: Unexpected combo of ctx:\n$ctx\ndata:\n$data")
+//              actorCtx.log.error(s"${positionOpener.desc}: Unexpected combo of ctx:\n$ctx\ndata:\n$data")
 //              Behaviors.same
           }
       }
@@ -166,7 +166,7 @@ object OrchestratorActor {
       def loop(ctx: ClosePositionCtx): Behavior[ActorEvent] =
         Behaviors.receivePartial[ActorEvent] { case (actorCtx, wsEvent) =>
           (ctx, wsEvent) match {
-            case (_, Instrument) =>
+            case (_, SendMetrics) =>
               val ledger2 = ctx.ledger.withMetrics()
               metrics.foreach(_.gauge(ledger2.ledgerMetrics.map(_.metrics).getOrElse(Map.empty)))
               loop(ctx.copy(ledger2))
@@ -242,7 +242,7 @@ object OrchestratorActor {
               val ledger2 = ctx.ledger.record(data)
               loop(ctx.copy(ledger=ledger2))
 //            case (ctx, data) =>
-//              actorCtx.log.error(s"### ${positionCloser.desc}: Unexpected combo of ctx:\n$ctx\ndata:\n$data")
+//              actorCtx.log.error(s"${positionCloser.desc}: Unexpected combo of ctx:\n$ctx\ndata:\n$data")
 //              Behaviors.same
           }
         }
@@ -288,7 +288,7 @@ object OrchestratorActor {
           actorCtx.log.debug(s"init, received: $wsData")
           val ledger2 = ctx.ledger.record(wsData)
           if (ledger2.isMinimallyFilled) {
-            timers.startTimerAtFixedRate(Instrument, 1.minute)
+            timers.startTimerAtFixedRate(SendMetrics, 1.minute)
             // border from: https://www.asciiart.eu/art-and-design/borders
             actorCtx.log.info(
               """
@@ -307,7 +307,7 @@ object OrchestratorActor {
      * Waiting for market conditions to change to volumous bull or bear
      */
     def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receivePartial[ActorEvent] {
-      case (_, Instrument) =>
+      case (_, SendMetrics) =>
         val ledger2 = ctx.ledger.withMetrics()
         metrics.foreach(_.gauge(ledger2.ledgerMetrics.map(_.metrics).getOrElse(Map.empty)))
         idle(ctx.copy(ledger2))

@@ -1,5 +1,6 @@
 package moon
 
+import com.typesafe.scalalogging.Logger
 import play.api.libs.json._
 import play.api.libs.json.Reads._
 import moon.OrderSide.OrderSide
@@ -42,8 +43,9 @@ object OrderReqs {
 }
 
 object RestModel {
+  private val log = Logger("RestModel")
   implicit val aReads: Reads[RestModel] = (json: JsValue) => {
-    // println(s"#### rest json: $json")
+    log.debug(s"#### rest json: $json")
     val res = json match {
       case arr@JsArray(_) => (arr(0) \ "orderID").asOpt[String] match {
         case Some(_) => arr.validate[List[Order]].map(x => Orders(x))

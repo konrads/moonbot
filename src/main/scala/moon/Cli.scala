@@ -7,6 +7,7 @@ import com.typesafe.scalalogging.Logger
 import org.rogach.scallop._
 import play.api.libs.json.{JsError, JsResult, JsSuccess}
 import moon.BotApp.orchestrator
+import org.slf4j.LoggerFactory
 
 import scala.util.{Failure, Success}
 
@@ -55,15 +56,22 @@ object Cli extends App {
   }
   val consumeOrderTrade: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value:UpsertOrder, _) => log.info(s"WS UpsertOrder: $value")
-    case JsSuccess(value:Trade,  _)      => log.info(s"WS Trade: $value")
+    case JsSuccess(value:Trade, _)       => log.info(s"WS Trade: $value")
     case s:JsError                       => log.error(s"WS error!: $s")
   }
   val consumeTrade: PartialFunction[JsResult[WsModel], Unit] = {
-    case JsSuccess(value:Trade,  _) => log.info(s"WS Trade: $value")
-    case s:JsError                  => log.error(s"WS error!: $s")
+    case JsSuccess(value:Trade, _) => log.info(s"WS Trade: $value")
+    case s:JsError                 => log.error(s"WS error!: $s")
   }
   val consumeOrderBook: PartialFunction[JsResult[WsModel], Unit] = {
-    case JsSuccess(value:OrderBook,  _) => log.info(s"WS OrderBook: $value")
+    case JsSuccess(value:OrderBook, _) => log.info(s"WS OrderBook: $value")
+    case s:JsError                     => log.error(s"WS error!: $s")
+  }
+  val consumeInstrument: PartialFunction[JsResult[WsModel], Unit] = {
+    case JsSuccess(value:Instrument, _) => log.info(s"WS Instrument: $value")
+    case s:JsError                      => log.error(s"WS error!: $s")
+  }
+  val consumeNone: PartialFunction[JsResult[WsModel], Unit] = {
     case s:JsError                      => log.error(s"WS error!: $s")
   }
 
@@ -191,6 +199,15 @@ object Cli extends App {
     case ("monitorOrderBook", _, _, _, _, _, _, _) =>
       log.info(s"monitoring order book")
       wsGateway.run(consumeOrderBook)
+    case ("monitorInstrument", _, _, _, _, _, _, _) =>
+      log.info(s"monitoring instrument")
+      wsGateway.run(consumeInstrument)
+    case ("monitorDebug", _, _, _, _, _, _, _) =>
+      // overwrite debug level
+      val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME).asInstanceOf[ch.qos.logback.classic.Logger]
+      rootLogger.setLevel(ch.qos.logback.classic.Level.DEBUG)
+      log.info(s"monitoring instrument")
+      wsGateway.run(consumeNone)
     case (action, orderTypeOpt, priceOpt, takeProfitPriceOpt, stoplossPriceOpt, qtyOpt, orderidOpt, cliOrdOpt) =>
       log.error(s"Unknown params: action: $action, orderType: $orderTypeOpt, price: $priceOpt, takeProfitPriceOpt: $takeProfitPriceOpt, stoplossPriceOpt: $stoplossPriceOpt, amount: $qtyOpt, orderid: $orderidOpt, cliOrdOpt: $cliOrdOpt")
       sys.exit(-1)

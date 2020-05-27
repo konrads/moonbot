@@ -25,3 +25,8 @@ sbt "runMain moon.Cli --ordertype market --qty 30 bid"
 sbt "runMain rcb.Cli --ordertype limit --price 9000 --qty 30 bid"
 ...etc
 ```
+
+To gather all ws jsons (as per ws application.conf's bitmex.wsUrl)
+```
+sbt "runMain moon.Cli monitorDebug" | grep "###" | sed 's/.*ws json: //'
+```

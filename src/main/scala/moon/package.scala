@@ -30,6 +30,12 @@ package object moon {
     implicit val aFormat = Json.formatEnum(this)
   }
 
+  object TickDirection extends Enumeration {
+    type TickDirection = Value
+    val MinusTick, ZeroMinusTick, PlusTick, ZeroPlusTick = Value
+    implicit val aFormat = Json.formatEnum(this)
+  }
+
   object Sentiment extends Enumeration {
     type Sentiment = Value
     val Bull, Bear, Neutral = Value

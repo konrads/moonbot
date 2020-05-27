@@ -13,7 +13,7 @@ case object OpenTakeProfit extends ActorEvent
 case object Expiry extends ActorEvent
 case object Issue extends ActorEvent
 case class Cancel(orderID: String*) extends ActorEvent
-case object Instrument extends ActorEvent
+case object SendMetrics extends ActorEvent
 
 
 // Context
