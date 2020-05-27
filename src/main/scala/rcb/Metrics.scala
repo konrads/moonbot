@@ -31,11 +31,11 @@ case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: 
     } else
       gauges
 
-    if (gauges.nonEmpty) {
-      val now = System.currentTimeMillis()
+    if (gauges2.nonEmpty) {
+      val now = System.currentTimeMillis() / 1000
       try {
         graphite.connect()
-        for { (k, v) <- gauges2 } yield graphite.send(s"$prefix.$k", v.toString, now)
+        for { (k, v) <- gauges2 } graphite.send(s"$prefix.$k", v.toString, now)
       } catch {
         case exc: IOException => log.warn(s"Failed to send graphite metrics: ${gauges.mkString(", ")}", exc)
       } finally {

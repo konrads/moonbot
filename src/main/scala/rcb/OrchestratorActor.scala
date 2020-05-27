@@ -58,21 +58,25 @@ object OrchestratorActor {
                   order.ordStatus match {
                     case Filled => // race condition
                       actorCtx.log.info(s"${positionOpener.desc}: Filled orderID: ${order.orderID} @ ${order.price} (even though Cancelled on Expired)")
-                      timers.cancelAll()
+                      timers.cancel(Expiry)
                       positionOpener.onFilled(ledger2, order.price)
                     case Canceled =>
                       actorCtx.log.info(s"${positionOpener.desc}: Expired (and canceled) orderID: ${order.orderID}")
-                      timers.cancelAll()
+                      timers.cancel(Expiry)
                       positionOpener.onExpired(ledger2)
                     case _ =>
                       loop(ctx.copy(ledger=ledger2, lifecycle=Cancelling))
                   }
+//                case Failure(_: BackoffRequiredError) =>
+//                  val backoff = positionOpener.backoffStrategy(ctx.retry)
+//                  timers.startSingleTimer(Cancel(orderID), Duration(backoff, MILLISECONDS))
+//                  Behaviors.same
                 case Failure(_: RecoverableError) =>
                   actorCtx.self ! Cancel(orderID)
                   Behaviors.same
                 case Failure(exc) =>
                   actorCtx.log.warn(s"${positionOpener.desc}: Unexpected failure of cancellation of orderID: $orderID", exc)
-                  timers.cancelAll()
+                  timers.cancel(Expiry)
                   positionOpener.onIrrecoverableError(ctx.ledger, Some(orderID), exc)
               }
             case (_, Issue) =>
@@ -81,55 +85,61 @@ object OrchestratorActor {
                   // Note: not checking the status here, relying on WS. Some statuses eg. Filled, PostOnlyFailure are only delivered via WS
                   val ledger2 = ctx.ledger.record(o)
                   loop(ctx.copy(ledger=ledger2, orderID=o.orderID, lifecycle=Issuing))
+//                case Failure(_: BackoffRequiredError) =>
+//                  val backoff = positionOpener.backoffStrategy(ctx.retry)
+//                  timers.startSingleTimer(Issue, Duration(backoff, MILLISECONDS))
+//                  Behaviors.same
                 case Failure(_: RecoverableError) =>
                   actorCtx.self ! Issue
                   Behaviors.same
                 case Failure(exc) =>
                   actorCtx.log.warn(s"${positionOpener.desc}: Unexpected failure of issuing of orders", exc)
-                  timers.cancelAll()
+                  timers.cancel(Expiry)
                   positionOpener.onIrrecoverableError(ctx.ledger, Some(ctx.orderID), exc)
               }
-            case (OpenPositionCtx(ledger, orderID, Issuing, _), WsEvent(data)) =>
+            case (OpenPositionCtx(ledger, orderID, Issuing, _), WsEvent(data:UpsertOrder)) if data.containsOrderIDs(orderID) =>
               val ledger2 = ledger.record(data)
               val order = ledger2.ledgerOrdersById(orderID)
               order.ordStatus match {
                 case Filled =>
                   actorCtx.log.info(s"${positionOpener.desc}: Filled orderID: $orderID @ ${order.price}")
-                  timers.cancelAll()
+                  timers.cancel(Expiry)
                   positionOpener.onFilled(ledger2, order.price)
                 case PostOnlyFailure if ctx.markupRetry < positionOpener.maxMarkupRetries =>
-                  val backoff = positionOpener.backoffStrategy(ctx.markupRetry)
-                  timers.startSingleTimer(Issue, Duration(backoff, MILLISECONDS))
+                  actorCtx.self ! Issue
                   loop(ctx.copy(ledger=ledger2, markupRetry=ctx.markupRetry+1))
                 case PostOnlyFailure => // maxMarkupRetries reached
                   actorCtx.log.info(s"${positionOpener.desc}: Reached max markupRetries")
-                  timers.cancelAll()
+                  timers.cancel(Expiry)
                   positionOpener.onExceededMarkupRetries(ledger2)
                 case Canceled =>
                   actorCtx.log.warn(s"${positionOpener.desc}: Got unexpected cancellation of orderID: ${order.orderID}")
-                  timers.cancelAll()
+                  timers.cancel(Expiry)
                   positionOpener.onExternalCancel(ledger2, order.orderID)
                 case _ =>
                   loop(ctx.copy(ledger = ledger2))
               }
-            case (OpenPositionCtx(_, orderID, Cancelling, _), WsEvent(data)) =>
+            case (OpenPositionCtx(_, orderID, Cancelling, _), WsEvent(data:UpsertOrder)) if data.containsOrderIDs(orderID) =>
               val ledger2 = ctx.ledger.record(data)
               val order = ledger2.ledgerOrdersById(orderID)
               order.ordStatus match {
                 case Filled => // race condition
                   actorCtx.log.info(s"${positionOpener.desc}: Filled orderID: $orderID @ ${order.price} (even though Cancelling on Expired)")
-                  timers.cancelAll()
+                  timers.cancel(Expiry)
                   positionOpener.onFilled(ledger2, order.price)
                 case PostOnlyFailure | Canceled =>
                   actorCtx.log.info(s"${positionOpener.desc}: Expired orderID: $orderID")
-                  timers.cancelAll()
+                  timers.cancel(Expiry)
                   positionOpener.onExpired(ledger2)
                 case _ =>
-                  loop(ctx.copy(ledger = ledger2))
+                  loop(ctx.copy(ledger=ledger2))
               }
-            case (ctx, data) =>
-              actorCtx.log.error(s"### ${positionOpener.desc}: Unexpected combo of ctx:\n$ctx\ndata:\n$data")
-              Behaviors.same
+            case (_, WsEvent(data)) =>
+              val ledger2 = ctx.ledger.record(data)
+              loop(ctx.copy(ledger=ledger2))
+//            case (ctx, data) =>
+//              actorCtx.log.error(s"### ${positionOpener.desc}: Unexpected combo of ctx:\n$ctx\ndata:\n$data")
+//              Behaviors.same
           }
       }
 
@@ -169,10 +179,13 @@ object OrchestratorActor {
                   if (orderStatuses == Set(Filled, Canceled)) {
                     val orderDescs = orders.map(o => s"${o.orderID}:${o.ordType}:${o.side} @ ${o.price} = ${o.ordStatus}")
                     actorCtx.log.info(s"${positionCloser.desc}: Got a fill and cancel in orderIDs: ${orderDescs.mkString(", ")}")
-                    timers.cancelAll()
                     positionCloser.onDone(ledger2)
                   } else
                     loop(ctx.copy(ledger=ledger2, lifecycle=Cancelling))
+//                case Failure(_: BackoffRequiredError) =>
+//                  val backoff = positionCloser.backoffStrategy(ctx.retry)
+//                  timers.startSingleTimer(Cancel(orderIDs:_*), Duration(backoff, MILLISECONDS))
+//                  Behaviors.same
                 case Failure(_: RecoverableError) =>
                   actorCtx.self ! Cancel(orderIDs:_*)
                   Behaviors.same
@@ -187,47 +200,50 @@ object OrchestratorActor {
                   val ledger2 = ctx.ledger.record(os)
                   val orderIDs = os.orders.map(_.orderID)
                   loop(ctx.copy(ledger=ledger2, orderIDs=orderIDs, lifecycle=Issuing))
+//                case Failure(_: BackoffRequiredError) =>
+//                  val backoff = positionCloser.backoffStrategy(ctx.retry)
+//                  timers.startSingleTimer(Issue, Duration(backoff, MILLISECONDS))
+//                  Behaviors.same
                 case Failure(_: RecoverableError) =>
                   actorCtx.self ! Issue
                   Behaviors.same
                 case Failure(exc) =>
                   actorCtx.log.error(s"${positionCloser.desc}: Unexpected failure of issuing of orders", exc)
-                  timers.cancelAll()
                   positionCloser.onIrrecoverableError(ctx.ledger, ctx.orderIDs, exc)
               }
-            case (ClosePositionCtx(ledger, orderIDs, Issuing), WsEvent(data)) =>
+            case (ClosePositionCtx(ledger, orderIDs, Issuing), WsEvent(data:UpsertOrder)) if data.containsOrderIDs(orderIDs:_*) =>
               val ledger2 = ledger.record(data)
               val orders = orderIDs.map(ledger2.ledgerOrdersById)
               val orderStatuses = orders.map(_.ordStatus).toSet
               if (orderStatuses.contains(Canceled)) {
                 val orderDescs = orders.map(o => s"${o.orderID}:${o.ordType}:${o.side} @ ${o.price} = ${o.ordStatus}")
                 actorCtx.log.warn(s"${positionCloser.desc}: Got an external cancel on orderIDs: ${orderDescs.mkString(", ")} - unexpected!")
-                timers.cancelAll()
                 positionCloser.onExternalCancels(ledger, orderIDs)
               } else if (orderStatuses.contains(Filled)) {
                 actorCtx.self ! Cancel(orderIDs:_*)  // FIXME: hack, canceling even the filled order
                 loop(ctx.copy(ledger=ledger2))
               } else
                 loop(ctx.copy(ledger=ledger2))
-            case (ClosePositionCtx(ledger, orderIDs, Cancelling), WsEvent(data)) =>
+            case (ClosePositionCtx(ledger, orderIDs, Cancelling), WsEvent(data:UpsertOrder)) if data.containsOrderIDs(orderIDs:_*) =>
               val ledger2 = ledger.record(data)
               val orders = orderIDs.map(ledger2.ledgerOrdersById)
               val orderStatuses = orders.map(_.ordStatus).toSet
               if (orderStatuses == Set(Canceled)) {
                 val orderDescs = orders.map(o => s"${o.orderID}:${o.ordType}:${o.side} @ ${o.price} = ${o.ordStatus}")
                 actorCtx.log.warn(s"${positionCloser.desc}: Got cancel only on orderIDs: ${orderDescs.mkString(", ")} - unexpected!")
-                timers.cancelAll()
                 positionCloser.onExternalCancels(ledger, orderIDs)
               } else if (orderStatuses == Set(Filled, Canceled)) {
                 val orderDescs = orders.map(o => s"${o.orderID}:${o.ordType}:${o.side} @ ${o.price} = ${o.ordStatus}")
                 actorCtx.log.info(s"${positionCloser.desc}: Got a fill and cancel in orderIDs: ${orderDescs.mkString(", ")} - closing position!")
-                timers.cancelAll()
                 positionCloser.onDone(ledger2)
               } else
                 loop(ctx.copy(ledger=ledger2))
-            case (ctx, data) =>
-              actorCtx.log.error(s"### ${positionCloser.desc}: Unexpected combo of ctx:\n$ctx\ndata:\n$data")
-              Behaviors.same
+            case (_, WsEvent(data)) =>
+              val ledger2 = ctx.ledger.record(data)
+              loop(ctx.copy(ledger=ledger2))
+//            case (ctx, data) =>
+//              actorCtx.log.error(s"### ${positionCloser.desc}: Unexpected combo of ctx:\n$ctx\ndata:\n$data")
+//              Behaviors.same
           }
         }
 
@@ -239,7 +255,11 @@ object OrchestratorActor {
           log.info(s"${positionCloser.desc}: Initial position closing, orderID: ${orderDescs.mkString(", ")}")
           val ctx = ClosePositionCtx(initLedger.record(os), orderIDs)
           loop(ctx)
-        case Failure(exc:RecoverableError) =>
+//        case Failure(_: BackoffRequiredError) =>
+//          val backoff = positionCloser.backoffStrategy(ctx.retry)
+//          timers.startSingleTimer(Issue, Duration(backoff, MILLISECONDS))
+//          Behaviors.same
+        case Failure(exc: RecoverableError) =>
           log.warn(s"${positionCloser.desc}: Initial position closing recoverable error", exc) // FIXME inelegant way of re-starting failed request
           timers.startSingleTimer(Issue, 0.microseconds)
           loop(ClosePositionCtx(initLedger, null))
@@ -312,7 +332,11 @@ object OrchestratorActor {
         override def onExternalCancel(l: Ledger, orderID: String): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long opening orderID: $orderID")
         override def onIrrecoverableError(l: Ledger, orderID: Option[String], exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long opening orderID: $orderID", exc)
         override def onExceededMarkupRetries(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(ledger))
-        override def openOrder(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty, l.bidPrice - retryCnt * postOnlyPriceAdj, OrderSide.Buy)
+        override def openOrder(l: Ledger, retryCnt: Int): Try[Order] = {
+          val price = l.bidPrice - retryCnt * postOnlyPriceAdj
+          log.info(s"${desc}: opening retry: $retryCnt @ $price (${l.bidPrice})")
+          restGateway.placeLimitOrderSync(tradeQty, price, OrderSide.Buy)
+        }
         override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(Seq(orderID)), None)
       }, metrics)
 
@@ -339,7 +363,11 @@ object OrchestratorActor {
         override def onExternalCancel(l: Ledger, orderID: String): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of short opening orderID: $orderID")
         override def onIrrecoverableError(l: Ledger, orderID: Option[String], exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of short opening orderID: $orderID", exc)
         override def onExceededMarkupRetries(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(ledger))
-        override def openOrder(l: Ledger, retryCnt: Int): Try[Order] = restGateway.placeLimitOrderSync(tradeQty, l.askPrice + retryCnt * postOnlyPriceAdj, OrderSide.Sell)
+        override def openOrder(l: Ledger, retryCnt: Int): Try[Order] = {
+          val price = l.askPrice + retryCnt * postOnlyPriceAdj
+          log.info(s"${desc}: opening retry: $retryCnt @ $price (${l.askPrice})")
+          restGateway.placeLimitOrderSync(tradeQty, price, OrderSide.Sell)
+        }
         override def cancelOrder(orderID: String): Try[Orders] = restGateway.cancelOrderSync(Some(Seq(orderID)), None)
       }, metrics)
 

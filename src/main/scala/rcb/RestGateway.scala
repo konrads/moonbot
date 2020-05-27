@@ -123,7 +123,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
     Await.ready(
       cancelOrder(orderID, clOrdID),
       Duration(syncTimeoutMs, MILLISECONDS)
-    ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on amendOrderSync orderID: ${orderID.getOrElse(Nil).mkString(", ")}, clOrdID: ${clOrdID.getOrElse(Nil).mkString(", ")}") }.value.get
+    ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on cancelOrderSync orderID: ${orderID.getOrElse(Nil).mkString(", ")}, clOrdID: ${clOrdID.getOrElse(Nil).mkString(", ")}") }.value.get
 
   // LastPrice trigger as described in: https://www.reddit.com/r/BitMEX/comments/8pi7j7/bitmex_api_how_to_switch_sl_trigger_to_last_price/
   private def placeStopMarketOrder(qty: BigDecimal, side: OrderSide, price: BigDecimal, execInst: String="LastPrice", clOrdID: Option[String]=None): Future[Order] =
@@ -193,15 +193,17 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
               }
           }
         case HttpResponse(s@StatusCodes.Forbidden, _headers, entity, _) =>
-          // need to deal with getting banned for too many api calls
-          // FIXME: check what response i get on this in text, throw: BackoffRequiredError
-          ???
+          entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
+            b =>
+              val bStr = b.utf8String
+              Future.failed(BackoffRequiredError(s"Forbidden, assuming due to excessive requests: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+          }
         case HttpResponse(s@StatusCodes.BadRequest, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
             b =>
               val bStr = b.utf8String
               if (bStr.contains("Account has insufficient Available Balance"))
-                Future.failed(new AccountHasInsufficientBalanceError(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+                Future.failed(AccountHasInsufficientBalanceError(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
               else
                 Future.failed(new Exception(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
@@ -219,5 +221,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
 sealed trait RecoverableError
 case class TemporarilyUnavailableError(msg: String) extends Exception(msg) with RecoverableError
 case class TimeoutError(msg: String) extends Exception(msg) with RecoverableError
+
+case class BackoffRequiredError(msg: String) extends Exception(msg)
 
 case class AccountHasInsufficientBalanceError(msg: String) extends Exception(msg)

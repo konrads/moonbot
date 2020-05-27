@@ -4,4 +4,4 @@ Deleteme*
 *.private.conf
 target
 project/project
-scala-logging.log
+*.log
