@@ -131,7 +131,13 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
 
         val prevPandl = ledgerMetrics.map(_.prevPandl).getOrElse(BigDecimal(0))
         val metrics = LedgerMetrics(
-          Map("data.price" -> (bidPrice + askPrice) / 2, "data.pandl" -> pandl, "data.pandlDelta" -> (pandl - prevPandl)),
+          Map(
+            "data.price"          -> (bidPrice + askPrice) / 2,
+            "data.pandl"          -> pandl,
+            "data.pandlDelta"     -> (pandl - prevPandl),
+            "data.sentimentScore" -> sentimentScore,
+            "data.myTradesCnt"    -> myOrders.count(_.ordStatus == OrderStatus.Filled)
+          ),
           currOrders3.head.timestamp,
           pandl
         )

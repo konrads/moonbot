@@ -118,7 +118,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
 
     val l5 = l4.withMetrics()
     val metrics5 = l5.ledgerMetrics
-    metrics5 shouldBe Some(LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl" -> BigDecimal(-30.0425), "data.pandlDelta" -> BigDecimal(-30.0425)), "t5", BigDecimal(-30.0425)))  // no buy/sell as yet
+    metrics5 shouldBe Some(LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl" -> BigDecimal(-30.0425), "data.pandlDelta" -> BigDecimal(-30.0425), "data.sentimentScore" -> BigDecimal(0), "data.myTradesCnt" -> 3), "t5", BigDecimal(-30.0425)))  // no buy/sell as yet
 
     // add sell, recalculate metrics
     val l6 = buildLedger(l5,
@@ -129,7 +129,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     )
     val l7 = l6.withMetrics()
     val metrics7 = l7.ledgerMetrics
-    metrics7 shouldBe Some(LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl" -> BigDecimal(-.15), "data.pandlDelta" -> BigDecimal(29.89250)), "t7", BigDecimal(-.15)))  // no buy/sell as yet
+    metrics7 shouldBe Some(LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl" -> BigDecimal(-.15), "data.pandlDelta" -> BigDecimal(29.89250), "data.sentimentScore" -> BigDecimal(0), "data.myTradesCnt" -> 4), "t7", BigDecimal(-.15)))  // no buy/sell as yet
   }
 
   it should "order LedgerOrders desc" in {
