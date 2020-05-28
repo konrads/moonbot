@@ -29,7 +29,7 @@ libraryDependencies ++= {
     "com.typesafe.akka" %% "akka-http"            % akkaHttpVsn,
     "com.typesafe.akka" %% "akka-stream"          % akkaVsn,
     "com.typesafe.akka" %% "akka-actor-typed"     % akkaVsn,
-    "com.typesafe.akka" %% "akka-slf4j"           % akkaVsn,
+    // "com.typesafe.akka" %% "akka-slf4j"           % akkaVsn,
     "ch.qos.logback"    %  "logback-classic"      % "1.2.3",
     "com.typesafe.play" %% "play-json"            % "2.8.1",
     "org.rogach"        %% "scallop"              % "3.4.0",
