@@ -1,18 +1,19 @@
 package moon
 
+import com.github.nscala_time.time.Imports._
 import moon.OrderSide.OrderSide
-import moon.OrderStatus.OrderStatus
-import moon.OrderStatus._
+import moon.OrderStatus.{OrderStatus, _}
+import org.joda.time.DateTime
 
 import scala.collection.SortedSet
 
 
-case class LedgerOrder(orderID: String, price: BigDecimal, qty: BigDecimal, ordStatus: OrderStatus, side: OrderSide, ordType: OrderType.Value=null, timestamp: String, myOrder: Boolean=false) extends Ordered[LedgerOrder] {
+case class LedgerOrder(orderID: String, price: BigDecimal, qty: BigDecimal, ordStatus: OrderStatus, side: OrderSide, ordType: OrderType.Value=null, timestamp: DateTime, myOrder: Boolean=false) extends Ordered[LedgerOrder] {
   import scala.math.Ordered.orderingToOrdered
   override def compare(that: LedgerOrder): Int = -((this.timestamp, this.orderID) compare (that.timestamp, that.orderID))
 }
 
-case class LedgerMetrics(metrics: Map[String, BigDecimal], lastOrderTimestamp: String="", prevPandl: BigDecimal=0)
+case class LedgerMetrics(metrics: Map[String, BigDecimal], lastOrderTimestamp: DateTime=new DateTime(0), prevPandl: BigDecimal=0)
 
 case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
                   orderBook: OrderBook=null, trades: Seq[Trade]=Nil,

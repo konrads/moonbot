@@ -4,30 +4,30 @@ import com.typesafe.scalalogging.Logger
 import org.joda.time.DateTime
 import play.api.libs.json._
 import play.api.libs.json.Reads._
-import play.api.libs.json.JodaReads._  // gives DateTime conversion, use "com.typesafe.play" %% "play-json-joda"       % "2.8.1"
+import moon.jodaDateReads
 
 
 sealed trait WsModel
 
-case class Info(info: String, version: String, timestamp: String, docs: String) extends WsModel
+case class Info(info: String, version: String, timestamp: DateTime, docs: String) extends WsModel
 object Info { implicit val aReads: Reads[Info] = Json.reads[Info] }
 
 case class SuccessConfirmation(success: Boolean, subscribe: Option[String]) extends WsModel
 object SuccessConfirmation { implicit val aReads: Reads[SuccessConfirmation] = Json.reads[SuccessConfirmation] }
 
-case class OrderBookData(symbol: String, timestamp: String, asks: Seq[Seq[BigDecimal]], bids: Seq[Seq[BigDecimal]]) extends WsModel
+case class OrderBookData(symbol: String, timestamp: DateTime, asks: Seq[Seq[BigDecimal]], bids: Seq[Seq[BigDecimal]]) extends WsModel
 object OrderBookData { implicit val aReads: Reads[OrderBookData] = Json.reads[OrderBookData] }
 
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel
 object OrderBook { implicit val aReads: Reads[OrderBook] = Json.reads[OrderBook] }
 
-case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, avgPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: String, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel
+case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, avgPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: DateTime, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel
 object OrderData { implicit val aReads: Reads[OrderData] = Json.reads[OrderData] }
 
 case class Instrument(data: Seq[InstrumentData]) extends WsModel
 object Instrument { implicit val aReads: Reads[Instrument] = Json.reads[Instrument] }
 
-case class InstrumentData(symbol: String, lastPrice: Option[BigDecimal], lastChangePcnt: Option[BigDecimal], markPrice: Option[BigDecimal], prevPrice24h: Option[BigDecimal], timestamp: String) extends WsModel
+case class InstrumentData(symbol: String, lastPrice: Option[BigDecimal], lastChangePcnt: Option[BigDecimal], markPrice: Option[BigDecimal], prevPrice24h: Option[BigDecimal], timestamp: DateTime) extends WsModel
 object InstrumentData { implicit val aReads: Reads[InstrumentData] = Json.reads[InstrumentData] }
 
 case class Funding(data: Seq[FundingData]) extends WsModel
@@ -41,7 +41,7 @@ case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsM
 }
 object UpsertOrder { implicit val aReads: Reads[UpsertOrder] = Json.reads[UpsertOrder] }
 
-case class TradeData(side: OrderSide.Value, size: Int, price: BigDecimal, tickDirection: TickDirection.Value, timestamp: String) extends WsModel
+case class TradeData(side: OrderSide.Value, size: Int, price: BigDecimal, tickDirection: TickDirection.Value, timestamp: DateTime) extends WsModel
 object TradeData { implicit val aReads: Reads[TradeData] = Json.reads[TradeData] }
 
 case class Trade(data: Seq[TradeData]) extends WsModel

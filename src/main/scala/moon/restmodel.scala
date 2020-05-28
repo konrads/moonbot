@@ -4,11 +4,13 @@ import com.typesafe.scalalogging.Logger
 import play.api.libs.json._
 import play.api.libs.json.Reads._
 import moon.OrderSide.OrderSide
+import org.joda.time.DateTime
+import moon.jodaDateReads
 
 
 sealed trait RestModel
 
-case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: String, ordType: OrderType.Value, side: OrderSide.Value, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends RestModel
+case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends RestModel
 object Order { implicit val aReads: Reads[Order] = Json.reads[Order] }
 
 case class Orders(orders: Seq[Order]) extends RestModel

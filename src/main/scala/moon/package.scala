@@ -1,7 +1,9 @@
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import javax.xml.bind.DatatypeConverter
-import play.api.libs.json.Json
+import org.joda.time.{DateTime, DateTimeZone}
+import org.joda.time.format.DateTimeFormat
+import play.api.libs.json.{Json, Reads}
 
 package object moon {
   def getBitmexApiSignature(keyString: String, apiSecret: String): String = {
@@ -41,4 +43,10 @@ package object moon {
     val Bull, Bear, Neutral = Value
     implicit val aFormat = Json.formatEnum(this)
   }
+
+  val dateFormat = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ").withZone(DateTimeZone.UTC)
+
+  def parseDateTime(asStr: String) = DateTime.parse(asStr, dateFormat)
+
+  implicit val jodaDateReads = Reads[DateTime](js => js.validate[String].map[DateTime](parseDateTime))
 }

@@ -59,38 +59,38 @@ class ModelsSpec extends FlatSpec with Matchers with Inside {
   "Models" should "work parse" in {
     val restMessages = Seq(
       // New
-      restOrderNew(orderID="o1", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="t1"),
-      restOrderNew(orderID="o2", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="t2"),
-      restOrderNew(orderID="o3", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Market, timestamp="t3"),
-      restOrderNew(orderID="o4", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Market, timestamp="t4"),
-      restOrderNew(orderID="o5", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Stop,   timestamp="t5"),
-      restOrderNew(orderID="o6", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Stop,   timestamp="t6"),
+      restOrderNew(orderID="o1", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="2010-01-01T00:00:00.000Z"),
+      restOrderNew(orderID="o2", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="2010-01-02T00:00:00.000Z"),
+      restOrderNew(orderID="o3", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Market, timestamp="2010-01-03T00:00:00.000Z"),
+      restOrderNew(orderID="o4", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Market, timestamp="2010-01-04T00:00:00.000Z"),
+      restOrderNew(orderID="o5", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Stop,   timestamp="2010-01-05T00:00:00.000Z"),
+      restOrderNew(orderID="o6", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Stop,   timestamp="2010-01-06T00:00:00.000Z"),
       // post only failure
-      restOrderPostOnlyFailure(orderID="o11", side=OrderSide.Buy, price=22.33, orderQty=22, timestamp="t10"),
+      restOrderPostOnlyFailure(orderID="o11", side=OrderSide.Buy, price=22.33, orderQty=22, timestamp="2010-01-10T00:00:00.000Z"),
       // Cancel
-      restOrderCancelled(orderID="o31", timestamp="t31"),
+      restOrderCancelled(orderID="o31", timestamp="2010-01-31T00:00:00.000Z"),
     )
     val wsMessages = Seq(
       // New
-      wsOrderNew(orderID="o1", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="t1"),
-      wsOrderNew(orderID="o2", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="t2"),
-      wsOrderNew(orderID="o3", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Market, timestamp="t3"),
-      wsOrderNew(orderID="o4", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Market, timestamp="t4"),
-      wsOrderNew(orderID="o5", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Stop,   timestamp="t5"),
-      wsOrderNew(orderID="o6", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Stop,   timestamp="t6"),
+      wsOrderNew(orderID="o1", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="2010-01-01T00:00:00.000Z"),
+      wsOrderNew(orderID="o2", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="2010-01-02T00:00:00.000Z"),
+      wsOrderNew(orderID="o3", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Market, timestamp="2010-01-03T00:00:00.000Z"),
+      wsOrderNew(orderID="o4", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Market, timestamp="2010-01-04T00:00:00.000Z"),
+      wsOrderNew(orderID="o5", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Stop,   timestamp="2010-01-05T00:00:00.000Z"),
+      wsOrderNew(orderID="o6", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Stop,   timestamp="2010-01-06T00:00:00.000Z"),
       // post only failure
-      wsOrderPostOnlyFailure(orderID="o11", side=OrderSide.Buy, price=22.33, orderQty=22, timestamp="t10"),
+      wsOrderPostOnlyFailure(orderID="o11", side=OrderSide.Buy, price=22.33, orderQty=22, timestamp="2010-01-10T00:00:00.000Z"),
       // fill
-      wsOrderFilled(orderID="o21", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Limit,  timestamp="t20"),
-      wsOrderFilled(orderID="o22", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Limit,  timestamp="t20"),
-      wsOrderFilled(orderID="o23", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Market, timestamp="t20"),
-      wsOrderFilled(orderID="o24", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Market, timestamp="t20"),
-      wsOrderFilled(orderID="o25", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Stop,   timestamp="t20"),
-      wsOrderFilled(orderID="o26", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Stop,   timestamp="t20"),
+      wsOrderFilled(orderID="o21", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Limit,  timestamp="2010-01-20T00:00:00.000Z"),
+      wsOrderFilled(orderID="o22", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Limit,  timestamp="2010-01-20T00:00:00.000Z"),
+      wsOrderFilled(orderID="o23", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Market, timestamp="2010-01-20T00:00:00.000Z"),
+      wsOrderFilled(orderID="o24", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Market, timestamp="2010-01-20T00:00:00.000Z"),
+      wsOrderFilled(orderID="o25", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Stop,   timestamp="2010-01-20T00:00:00.000Z"),
+      wsOrderFilled(orderID="o26", price=44.55, avgPx=44.66, cumQty=44, ordType=OrderType.Stop,   timestamp="2010-01-20T00:00:00.000Z"),
       // Cancel
-      wsOrderCancelled(orderID="o31", timestamp="t31"),
+      wsOrderCancelled(orderID="o31", timestamp="2010-01-31T00:00:00.000Z"),
       // Amend
-      wsOrderAmend(orderID="o41", price=55.66, timestamp="t31"),
+      wsOrderAmend(orderID="o41", price=55.66, timestamp="2010-01-31T00:00:00.000Z"),
     )
     val restRes = restMessages.map(RestModel.asModel)
     restRes.filter(j => j.isError) shouldBe empty
