@@ -33,6 +33,8 @@ object BotApp extends App {
   val takeProfitMargin       = conf.getDouble("bot.takeProfitMargin")
   val stoplossMargin         = conf.getDouble("bot.stoplossMargin")
   val postOnlyPriceAdj       = conf.getDouble("bot.postOnlyPriceAdj")
+  val bullScoreThreshold     = conf.getDouble("bot.bullScoreThreshold")
+  val bearScoreThreshold     = conf.getDouble("bot.bearScoreThreshold")
 
   log.info(
     s"""
@@ -77,6 +79,7 @@ object BotApp extends App {
     restGateway=restGateway,
     tradeQty=tradeQty, minTradeVol=minTradeVol,
     openPositionExpiryMs=openPositionExpiryMs, backoffMs=backoffMs,
+    bullScoreThreshold=bullScoreThreshold, bearScoreThreshold=bearScoreThreshold,
     reqRetries=reqRetries, markupRetries=markupRetries,
     takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,
     metrics=Some(metrics))

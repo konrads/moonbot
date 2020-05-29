@@ -21,7 +21,7 @@ object OrderBookData { implicit val aReads: Reads[OrderBookData] = Json.reads[Or
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel
 object OrderBook { implicit val aReads: Reads[OrderBook] = Json.reads[OrderBook] }
 
-case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, avgPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: DateTime, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, text: Option[String]=None) extends WsModel
+case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, avgPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: DateTime, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None) extends WsModel
 object OrderData { implicit val aReads: Reads[OrderData] = Json.reads[OrderData] }
 
 case class Instrument(data: Seq[InstrumentData]) extends WsModel
@@ -33,7 +33,7 @@ object InstrumentData { implicit val aReads: Reads[InstrumentData] = Json.reads[
 case class Funding(data: Seq[FundingData]) extends WsModel
 object Funding { implicit val aReads: Reads[Funding] = Json.reads[Funding] }
 
-case class FundingData(symbol: String, fundingInterval: String, fundingRate: BigDecimal, fundingRateDaily: Option[BigDecimal]) extends WsModel
+case class FundingData(symbol: String, fundingInterval: String, fundingRate: BigDecimal, fundingRateDaily: Option[BigDecimal], timestamp: DateTime) extends WsModel
 object FundingData { implicit val aReads: Reads[FundingData] = Json.reads[FundingData] }
 
 case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel {
@@ -61,7 +61,7 @@ object WsModel {
       case (Some(table), Some("partial")) if Seq("order", "trade", "instrument", "funding").contains(table) => JsSuccess(Ignorable(json))
       case (Some(table), _@Some(_)) if table.startsWith("orderBook") => json.validate[OrderBook]
       case (Some(table), _@Some(_)) if table == "instrument" => json.validate[Instrument]
-      case (Some(table), _@Some(_)) if table == "funding" => json.validate[List[FundingData]].map(x => Funding(x))
+      case (Some(table), _@Some(_)) if table == "funding" => json.validate[Funding]
       case (Some("order"), _) => json.validate[UpsertOrder]
         .map(o => o.copy(data = o.data.map(od => od.copy(ordStatus =
           if (od.ordStatus.contains(OrderStatus.Canceled) && od.text.exists(_.contains("had execInst of ParticipateDoNotInitiate")))

@@ -13,8 +13,7 @@ import org.joda.time.DateTimeZone
 class LedgerSpec extends FlatSpec with Matchers with Inside {
   "Ledger" should "work with WS and REST orders" in {
     val ws1 = UpsertOrder(Some("insert"), data=Seq(
-      OrderData(orderID="o1", price=Some(1), orderQty=Some(1), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-01T00:00:00.000Z")
-        , ordStatus=Some(OrderStatus.New)),
+      OrderData(orderID="o1", price=Some(1), orderQty=Some(1), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-01T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
       OrderData(orderID="o2", price=Some(2), orderQty=Some(2), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-02T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
       OrderData(orderID="o3", price=Some(3), orderQty=Some(3), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-03T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
     ))
@@ -123,7 +122,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
 
     val l5 = l4.withMetrics()
     val metrics5 = l5.ledgerMetrics
-    metrics5 shouldBe Some(LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl" -> BigDecimal(-30.0425), "data.pandlDelta" -> BigDecimal(-30.0425), "data.sentimentScore" -> BigDecimal(0), "data.myTradesCnt" -> 3), parseDateTime("2010-01-05T00:00:00.000Z"), BigDecimal(-30.0425)))  // no buy/sell as yet
+    metrics5 shouldBe Some(LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl" -> BigDecimal("-0.2313269230769230769230769230769231"), "data.pandlDelta" -> BigDecimal("-0.2313269230769230769230769230769231"), "data.sentimentScore" -> BigDecimal(0), "data.myTradesCnt" -> 3), parseDateTime("2010-01-05T00:00:00.000Z"), BigDecimal("-0.2313269230769230769230769230769231")))  // no buy/sell as yet
 
     // add sell, recalculate metrics
     val l6 = buildLedger(l5,
@@ -134,15 +133,15 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     )
     val l7 = l6.withMetrics()
     val metrics7 = l7.ledgerMetrics
-    metrics7 shouldBe Some(LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl" -> BigDecimal(-.15), "data.pandlDelta" -> BigDecimal(29.89250), "data.sentimentScore" -> BigDecimal(0), "data.myTradesCnt" -> 4), parseDateTime("2010-01-07T00:00:00.000Z"), BigDecimal(-.15)))  // no buy/sell as yet
+    metrics7 shouldBe Some(LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl" -> BigDecimal(-.0015), "data.pandlDelta" -> BigDecimal("0.2298269230769230769230769230769231"), "data.sentimentScore" -> BigDecimal(0), "data.myTradesCnt" -> 4), parseDateTime("2010-01-07T00:00:00.000Z"), BigDecimal(-.0015)))  // no buy/sell as yet
   }
 
   it should "order LedgerOrders desc" in {
     val set = SortedSet(
-      LedgerOrder("o1",   12, 23, null, null, null, parseDateTime("2010-01-01T00:00:00.000Z"), true),
-      LedgerOrder("o3",   12, 23, null, null, null, parseDateTime("2010-01-03T00:00:00.000Z"), true),
-      LedgerOrder("o3.5", 12, 23, null, null, null, parseDateTime("2010-01-03T12:00:00.000Z"), true),
-      LedgerOrder("o2",   12, 23, null, null, null, parseDateTime("2010-01-02T00:00:00.000Z"), true),
+      LedgerOrder("o1",   12, 23, null, null, null, None, parseDateTime("2010-01-01T00:00:00.000Z"), true),
+      LedgerOrder("o3",   12, 23, null, null, null, None, parseDateTime("2010-01-03T00:00:00.000Z"), true),
+      LedgerOrder("o3.5", 12, 23, null, null, null, None, parseDateTime("2010-01-03T12:00:00.000Z"), true),
+      LedgerOrder("o2",   12, 23, null, null, null, None, parseDateTime("2010-01-02T00:00:00.000Z"), true),
     )
     set.toSeq.map(_.orderID) shouldBe Seq("o3.5", "o3", "o2", "o1")
   }
