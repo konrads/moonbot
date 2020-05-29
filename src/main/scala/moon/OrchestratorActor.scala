@@ -341,7 +341,7 @@ object OrchestratorActor {
         else if (ledger2.orderBookHeadVolume > minTradeVol && ledger2.sentimentScore <= bearScoreThreshold)
           openShort(ledger2)
         else {
-          actorCtx.log.info(s"Ledger suggests to hold back, orderBookHeadVolume: ${ledger2.orderBookHeadVolume}, sentimentScore: ${ledger2.sentimentScore}...")
+          actorCtx.log.debug(s"Ledger suggests to hold back, orderBookHeadVolume: ${ledger2.orderBookHeadVolume}, sentimentScore: ${ledger2.sentimentScore}...")
           idle(ctx.copy(ledger = ledger2))
         }
     }
