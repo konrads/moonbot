@@ -32,7 +32,10 @@ object Cli extends App {
     val price           = opt[BigDecimal]()
     val takeprofitprice = opt[BigDecimal]()
     val stoplossprice   = opt[BigDecimal]()
+    val pegoffsetvalue  = opt[BigDecimal](default = Some(BigDecimal(10)))
+    val reduceOnly      = opt[Boolean](default = Some(true))
     val qty             = opt[BigDecimal]()
+    val side            = opt[String](default = Some("buy"))
     val orderid         = opt[String]()
     val clordrid        = opt[String]()
     val minwssleep      = opt[Long](default = Some(10))
@@ -43,6 +46,10 @@ object Cli extends App {
 
   implicit val serviceSystem = akka.actor.ActorSystem()
   implicit val executionContext = serviceSystem.dispatcher
+  val oSide = cliConf.side.toOption.map(_.toLowerCase) match {
+    case Some("buy") => OrderSide.Buy
+    case _           => OrderSide.Sell
+  }
 
   val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
   val wsGateway = new WsGateWay(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, minSleepInMs = cliConf.minwssleep.toOption)
@@ -76,73 +83,66 @@ object Cli extends App {
   }
 
   // validate sets of options
-  (cliConf.action(), cliConf.ordertype.toOption, cliConf.price.toOption, cliConf.takeprofitprice.toOption, cliConf.stoplossprice.toOption, cliConf.qty.toOption, cliConf.orderid.toOption, cliConf.clordrid.toOption) match {
-    case ("takeProfitAndStoploss", _, _, Some(takeProfitPrice), Some(stoplossPrice), Some(qty), _, _) =>
-      log.info(s"issuing takeProfitAndStoploss'es: takeProfitPrice: $takeProfitPrice, stoplossPrice: $stoplossPrice, qty: $qty")
+  (cliConf.action(), cliConf.ordertype.toOption, cliConf.price.toOption, cliConf.takeprofitprice.toOption, cliConf.stoplossprice.toOption, cliConf.pegoffsetvalue.toOption, cliConf.qty.toOption, cliConf.orderid.toOption, cliConf.clordrid.toOption, cliConf.reduceOnly.toOption) match {
+    case ("order", Some("takeProfitAndStoploss"), _, Some(takeProfitPrice), Some(stoplossPrice), _, Some(qty), _, _, _) =>
+      log.info(s"issuing $oSide takeProfitAndStoploss'es: takeProfitPrice: $takeProfitPrice, stoplossPrice: $stoplossPrice, qty: $qty")
       wsGateway.run(consumeOrder)
       val (clOrdID, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
-        OrderReq.asLimitOrder(OrderSide.Sell, qty, takeProfitPrice),
-        OrderReq.asStopMarketOrder(OrderSide.Sell, qty, stoplossPrice))))
+        OrderReq.asLimitOrder(oSide, qty, takeProfitPrice, true),
+        OrderReq.asStopOrder(oSide, qty, stoplossPrice, true))))
       log.info(s"REST takeProfitAndStoploss request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST takeProfitAndStoploss response: $clOrdID, $res")
         case Failure(exc) => log.error(s"REST takeProfitAndStoploss exception: $clOrdID", exc)
       }
-    case ("bid", Some("limit"), Some(price), _, _, Some(qty), _, _) =>
-      log.info(s"issuing limit bid: price: $price, qty: $qty")
+    case ("order", Some("takeProfitAndTrailingStoploss"), _, Some(takeProfitPrice), _, Some(pegOffsetValue), Some(qty), _, _, _) =>
+      log.info(s"issuing $oSide takeProfitAndTrailingStoploss'es: takeProfitPrice: $takeProfitPrice, pegOffsetValue: $pegOffsetValue, qty: $qty")
       wsGateway.run(consumeOrder)
-      val (clOrdID, resF) = restGateway.placeLimitOrderAsync(qty, price, OrderSide.Buy)
-      log.info(s"REST bid limit request: $clOrdID")
+      val (clOrdID, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
+        OrderReq.asLimitOrder(oSide, qty, takeProfitPrice, true),
+        OrderReq.asTrailingStopOrder(oSide, qty, pegOffsetValue, true))))
+      log.info(s"REST $oSide takeProfitAndStoploss request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST limit bid response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST limit bid exception: $clOrdID", exc)
+        case Success(res) => log.info(s"REST $oSide takeProfitAndStoploss response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST $oSide takeProfitAndStoploss exception: $clOrdID", exc)
       }
-    case ("ask", Some("limit"), Some(price), _, _, Some(qty), _, _) =>
-      log.info(s"issuing limit ask: price: $price, qty: $qty")
+    case ("order", Some("limit"), Some(price), _, _, _, Some(qty), _, _, Some(reduceOnly)) =>
+      log.info(s"issuing $oSide limit: price: $price, qty: $qty")
       wsGateway.run(consumeOrder)
-      val (clOrdID, resF) = restGateway.placeLimitOrderAsync(qty, price, OrderSide.Sell)
-      log.info(s"REST limit ask request: $clOrdID")
+      val (clOrdID, resF) = restGateway.placeLimitOrderAsync(qty, price, reduceOnly, oSide)
+      log.info(s"REST $oSide limit request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST limit ask response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST limit ask exception: $clOrdID", exc)
+        case Success(res) => log.info(s"REST $oSide limit response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST $oSide limit exception: $clOrdID", exc)
       }
-    case ("bid", Some("market"), _, _, _, Some(qty), _, _) =>
-      log.info(s"issuing market bid: qty: $qty")
+    case ("order", Some("market"), _, _, _, _, Some(qty), _, _, _) =>
+      log.info(s"issuing $oSide market: qty: $qty")
       wsGateway.run(consumeOrder)
-      val (clOrdID, resF) = restGateway.placeMarketOrderAsync(qty, OrderSide.Buy)
-      log.info(s"REST market bid request: $clOrdID")
+      val (clOrdID, resF) = restGateway.placeMarketOrderAsync(qty, oSide)
+      log.info(s"REST $oSide market request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST market bid response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST market bid exception: $clOrdID", exc)
+        case Success(res) => log.info(s"REST $oSide market response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST $oSide market exception: $clOrdID", exc)
       }
-    case ("ask", Some("market"), _, _, _, Some(qty), _, _) =>
-      log.info(s"issuing market ask: qty: $qty")
+    case ("order", Some("stop"), Some(price), _, _, _, Some(qty), _, _, Some(close)) =>
+      log.info(s"issuing $oSide stop: price: $price, qty: $qty, close: $close")
       wsGateway.run(consumeOrder)
-      val (clOrdID, resF) = restGateway.placeMarketOrderAsync(qty, OrderSide.Sell)
-      log.info(s"REST market ask request: $clOrdID")
-      resF.onComplete {
-        case Success(res) => log.info(s"REST market ask response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST market ask exception: $clOrdID", exc)
-      }
-    case ("bid", Some("stop"), Some(price), _, _, Some(qty), _, _) =>
-      log.info(s"issuing stop bid: price: $price, qty: $qty")
-      wsGateway.run(consumeOrder)
-      val (clOrdID, resF) = restGateway.placeStopMarketOrderAsync(qty, price, OrderSide.Buy)
+      val (clOrdID, resF) = restGateway.placeStopOrderAsync(qty, price, close, OrderSide.Buy)
       log.info(s"REST bid request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST stop bid response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST stop bid exception: $clOrdID", exc)
+        case Success(res) => log.info(s"REST $oSide stop response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST $oSide stop exception: $clOrdID", exc)
       }
-    case ("ask", Some("stop"), Some(price), _, _, Some(qty), _, _) =>
-      log.info(s"issuing stop ask: price: $price, qty: $qty")
+    case ("order", Some("trailingStop"), _, _, _, Some(pegOffsetValue), Some(qty), _, _, Some(close)) =>
+      log.info(s"issuing $oSide trailingStop: pegOffsetValue: $pegOffsetValue, qty: $qty, close: $close")
       wsGateway.run(consumeOrder)
-      val (clOrdID, resF) = restGateway.placeStopMarketOrderAsync(qty, price, OrderSide.Sell)
-      log.info(s"REST stop ask request: $clOrdID")
+      val (clOrdID, resF) = restGateway.placeTrailingStopOrderAsync(qty, pegOffsetValue, close, OrderSide.Buy)
+      log.info(s"REST $oSide trailingStop request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST stop ask response: $clOrdID, $res")
-        case Failure(exc) => log.error(s"REST stop ask exception: $clOrdID", exc)
+        case Success(res) => log.info(s"REST $oSide trailingStop response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST $oSide trailingStop exception: $clOrdID", exc)
       }
-    case ("amend", _, Some(price), _, _, _, orderIDOpt, cliOrdOpt) =>
+    case ("amend", _, Some(price), _, _, _, _, orderIDOpt, cliOrdOpt, _) =>
       log.info(s"amending: price: $price, orderid: $orderIDOpt")
       wsGateway.run(consumeOrder)
       val resF = restGateway.amendOrderAsync(orderIDOpt, cliOrdOpt, price)
@@ -151,7 +151,7 @@ object Cli extends App {
         case Success(res) => log.info(s"REST amend response: $orderIDOpt, $cliOrdOpt, $res")
         case Failure(exc) => log.error(s"REST amend exception: $orderIDOpt, $cliOrdOpt", exc)
       }
-    case ("cancel", _, _, _, _, _, orderIDOpt, cliOrdOpt) =>
+    case ("cancel", _, _, _, _, _, _, orderIDOpt, cliOrdOpt, _) =>
       log.info(s"canceling: orderid: $orderIDOpt")
       wsGateway.run(consumeOrder)
       val resF = restGateway.cancelOrderAsync(orderIDOpt.map(_.split(",")), cliOrdOpt.map(_.split(",")))
@@ -160,7 +160,7 @@ object Cli extends App {
         case Success(res) => log.info(s"REST cancel response: $orderIDOpt, $cliOrdOpt, $res")
         case Failure(exc) => log.error(s"REST cancel exception: $orderIDOpt, $cliOrdOpt", exc)
       }
-    case ("monitorLedger", _, _, _, _, _, _, _) =>
+    case ("monitorLedger", _, _, _, _, _, _, _, _, _) =>
       log.info(s"monitoring ledger")
       def consumeWs(ledger: Ledger=Ledger()): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
         case WsEvent(wsData) =>
@@ -184,32 +184,32 @@ object Cli extends App {
         case s:JsError           => log.error(s"WS error!: $s")
       }
       wsGateway.run(consumeAll)
-    case ("monitorAll", _, _, _, _, _, _, _) =>
+    case ("monitorAll", _, _, _, _, _, _, _, _, _) =>
       log.info(s"monitoring all ws")
       wsGateway.run(consumeAll)
-    case ("monitorOrder", _, _, _, _, _, _, _) =>
+    case ("monitorOrder", _, _, _, _, _, _, _, _, _) =>
       log.info(s"monitoring orders")
       wsGateway.run(consumeOrder)
-    case ("monitorTrade", _, _, _, _, _, _, _) =>
+    case ("monitorTrade", _, _, _, _, _, _, _, _, _) =>
       log.info(s"monitoring trades")
       wsGateway.run(consumeTrade)
-    case ("monitorOrderTrade", _, _, _, _, _, _, _) =>
+    case ("monitorOrderTrade", _, _, _, _, _, _, _, _, _) =>
       log.info(s"monitoring orders & trades")
       wsGateway.run(consumeOrderTrade)
-    case ("monitorOrderBook", _, _, _, _, _, _, _) =>
+    case ("monitorOrderBook", _, _, _, _, _, _, _, _, _) =>
       log.info(s"monitoring order book")
       wsGateway.run(consumeOrderBook)
-    case ("monitorInstrument", _, _, _, _, _, _, _) =>
+    case ("monitorInstrument", _, _, _, _, _, _, _, _, _) =>
       log.info(s"monitoring instrument")
       wsGateway.run(consumeInstrument)
-    case ("monitorDebug", _, _, _, _, _, _, _) =>
+    case ("monitorDebug", _, _, _, _, _, _, _, _, _) =>
       // overwrite debug level
       val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME).asInstanceOf[ch.qos.logback.classic.Logger]
       rootLogger.setLevel(ch.qos.logback.classic.Level.DEBUG)
       log.info(s"monitoring instrument")
       wsGateway.run(consumeNone)
-    case (action, orderTypeOpt, priceOpt, takeProfitPriceOpt, stoplossPriceOpt, qtyOpt, orderidOpt, cliOrdOpt) =>
-      log.error(s"Unknown params: action: $action, orderType: $orderTypeOpt, price: $priceOpt, takeProfitPriceOpt: $takeProfitPriceOpt, stoplossPriceOpt: $stoplossPriceOpt, amount: $qtyOpt, orderid: $orderidOpt, cliOrdOpt: $cliOrdOpt")
+    case (action, orderTypeOpt, priceOpt, takeProfitPriceOpt, stoplossPriceOpt, pegOffsetValueOpt, qtyOpt, orderidOpt, cliOrdOpt, reduceOnlyOpt) =>
+      log.error(s"Unknown params: action: $action, orderType: $orderTypeOpt, price: $priceOpt, takeProfitPriceOpt: $takeProfitPriceOpt, stoplossPriceOpt: $stoplossPriceOpt, pegOffsetValueOpt: $pegOffsetValueOpt, amount: $qtyOpt, orderid: $orderidOpt, cliOrdOpt: $cliOrdOpt, reduceOnlyOpt: $reduceOnlyOpt")
       sys.exit(-1)
   }
 }
