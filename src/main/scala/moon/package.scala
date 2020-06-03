@@ -14,6 +14,19 @@ package object moon {
     hash
   }
 
+  // http://stackoverflow.com/questions/24705011/how-to-optimise-a-exponential-moving-average-algorithm-in-php
+  def ema(emaSmoothing: BigDecimal=2)(vals: Seq[BigDecimal]): BigDecimal = {
+    if (vals.isEmpty)
+      0
+    else {
+      val k = emaSmoothing / (vals.length + 1)
+      val mean = vals.sum / vals.length
+      vals.foldLeft(mean)(
+        (last, s) => (1 - k) * last + k * s
+      )
+    }
+  }
+
   object OrderSide extends Enumeration {
     type OrderSide = Value
     val Buy, Sell = Value

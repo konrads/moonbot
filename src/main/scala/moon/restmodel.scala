@@ -10,7 +10,7 @@ import moon.jodaDateReads
 
 sealed trait RestModel
 
-case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None) extends RestModel
+case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends RestModel
 object Order { implicit val aReads: Reads[Order] = Json.reads[Order] }
 
 case class Orders(orders: Seq[Order]) extends RestModel
@@ -66,11 +66,14 @@ object RestModel {
       }
       case _ => (json \ "orderID").asOpt[String] match {
         case Some(_) => json.validate[Order]
-          .map(o => o.copy(ordStatus =
-            if (o.ordStatus.contains(OrderStatus.Canceled) && o.text.exists(_.contains("had execInst of ParticipateDoNotInitiate")))
-              Some(OrderStatus.PostOnlyFailure)
-            else
-              o.ordStatus))
+          .map(o => o.copy(
+            ordStatus =
+              if (o.ordStatus.contains(OrderStatus.Canceled) && o.text.exists(_.contains("had execInst of ParticipateDoNotInitiate")))
+                Some(OrderStatus.PostOnlyFailure)
+              else
+                o.ordStatus,
+            amended = o.text.map(_.startsWith("Amended"))
+          ))
         case None    => (json \ "error").asOpt[JsValue] match {
           case Some(_) => json.validate[Error]
           case None    => JsError(s"Unknown json '$json'")

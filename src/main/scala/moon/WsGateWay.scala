@@ -29,7 +29,7 @@ class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
           if (wsConsume.isDefinedAt(asModel))
             wsConsume(asModel)
           else
-            log.trace(s"Ignored ws message: $asModel")
+            log.debug(s"Ignored ws message: $asModel")
         case message: TextMessage =>
           message.toStrict(30.seconds).onComplete {
             case Success(message) =>
@@ -37,7 +37,7 @@ class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
               if (wsConsume.isDefinedAt(asModel))
                 wsConsume(asModel)
               else
-                log.trace(s"Ignored ws message: $asModel")
+                log.debug(s"Ignored ws message: $asModel")
             case Failure(exc) =>
               log.error(s"Unexpected error on ws message fetch", exc)
           }

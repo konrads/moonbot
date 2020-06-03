@@ -24,7 +24,7 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
   def record(o: Order): Ledger =
     ledgerOrdersById.get(o.orderID) match {
       case Some(existing) =>
-        val existing2 = existing.copy(myOrder=true, ordStatus=o.ordStatus.get, timestamp=o.timestamp)
+        val existing2 = existing.copy(myOrder=true, ordStatus=o.ordStatus.get, price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), timestamp=o.timestamp)
         copy(ledgerOrders=ledgerOrders-existing+existing2, ledgerOrdersById=ledgerOrdersById + (existing2.orderID -> existing2))
       case None =>
         val lo = LedgerOrder(orderID=o.orderID, qty=o.orderQty, price=o.stopPx.getOrElse(o.price.orNull), side=o.side, ordType=o.ordType, timestamp=o.timestamp, ordStatus=o.ordStatus.getOrElse(OrderStatus.New), ordRejReason=o.ordRejReason, myOrder=true)
@@ -108,8 +108,8 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       BigDecimal(0)
     else {
       val (bullTrades, bearTrades) = trades.flatMap(_.data).partition(_.side == OrderSide.Buy)
-      val bullVolume = ema(bullTrades.map(_.size))
-      val bearVolume = ema(bearTrades.map(_.size))
+      val bullVolume = ema(emaSmoothing)(bullTrades.map(_.size))
+      val bearVolume = ema(emaSmoothing)(bearTrades.map(_.size))
       val volumeScore = (bullVolume - bearVolume) / (bullVolume + bearVolume)
       volumeScore
     }
@@ -151,19 +151,6 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
         )
         copy(ledgerMetrics=Some(metrics))
       }
-    }
-  }
-
-  // http://stackoverflow.com/questions/24705011/how-to-optimise-a-exponential-moving-average-algorithm-in-php
-  private def ema(vals: Seq[BigDecimal]): BigDecimal = {
-    if (vals.isEmpty)
-      0
-    else {
-      val k = emaSmoothing / (vals.length + 1)
-      val mean = vals.sum / vals.length
-      vals.foldLeft(mean)(
-        (last, s) => (1 - k) * last + k * s
-      )
     }
   }
 }
