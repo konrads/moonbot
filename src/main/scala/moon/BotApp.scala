@@ -4,6 +4,7 @@ import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
 import play.api.libs.json._
 import akka.actor.typed.{ActorRef, ActorSystem}
+import scala.concurrent.ExecutionContext.Implicits.global
 
 
 object BotApp extends App {
@@ -27,7 +28,6 @@ object BotApp extends App {
   val minTradeVol            = conf.getInt("bot.minTradeVol")
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
   val openPositionExpiryMs   = conf.getLong("bot.openPositionExpiryMs")
-  val backoffMs              = conf.getLong("bot.backoffMs")
   val reqRetries             = conf.getInt("bot.reqRetries")
   val markupRetries          = conf.getInt("bot.markupRetries")
   val takeProfitMargin       = conf.getDouble("bot.takeProfitMargin")
@@ -60,7 +60,6 @@ object BotApp extends App {
       |• minTradeVol:          $minTradeVol
       |• restSyncTimeoutMs:    $restSyncTimeoutMs
       |• openPositionExpiryMs: $openPositionExpiryMs
-      |• backoffMs:            $backoffMs
       |• reqRetries:           $reqRetries
       |• markupRetries:        $markupRetries
       |• takeProfitMargin:     $takeProfitMargin
@@ -78,7 +77,7 @@ object BotApp extends App {
   val orchestrator = OrchestratorActor(
     restGateway=restGateway,
     tradeQty=tradeQty, minTradeVol=minTradeVol,
-    openPositionExpiryMs=openPositionExpiryMs, backoffMs=backoffMs,
+    openPositionExpiryMs=openPositionExpiryMs,
     bullScoreThreshold=bullScoreThreshold, bearScoreThreshold=bearScoreThreshold,
     reqRetries=reqRetries, markupRetries=markupRetries,
     takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,

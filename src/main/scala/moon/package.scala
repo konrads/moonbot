@@ -3,7 +3,9 @@ import javax.crypto.spec.SecretKeySpec
 import javax.xml.bind.DatatypeConverter
 import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.DateTimeFormat
-import play.api.libs.json.{Json, Reads}
+import play.api.libs.json.{JsError, JsPath, JsString, JsSuccess, JsValue, Json, JsonValidationError, Reads}
+
+import scala.collection.Seq
 
 package object moon {
   def getBitmexApiSignature(keyString: String, apiSecret: String): String = {

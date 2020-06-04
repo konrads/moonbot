@@ -30,11 +30,11 @@ case class CancelOrderIssued(orderID: String) extends HttpReply
 /** Trait, for testing purposes */
 trait IRestGateway {
   // async
-  def placeBulkOrdersAsync(orderReqs: OrderReqs): (String, Future[Orders])
-  def placeStopOrderAsync(qty: BigDecimal, price: BigDecimal, isClose: Boolean, side: OrderSide): (String, Future[Order])
-  def placeTrailingStopOrderAsync(qty: BigDecimal, pegOffsetValue: BigDecimal, isClose: Boolean, side: OrderSide): (String, Future[Order])
-  def placeMarketOrderAsync(qty: BigDecimal, side: OrderSide): (String, Future[Order])
-  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order])
+  def placeBulkOrdersAsync(orderReqs: OrderReqs): Future[Orders]
+  def placeStopOrderAsync(qty: BigDecimal, side: OrderSide, price: BigDecimal, isClose: Boolean, execInst: String="LastPrice", clOrdID: Option[String]=None): Future[Order]
+  def placeTrailingStopOrderAsync(qty: BigDecimal, side: OrderSide, pegOffsetValue: BigDecimal, isClose: Boolean, execInst: String="LastPrice", clOrdID: Option[String]=None): Future[Order]
+  def placeMarketOrderAsync(qty: BigDecimal, side: OrderSide, clOrdID: Option[String]=None): Future[Order]
+  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, reduceOnly: Boolean, side: OrderSide, clOrdID: Option[String]=None): Future[Order]
   def amendOrderAsync(orderID: Option[String], clOrdID: Option[String], price: BigDecimal): Future[Order]
   def cancelOrderAsync(orderID: Option[Seq[String]], clOrdID: Option[Seq[String]]): Future[Orders]
 
@@ -60,87 +60,51 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   private val log = Logger[RestGateway]
   implicit val executionContext = system.dispatcher
 
-  def placeBulkOrdersAsync(orderReqs: OrderReqs): (String, Future[Orders]) = {
-    val clOrdID = java.util.UUID.randomUUID().toString
-    val resF = placeBulkOrders(orderReqs)
-    (clOrdID, resF)
-  }
-
-  def placeStopOrderAsync(qty: BigDecimal, price: BigDecimal, isClose: Boolean, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = java.util.UUID.randomUUID().toString
-    val resF = placeStopOrder(qty, side, price, isClose, clOrdID=Some(clOrdID))
-    (clOrdID, resF)
-  }
-
-  def placeTrailingStopOrderAsync(qty: BigDecimal, pegOffsetValue: BigDecimal, isClose: Boolean, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = java.util.UUID.randomUUID().toString
-    val resF = placeTrailingStopOrder(qty, side, pegOffsetValue, isClose, clOrdID=Some(clOrdID))
-    (clOrdID, resF)
-  }
-
-  def placeMarketOrderAsync(qty: BigDecimal, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = java.util.UUID.randomUUID().toString
-    val resF = placeMarketOrder(qty, side, Some(clOrdID))
-    (clOrdID, resF)
-  }
-
-  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = java.util.UUID.randomUUID().toString
-    val resF = placeLimitOrder(qty, price, isReduceOnly, side, Some(clOrdID))
-    (clOrdID, resF)
-  }
-
-  def amendOrderAsync(orderID: Option[String], clOrdID: Option[String], price: BigDecimal): Future[Order] =
-    amendOrder(orderID, clOrdID, price)
-
-  def cancelOrderAsync(orderID: Option[Seq[String]], clOrdID: Option[Seq[String]]): Future[Orders] =
-    cancelOrder(orderID, clOrdID)
-
   // sync
   def placeBulkOrdersSync(orderReqs: OrderReqs): Try[Orders] =
     Await.ready(
-      placeBulkOrders(orderReqs),
+      placeBulkOrdersAsync(orderReqs),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get  // FIXME: not wrapping in recoverable error...
 
   def placeStopOrderSync(qty: BigDecimal, price: BigDecimal, isClose: Boolean, side: OrderSide): Try[Order] =
     Await.ready(
-      placeStopOrder(qty, side, price, isClose),
+      placeStopOrderAsync(qty, side, price, isClose),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get  // FIXME: not wrapping in recoverable error...
 
   def placeTrailingStopOrderSync(qty: BigDecimal, pegOffsetValue: BigDecimal, isClose: Boolean, side: OrderSide): Try[Order] =
     Await.ready(
-      placeTrailingStopOrder(qty, side, pegOffsetValue, isClose),
+      placeTrailingStopOrderAsync(qty, side, pegOffsetValue, isClose),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get  // FIXME: not wrapping in recoverable error...
 
   def placeMarketOrderSync(qty: BigDecimal, side: OrderSide): Try[Order] =
     Await.ready(
-      placeMarketOrder(qty, side),
+      placeMarketOrderAsync(qty, side),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get  // FIXME: not wrapping in recoverable error...
 
   def placeLimitOrderSync(qty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, side: OrderSide): Try[Order] =
     Await.ready(
-      placeLimitOrder(qty, price, isReduceOnly, side),
+      placeLimitOrderAsync(qty, price, isReduceOnly, side),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get  // FIXME: not wrapping in recoverable error...
 
   def amendOrderSync(orderID: Option[String], clOrdID: Option[String], price: BigDecimal): Try[Order] =
     Await.ready(
-      amendOrder(orderID, clOrdID, price),
+      amendOrderAsync(orderID, clOrdID, price),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on amendOrderSync orderID: $orderID, clOrdID: $clOrdID") }.value.get
 
   def cancelOrderSync(orderID: Option[Seq[String]], clOrdID: Option[Seq[String]]): Try[Orders] =
     Await.ready(
-      cancelOrder(orderID, clOrdID),
+      cancelOrderAsync(orderID, clOrdID),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on cancelOrderSync orderID: ${orderID.getOrElse(Nil).mkString(", ")}, clOrdID: ${clOrdID.getOrElse(Nil).mkString(", ")}") }.value.get
 
   // LastPrice trigger as described in: https://www.reddit.com/r/BitMEX/comments/8pi7j7/bitmex_api_how_to_switch_sl_trigger_to_last_price/
-  private def placeStopOrder(qty: BigDecimal, side: OrderSide, price: BigDecimal, isClose: Boolean, execInst: String="LastPrice", clOrdID: Option[String]=None): Future[Order] = {
+  def placeStopOrderAsync(qty: BigDecimal, side: OrderSide, price: BigDecimal, isClose: Boolean, execInst: String="LastPrice", clOrdID: Option[String]=None): Future[Order] = {
     val closeStr = if (isClose) ",Close" else ""
     sendReq(
       POST,
@@ -149,7 +113,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
     ).map(_.asInstanceOf[Order])
   }
 
-  private def placeTrailingStopOrder(qty: BigDecimal, side: OrderSide, pegOffsetValue: BigDecimal, isClose: Boolean, execInst: String="LastPrice", clOrdID: Option[String]=None): Future[Order] = {
+  def placeTrailingStopOrderAsync(qty: BigDecimal, side: OrderSide, pegOffsetValue: BigDecimal, isClose: Boolean, execInst: String="LastPrice", clOrdID: Option[String]=None): Future[Order] = {
     val pegOffsetValue2 = if (side == OrderSide.Buy) pegOffsetValue.abs else -pegOffsetValue.abs
     val closeStr = if (isClose) ",Close" else ""
     sendReq(
@@ -159,14 +123,14 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
     ).map(_.asInstanceOf[Order])
   }
 
-  private def placeMarketOrder(qty: BigDecimal, side: OrderSide, clOrdID: Option[String]=None): Future[Order] =
+  def placeMarketOrderAsync(qty: BigDecimal, side: OrderSide, clOrdID: Option[String]=None): Future[Order] =
     sendReq(
       POST,
       "/api/v1/order",
       s"symbol=$symbol&ordType=Market&timeInForce=GoodTillCancel&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
 
-  private def placeLimitOrder(qty: BigDecimal, price: BigDecimal, reduceOnly: Boolean, side: OrderSide, clOrdID: Option[String]=None): Future[Order] = {
+  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, reduceOnly: Boolean, side: OrderSide, clOrdID: Option[String]=None): Future[Order] = {
     val reduceOnlyStr = if (reduceOnly) ",ReduceOnly" else ""
     sendReq(
       POST,
@@ -175,7 +139,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
     ).map(_.asInstanceOf[Order])
   }
 
-  private def placeBulkOrders(orderReqs: OrderReqs): Future[Orders] =
+  def placeBulkOrdersAsync(orderReqs: OrderReqs): Future[Orders] =
     // https://www.reddit.com/r/BitMEX/comments/gmultr/webserver_disconnects_after_placing_order/
     sendReq(
       POST,
@@ -184,14 +148,14 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       contentType=ContentTypes.`application/json`,
     ).map(_.asInstanceOf[Orders])
 
-  private def amendOrder(orderID: Option[String], cliOrdID: Option[String], price: BigDecimal): Future[Order] =
+  def amendOrderAsync(orderID: Option[String], cliOrdID: Option[String], price: BigDecimal): Future[Order] =
     sendReq(
       PUT,
       "/api/v1/order",
       s"price=$price" + orderID.map("&orderID=" + _).getOrElse("") + cliOrdID.map("&origClOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
 
-  private def cancelOrder(orderID: Option[Seq[String]], cliOrdID: Option[Seq[String]]): Future[Orders] =
+  def cancelOrderAsync(orderID: Option[Seq[String]], cliOrdID: Option[Seq[String]]): Future[Orders] =
     sendReq(
       DELETE,
       "/api/v1/order",
@@ -230,6 +194,8 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
               val bStr = b.utf8String
               if (bStr.contains("Account has insufficient Available Balance"))
                 Future.failed(AccountHasInsufficientBalanceError(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: $bStr"))
+              else if (bStr.contains("Invalid ordStatus"))
+                Future.failed(InvalidOrdStatusError(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: $bStr"))
               else
                 Future.failed(new Exception(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
@@ -251,3 +217,6 @@ case class TimeoutError(msg: String) extends Exception(msg) with RecoverableErro
 case class BackoffRequiredError(msg: String) extends Exception(msg)
 
 case class AccountHasInsufficientBalanceError(msg: String) extends Exception(msg)
+
+sealed trait IgnorableError
+case class InvalidOrdStatusError(msg: String) extends Exception(msg) with IgnorableError
