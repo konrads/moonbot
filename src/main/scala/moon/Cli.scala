@@ -6,7 +6,6 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.rogach.scallop._
 import play.api.libs.json.{JsError, JsResult, JsSuccess}
-import moon.BotApp.orchestrator
 import org.slf4j.LoggerFactory
 
 import scala.util.{Failure, Success}
@@ -37,7 +36,7 @@ object Cli extends App {
     val qty             = opt[BigDecimal]()
     val side            = opt[String](default = Some("buy"))
     val orderid         = opt[String]()
-    val clordrid        = opt[String]()
+    val clordid         = opt[String]()
     val minwssleep      = opt[Long](default = Some(100))
     val action          = trailArg[String]()
     verify()
@@ -83,76 +82,89 @@ object Cli extends App {
   }
 
   // validate sets of options
-  (cliConf.action(), cliConf.ordertype.toOption, cliConf.price.toOption, cliConf.takeprofitprice.toOption, cliConf.stoplossprice.toOption, cliConf.pegoffsetvalue.toOption, cliConf.qty.toOption, cliConf.orderid.toOption, cliConf.clordrid.toOption, cliConf.reduceOnly.toOption) match {
+  (cliConf.action(), cliConf.ordertype.toOption, cliConf.price.toOption, cliConf.takeprofitprice.toOption, cliConf.stoplossprice.toOption, cliConf.pegoffsetvalue.toOption, cliConf.qty.toOption, cliConf.orderid.toOption, cliConf.clordid.toOption, cliConf.reduceOnly.toOption) match {
     case ("order", Some("takeProfitAndStoploss"), _, Some(takeProfitPrice), Some(stoplossPrice), _, Some(qty), _, _, _) =>
       log.info(s"issuing $oSide takeProfitAndStoploss'es: takeProfitPrice: $takeProfitPrice, stoplossPrice: $stoplossPrice, qty: $qty")
       wsGateway.run(consumeOrder)
-      val resF = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
+      val (clOrdIDs, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
         OrderReq.asLimitOrder(oSide, qty, takeProfitPrice, true),
         OrderReq.asStopOrder(oSide, qty, stoplossPrice, true))))
+      log.info(s"REST takeProfitAndStoploss request: ${clOrdIDs.mkString(", ")}")
       resF.onComplete {
-        case Success(res) => log.info(s"REST takeProfitAndStoploss response: $res")
-        case Failure(exc) => log.error(s"REST takeProfitAndStoploss exception", exc)
+        case Success(res) => log.info(s"REST takeProfitAndStoploss response: ${clOrdIDs.mkString(", ")}, $res")
+        case Failure(exc) => log.error(s"REST takeProfitAndStoploss exception: ${clOrdIDs.mkString(", ")}", exc)
       }
     case ("order", Some("takeProfitAndTrailingStoploss"), _, Some(takeProfitPrice), _, Some(pegOffsetValue), Some(qty), _, _, _) =>
       log.info(s"issuing $oSide takeProfitAndTrailingStoploss'es: takeProfitPrice: $takeProfitPrice, pegOffsetValue: $pegOffsetValue, qty: $qty")
       wsGateway.run(consumeOrder)
-      val resF = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
+      val (clOrdIDs, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
         OrderReq.asLimitOrder(oSide, qty, takeProfitPrice, true),
         OrderReq.asTrailingStopOrder(oSide, qty, pegOffsetValue, true))))
+      log.info(s"REST $oSide takeProfitAndStoploss request: ${clOrdIDs.mkString(", ")}")
       resF.onComplete {
-        case Success(res) => log.info(s"REST $oSide takeProfitAndStoploss response: $res")
-        case Failure(exc) => log.error(s"REST $oSide takeProfitAndStoploss exception", exc)
+        case Success(res) => log.info(s"REST $oSide takeProfitAndStoploss response: ${clOrdIDs.mkString(", ")}, $res")
+        case Failure(exc) => log.error(s"REST $oSide takeProfitAndStoploss exception: ${clOrdIDs.mkString(", ")}", exc)
       }
     case ("order", Some("limit"), Some(price), _, _, _, Some(qty), _, _, Some(reduceOnly)) =>
       log.info(s"issuing $oSide limit: price: $price, qty: $qty")
       wsGateway.run(consumeOrder)
-      val resF = restGateway.placeLimitOrderAsync(qty, price, reduceOnly, oSide)
+      val (clOrdID, resF) = restGateway.placeLimitOrderAsync(qty, price, reduceOnly, oSide)
+      log.info(s"REST $oSide limit request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST $oSide limit response: $res")
-        case Failure(exc) => log.error(s"REST $oSide limit exception", exc)
+        case Success(res) => log.info(s"REST $oSide limit response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST $oSide limit exception: $clOrdID", exc)
       }
     case ("order", Some("market"), _, _, _, _, Some(qty), _, _, _) =>
       log.info(s"issuing $oSide market: qty: $qty")
       wsGateway.run(consumeOrder)
-      val resF = restGateway.placeMarketOrderAsync(qty, oSide)
+      val (clOrdID, resF) = restGateway.placeMarketOrderAsync(qty, oSide)
+      log.info(s"REST $oSide market request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST $oSide market response: $res")
-        case Failure(exc) => log.error(s"REST $oSide market exception", exc)
+        case Success(res) => log.info(s"REST $oSide market response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST $oSide market exception: $clOrdID", exc)
       }
     case ("order", Some("stop"), Some(price), _, _, _, Some(qty), _, _, Some(close)) =>
       log.info(s"issuing $oSide stop: price: $price, qty: $qty, close: $close")
       wsGateway.run(consumeOrder)
-      val resF = restGateway.placeStopOrderAsync(qty, oSide, price, close)
+      val (clOrdID, resF) = restGateway.placeStopOrderAsync(qty, price, close, oSide)
+      log.info(s"REST bid request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST $oSide stop response: $res")
-        case Failure(exc) => log.error(s"REST $oSide stop exception", exc)
+        case Success(res) => log.info(s"REST $oSide stop response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST $oSide stop exception: $clOrdID", exc)
       }
     case ("order", Some("trailingStop"), _, _, _, Some(pegOffsetValue), Some(qty), _, _, Some(close)) =>
       log.info(s"issuing $oSide trailingStop: pegOffsetValue: $pegOffsetValue, qty: $qty, close: $close")
       wsGateway.run(consumeOrder)
-      val resF = restGateway.placeTrailingStopOrderAsync(qty, oSide, pegOffsetValue, close)
+      val (clOrdID, resF) = restGateway.placeTrailingStopOrderAsync(qty, pegOffsetValue, close, oSide)
+      log.info(s"REST $oSide trailingStop request: $clOrdID")
       resF.onComplete {
-        case Success(res) => log.info(s"REST $oSide trailingStop response: $res")
-        case Failure(exc) => log.error(s"REST $oSide trailingStop exception", exc)
+        case Success(res) => log.info(s"REST $oSide trailingStop response: $clOrdID, $res")
+        case Failure(exc) => log.error(s"REST $oSide trailingStop exception: $clOrdID", exc)
       }
-    case ("amend", _, Some(price), _, _, _, _, orderIDOpt, cliOrdOpt, _) =>
+    case ("amend", _, Some(price), _, _, _, _, orderIDOpt, clOrdOpt, _) =>
       log.info(s"amending: price: $price, orderid: $orderIDOpt")
       wsGateway.run(consumeOrder)
-      val resF = restGateway.amendOrderAsync(orderIDOpt, cliOrdOpt, price)
+      val resF = restGateway.amendOrderAsync(orderIDOpt, clOrdOpt, price)
       log.info(s"REST amend request: $orderIDOpt")
       resF.onComplete {
-        case Success(res) => log.info(s"REST amend response: $orderIDOpt, $cliOrdOpt, $res")
-        case Failure(exc) => log.error(s"REST amend exception: $orderIDOpt, $cliOrdOpt", exc)
+        case Success(res) => log.info(s"REST amend response: $orderIDOpt, $clOrdOpt, $res")
+        case Failure(exc) => log.error(s"REST amend exception: $orderIDOpt, $clOrdOpt", exc)
       }
     case ("cancel", _, _, _, _, _, _, orderIDOpt, cliOrdOpt, _) =>
       log.info(s"canceling: orderid: $orderIDOpt")
       wsGateway.run(consumeOrder)
-      val resF = restGateway.cancelOrderAsync(orderIDOpt.map(_.split(",")), cliOrdOpt.map(_.split(",")))
+      val resF = restGateway.cancelOrderAsync(orderIDOpt.map(_.split(",").toSeq).getOrElse(Nil), cliOrdOpt.map(_.split(",").toSeq).getOrElse(Nil))
       log.info(s"REST cancel request: $orderIDOpt")
       resF.onComplete {
         case Success(res) => log.info(s"REST cancel response: $orderIDOpt, $cliOrdOpt, $res")
         case Failure(exc) => log.error(s"REST cancel exception: $orderIDOpt, $cliOrdOpt", exc)
+      }
+    case ("closePosition", _, _, _, _, _, _, _, _, _) =>
+      log.info(s"closing position")
+      wsGateway.run(consumeOrder)
+      restGateway.closePositionSync() match {
+        case Success(res) => log.info(s"REST closePosition response: $res")
+        case Failure(exc) => log.error(s"REST closePosition exception", exc)
       }
     case ("monitorLedger", _, _, _, _, _, _, _, _, _) =>
       log.info(s"monitoring ledger")
@@ -202,8 +214,8 @@ object Cli extends App {
       rootLogger.setLevel(ch.qos.logback.classic.Level.DEBUG)
       log.info(s"monitoring instrument")
       wsGateway.run(consumeNone)
-    case (action, orderTypeOpt, priceOpt, takeProfitPriceOpt, stoplossPriceOpt, pegOffsetValueOpt, qtyOpt, orderidOpt, cliOrdOpt, reduceOnlyOpt) =>
-      log.error(s"Unknown params: action: $action, orderType: $orderTypeOpt, price: $priceOpt, takeProfitPriceOpt: $takeProfitPriceOpt, stoplossPriceOpt: $stoplossPriceOpt, pegOffsetValueOpt: $pegOffsetValueOpt, amount: $qtyOpt, orderid: $orderidOpt, cliOrdOpt: $cliOrdOpt, reduceOnlyOpt: $reduceOnlyOpt")
+    case (action, orderTypeOpt, priceOpt, takeProfitPriceOpt, stoplossPriceOpt, pegOffsetValueOpt, qtyOpt, orderidOpt, clOrdOpt, reduceOnlyOpt) =>
+      log.error(s"Unknown params: action: $action, orderType: $orderTypeOpt, price: $priceOpt, takeProfitPriceOpt: $takeProfitPriceOpt, stoplossPriceOpt: $stoplossPriceOpt, pegOffsetValueOpt: $pegOffsetValueOpt, amount: $qtyOpt, orderid: $orderidOpt, clOrdOpt: $clOrdOpt, reduceOnlyOpt: $reduceOnlyOpt")
       sys.exit(-1)
   }
 }

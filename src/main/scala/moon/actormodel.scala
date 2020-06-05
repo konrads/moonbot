@@ -21,5 +21,5 @@ object TradeLifecycle extends Enumeration {
 sealed trait ActorCtx
 case class InitCtx(ledger: Ledger) extends ActorCtx
 case class IdleCtx(ledger: Ledger) extends ActorCtx
-case class OpenPositionCtx(ledger: Ledger, orderID: String=null, lifecycle: TradeLifecycle.Value=TradeLifecycle.Waiting) extends ActorCtx
-case class ClosePositionCtx(ledger: Ledger, orderIDs: Seq[String]=Nil, lifecycle: TradeLifecycle.Value=TradeLifecycle.Waiting) extends ActorCtx
+case class OpenPositionCtx(ledger: Ledger, clOrdID: String=null, lifecycle: TradeLifecycle.Value=TradeLifecycle.Waiting) extends ActorCtx
+case class ClosePositionCtx(ledger: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String, lifecycle: TradeLifecycle.Value=TradeLifecycle.Waiting) extends ActorCtx

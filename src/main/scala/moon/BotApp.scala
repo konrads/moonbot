@@ -1,14 +1,22 @@
 package moon
 
+import akka.actor.typed.{ActorRef, ActorSystem}
 import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
+import org.rogach.scallop.ScallopConf
 import play.api.libs.json._
-import akka.actor.typed.{ActorRef, ActorSystem}
+
 import scala.concurrent.ExecutionContext.Implicits.global
 
 
 object BotApp extends App {
   private implicit val log = Logger("BotApp")
+
+  class CliConf extends ScallopConf(args) {
+    val flush = opt[Boolean](default = Some(true))
+    verify()
+  }
+  val cliConf = new CliConf()
 
   val conf = ConfigFactory.load()
     .withFallback(ConfigFactory.parseResources("application.conf"))
@@ -68,7 +76,13 @@ object BotApp extends App {
       |""".stripMargin)
 
   implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
+  // logDeadLetters(log, serviceSystem) // log dead letters if needed
   val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
+  if (cliConf.flush()) {
+    log.info("Bootstraping via closePosition...")
+    restGateway.closePositionSync()
+    Thread.sleep(100)  // fire and forget, not consuming the response as it clashes with my model :(
+  }
   val wsGateway = new WsGateWay(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
   val metrics = Metrics(graphiteHost, graphitePort, namespace)
 

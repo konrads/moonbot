@@ -65,8 +65,8 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     l.ledgerOrders.head.timestamp shouldBe parseDateTime("2010-01-02T00:00:00.000Z")
     l.ledgerOrders.head.myOrder shouldBe true
     // quickly check map...
-    l.ledgerOrdersById.size shouldBe 1
-    l.ledgerOrdersById("o1").timestamp shouldBe parseDateTime("2010-01-02T00:00:00.000Z")
+    l.ledgerOrdersByID.size shouldBe 1
+    l.ledgerOrdersByID("o1").timestamp shouldBe parseDateTime("2010-01-02T00:00:00.000Z")
   }
 
   it should "not be myOrder if only ws operations" in {
@@ -138,10 +138,10 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
 
   it should "order LedgerOrders desc" in {
     val set = SortedSet(
-      LedgerOrder("o1",   12, 23, null, null, null, None, parseDateTime("2010-01-01T00:00:00.000Z"), true),
-      LedgerOrder("o3",   12, 23, null, null, null, None, parseDateTime("2010-01-03T00:00:00.000Z"), true),
-      LedgerOrder("o3.5", 12, 23, null, null, null, None, parseDateTime("2010-01-03T12:00:00.000Z"), true),
-      LedgerOrder("o2",   12, 23, null, null, null, None, parseDateTime("2010-01-02T00:00:00.000Z"), true),
+      LedgerOrder("o1",   "clo1",   12, 23, null, null, null, None, parseDateTime("2010-01-01T00:00:00.000Z"), true),
+      LedgerOrder("o3",   "clo3",   12, 23, null, null, null, None, parseDateTime("2010-01-03T00:00:00.000Z"), true),
+      LedgerOrder("o3.5", "clo3.5", 12, 23, null, null, null, None, parseDateTime("2010-01-03T12:00:00.000Z"), true),
+      LedgerOrder("o2",   "clo2",   12, 23, null, null, null, None, parseDateTime("2010-01-02T00:00:00.000Z"), true),
     )
     set.toSeq.map(_.orderID) shouldBe Seq("o3.5", "o3", "o2", "o1")
   }
