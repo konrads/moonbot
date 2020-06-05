@@ -3,6 +3,7 @@ package moon
 import com.github.nscala_time.time.Imports._
 import moon.OrderSide.OrderSide
 import moon.OrderStatus.{OrderStatus, _}
+import moon.TickDirection.{TickDirection, _}
 import org.joda.time.DateTime
 
 import scala.collection.SortedSet
@@ -103,9 +104,6 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
     case _ => this
   }
   lazy val myOrders = ledgerOrders.filter(_.myOrder)
-  // def record(o: UpsertOrder): Ledger = ???
-  // def record(o: OrderBook): Ledger = copy(orderBook = o)
-  // def record(t: Trade): Ledger = copy(trades = (t +: trades).take(emaWindow))
   lazy val isMinimallyFilled: Boolean = orderBook != null && trades.nonEmpty
   lazy val sentimentScore = {
     if (trades.isEmpty)
@@ -141,20 +139,31 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
           case LedgerOrder(_, _, price, qty, _, OrderSide.Sell, _, _, _, true)               => -qty / price * (1 + takerFee)
           case _                                                                             =>  BigDecimal(0)
         }.sum
-
         val runningPandl = ledgerMetrics.map(_.runningPandl).getOrElse(BigDecimal(0))
+
+        val volume = trades.flatMap(_.data.map(_.size)).sum
+        val tickDirs = trades.flatMap(_.data.map(_.tickDirection))
+        val tickDirScore = if (tickDirs.isEmpty) 0.0 else tickDirs.map {
+          case MinusTick     => -1
+          case ZeroMinusTick => -.5
+          case ZeroPlusTick  => .5
+          case PlusTick      => 1
+        }.sum / tickDirs.length
+
         val metrics = LedgerMetrics(
           Map(
             "data.price"          -> (bidPrice + askPrice) / 2,
+            "data.volume"         -> volume,
             "data.pandl"          -> (runningPandl + pandlDelta),
             "data.pandlDelta"     -> pandlDelta,
+            "data.tickDirScore"   -> tickDirScore,
             "data.sentimentScore" -> sentimentScore,
             "data.myTradesCnt"    -> myOrders.count(_.ordStatus == OrderStatus.Filled)
           ),
           currOrders3.head.timestamp,
           runningPandl + pandlDelta
         )
-        copy(ledgerMetrics=Some(metrics))
+        copy(ledgerMetrics=Some(metrics), trades=Nil)
       }
     }
   }

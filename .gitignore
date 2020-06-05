@@ -6,3 +6,4 @@ target
 project/project
 *.log
 data
+bin/stage
