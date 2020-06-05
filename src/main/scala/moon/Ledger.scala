@@ -14,7 +14,7 @@ case class LedgerOrder(orderID: String, clOrdID: String=null, price: BigDecimal,
   lazy val fullOrdID = s"$orderID / $clOrdID"
 }
 
-case class LedgerMetrics(metrics: Map[String, BigDecimal], lastOrderTimestamp: DateTime=new DateTime(0), prevPandl: BigDecimal=0)
+case class LedgerMetrics(metrics: Map[String, BigDecimal], lastOrderTimestamp: DateTime=new DateTime(0), runningPandl: BigDecimal=0)
 
 case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
                   orderBook: OrderBook=null, trades: Seq[Trade]=Nil,
@@ -134,25 +134,25 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       if (currOrders3.isEmpty)
         copy(ledgerMetrics=Some(LedgerMetrics(Map("price" -> (bidPrice + askPrice) / 2))))
       else {
-        val pandl = currOrders3.map {
+        val pandlDelta = currOrders3.map {
           case LedgerOrder(_, _, price, qty, _, OrderSide.Buy, OrderType.Limit, _, _, true)  =>  qty / price * (1 + makerRebate)
           case LedgerOrder(_, _, price, qty, _, OrderSide.Buy, _, _, _, true)                =>  qty / price * (1 - takerFee)
           case LedgerOrder(_, _, price, qty, _, OrderSide.Sell, OrderType.Limit, _, _, true) => -qty / price * (1 - makerRebate)
           case LedgerOrder(_, _, price, qty, _, OrderSide.Sell, _, _, _, true)               => -qty / price * (1 + takerFee)
-          case _                                                                          =>  BigDecimal(0)
+          case _                                                                             =>  BigDecimal(0)
         }.sum
 
-        val prevPandl = ledgerMetrics.map(_.prevPandl).getOrElse(BigDecimal(0))
+        val runningPandl = ledgerMetrics.map(_.runningPandl).getOrElse(BigDecimal(0))
         val metrics = LedgerMetrics(
           Map(
             "data.price"          -> (bidPrice + askPrice) / 2,
-            "data.pandl"          -> pandl,
-            "data.pandlDelta"     -> (pandl - prevPandl),
+            "data.pandl"          -> (runningPandl + pandlDelta),
+            "data.pandlDelta"     -> pandlDelta,
             "data.sentimentScore" -> sentimentScore,
             "data.myTradesCnt"    -> myOrders.count(_.ordStatus == OrderStatus.Filled)
           ),
           currOrders3.head.timestamp,
-          pandl
+          runningPandl + pandlDelta
         )
         copy(ledgerMetrics=Some(metrics))
       }

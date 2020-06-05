@@ -6,7 +6,6 @@ import com.typesafe.scalalogging.Logger
 import moon.OrderStatus._
 import moon.TradeLifecycle._
 
-import scala.collection.Set
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -140,7 +139,7 @@ object OrchestratorActor {
                 case (Some(order), Waiting, _) =>
                   // will sentiment force a change of heart?
                   if (!positionOpener.shouldKeepGoing(ledger2)) {
-                    actorCtx.log.info(s"${positionOpener.desc}: having a change of heart, cancelling... ${order.fullOrdID}")
+                    actorCtx.log.info(s"${positionOpener.desc}: having a change of heart, cancelling ${order.fullOrdID}...")
                     positionOpener.cancelOrder(clOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
                     loop(ctx.copy(ledger = ledger2, lifecycle = IssuingCancel))
                   } else {

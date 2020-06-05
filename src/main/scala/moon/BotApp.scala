@@ -76,7 +76,6 @@ object BotApp extends App {
       |""".stripMargin)
 
   implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
-  // logDeadLetters(log, serviceSystem) // log dead letters if needed
   val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
   if (cliConf.flush()) {
     log.info("Bootstraping via closePosition...")
