@@ -318,10 +318,10 @@ object OrchestratorActor {
             } else
               init(ctx.copy(ledger2))
           case RestEvent(Success(data)) =>
-            actorCtx.log.info(s"init: unexpected RestEvent: $data")
+            actorCtx.log.debug(s"init: unexpected RestEvent: $data")
             init(ctx.copy(ledger = ctx.ledger.record(data)))
           case RestEvent(Failure(exc)) =>
-            actorCtx.log.warn(s"init: unexpected failure: $exc", exc)
+            actorCtx.log.debug(s"init: unexpected failure: $exc", exc)
             Behaviors.same
         }
 
@@ -345,10 +345,10 @@ object OrchestratorActor {
               idle(ctx.copy(ledger = ledger2))
             }
           case RestEvent(Success(data)) =>
-            actorCtx.log.info(s"idle: unexpected RestEvent: $data")
+            actorCtx.log.debug(s"idle: unexpected RestEvent: $data")
             idle(ctx.copy(ledger = ctx.ledger.record(data)))
           case RestEvent(Failure(exc)) =>
-            actorCtx.log.warn(s"idle: unexpected Rest failure: $exc", exc)
+            actorCtx.log.debug(s"idle: unexpected Rest failure: $exc", exc)
             Behaviors.same
         }
 
