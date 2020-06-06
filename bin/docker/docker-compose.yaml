@@ -1,0 +1,54 @@
+version: '3.3'
+
+services:
+  grafana:
+    image: moon-grafana
+    restart: always
+    ports:
+      - "80:80"
+      - "81:81"
+      - "2003:2003"
+      - "3000:3000"
+    volumes:
+      - .:/host
+      - /var/log/grafana:/var/log
+      - /var/log/graphite:/var/log
+      - /opt/graphite/storage:/opt/graphite/storage
+    # limit rotating log file sizes, expect them in: /var/lib/docker/containers/[container-id]/[container-id]-json.log, as described in https://stackoverflow.com/questions/35414495/save-docker-compose-logs-to-a-file
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '10'
+
+  grafana-bootstrap:
+    image: grafana-bootstrap
+    links:
+      - grafana
+    environment:
+      grafana_host: grafana
+    depends_on:
+      - grafana
+
+  algo:
+    image: moon-algo
+    restart: on-failure
+    volumes:
+      - .:/host
+      - /var/log/moon:/var/log/moon
+    links:
+      - grafana
+    environment:
+      graphite_host: grafana
+      CATALYST_LOG_LEVEL: 12  # NOTICE level
+      MOON_LOG_LEVEL: 9      # TRACE level
+    depends_on:
+      - grafana
+      - grafana-bootstrap
+    # limit rotating log file sizes, expect them in: /var/lib/docker/containers/[container-id]/[container-id]-json.log, as described in https://stackoverflow.com/questions/35414495/save-docker-compose-logs-to-a-file
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '20'
+    # entrypoint: bash -c "sleep 20 && cd /src/moon && /opt/moon/bin/algo --trade-mode paper config.release.yaml opts-btc-usdt.release.json"

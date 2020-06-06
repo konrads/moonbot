@@ -223,7 +223,7 @@
         "seriesOverrides": [
           {
             "alias": "volume",
-            "color": "#052457"
+            "color": "#34269e"
           }
         ],
         "spaceLength": 10,

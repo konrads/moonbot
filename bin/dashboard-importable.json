@@ -46,7 +46,7 @@
     "links": [],
     "panels": [
       {
-        "content": "<div style=\"text-align:center; color:white; font-family: Andromeda; font-size: 800%\">moon  __pair__</div>",
+        "content": "<div style=\"text-align:center; color:white; font-family: Andromeda; font-size: 1000%\">moon __pair__</div>",
         "gridPos": {
           "h": 5,
           "w": 24,
@@ -223,7 +223,7 @@
         "seriesOverrides": [
           {
             "alias": "volume",
-            "color": "#052457"
+            "color": "#34269e"
           }
         ],
         "spaceLength": 10,
@@ -394,12 +394,7 @@
         "pointradius": 5,
         "points": false,
         "renderer": "flot",
-        "seriesOverrides": [
-          {
-            "alias": "score",
-            "color": "#badff4"
-          }
-        ],
+        "seriesOverrides": [],
         "spaceLength": 10,
         "stack": false,
         "steppedLine": false,
@@ -407,13 +402,13 @@
           {
             "refCount": 1,
             "refId": "A",
-            "target": "aliasByMetric(moon.__pair__.data.sentiment.*)"
+            "target": "aliasByMetric(moon.__pair__.data.sentimentScore)"
           }
         ],
         "thresholds": [],
         "timeFrom": null,
         "timeShift": null,
-        "title": "Sentiment",
+        "title": "Sentiment score",
         "tooltip": {
           "shared": true,
           "sort": 0,
@@ -481,12 +476,7 @@
         "pointradius": 5,
         "points": false,
         "renderer": "flot",
-        "seriesOverrides": [
-          {
-            "alias": "score",
-            "color": "#badff4"
-          }
-        ],
+        "seriesOverrides": [],
         "spaceLength": 10,
         "stack": false,
         "steppedLine": false,
@@ -494,13 +484,13 @@
           {
             "refCount": 1,
             "refId": "A",
-            "target": "aliasByMetric(moon.__pair__.data.tickDir.*)"
+            "target": "aliasByMetric(moon.__pair__.data.tickDirScore)"
           }
         ],
         "thresholds": [],
         "timeFrom": null,
         "timeShift": null,
-        "title": "Tick direction",
+        "title": "Tick direction score",
         "tooltip": {
           "shared": true,
           "sort": 0,
