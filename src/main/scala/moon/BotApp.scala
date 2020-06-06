@@ -1,5 +1,7 @@
 package moon
 
+import java.io.File
+
 import akka.actor.typed.{ActorRef, ActorSystem}
 import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
@@ -20,6 +22,7 @@ object BotApp extends App {
 
   val conf = ConfigFactory.load()
     .withFallback(ConfigFactory.parseResources("application.conf"))
+    .withFallback(ConfigFactory.parseFile(new File("application.private.conf")))
     .withFallback(ConfigFactory.parseResources("application.private.conf"))
     .resolve()
 

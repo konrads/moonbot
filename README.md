@@ -1,12 +1,37 @@
 MOON (bot)
 ==========
 
-...We're going to the moon... To get there we utilize:
+Run
+---
 
-run via sbt:
+First setup `application.private.conf` in $PROJECT_DIR:
+```
+bitmex.url = "https://www.bitmex.com"
+# bitmex.url = "https://testnet.bitmex.com"
+bitmex.wsUrl = "wss://testnet.bitmex.com/realtime?subscribe=orderBook10:XBTUSD,trade:XBTUSD,instrument:.BXBT,funding:XBTUSD"
+# bitmex.wsUrl = "wss://www.bitmex.com/realtime?subscribe=orderBook10:XBTUSD,trade:XBTUSD,instrument:.BXBT,funding:XBTUSD"
+bitmex.apiKey = "XXX"
+bitmex.apiSecret = "YYY"
+```
+
+Setup with metrics and point browser @ `localhost:81`:
+```
+# setup graphite/grafana
+cd bin
+./devops.sh  # for options
+./devops.sh grafana-build
+./devops.sh grafana-run
+./devops.sh grafana-bootstrap-run
+```
+
+Start bot:
 ```
 sbt run
 ```
+
+
+Helpful operations
+------------------
 
 build fatjar & run:
 ```
@@ -15,7 +40,7 @@ find . -name "*assembly*.jar"
 java -jar ./target/scala-2.13/MoonBot-assembly-0.1.jar
 ```
 
-to test manual interactions:
+Test manual REST/Websockets interactions:
 ```
 sbt "runMain moon.Cli monitorAll"
 sbt "runMain moon.Cli monitorOrder"
@@ -26,16 +51,7 @@ sbt "runMain moon.Cli --ordertype limit --side buy --price 9000 --qty 30 order"
 ...etc
 ```
 
-To gather all ws jsons (as per ws application.conf's bitmex.wsUrl)
+Gather all ws jsons (as per ws application.conf's bitmex.wsUrl)
 ```
 sbt "runMain moon.Cli monitorDebug" | grep "###" | sed 's/.*ws json: //'
-```
-
-To start graphite/grafana:
-```
-cd bin
-./devops.sh  # for options
-./devops.sh grafana-build
-./devops.sh grafana-run
-./devops.sh grafana-bootstrap-run
 ```
