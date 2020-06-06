@@ -37,6 +37,7 @@ trait IRestGateway {
   def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order])
   def amendOrderAsync(orderID: Option[String]=None, origClOrdID: Option[String]=None, price: BigDecimal): Future[Order]
   def cancelOrderAsync(orderIDs: Seq[String]=Nil, clOrdIDs: Seq[String]=Nil): Future[Orders]
+  def cancelAllOrdersAsync(): Future[Orders]
   def closePositionAsync(): Future[String]
 
   // sync
@@ -47,6 +48,7 @@ trait IRestGateway {
   def placeLimitOrderSync(qty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, side: OrderSide): Try[Order]
   def amendOrderSync(orderID: Option[String]=None, clOrdID: Option[String]=None, price: BigDecimal): Try[Order]
   def cancelOrderSync(orderIDs: Seq[String]=Nil, origClOrdIDs: Seq[String]=Nil): Try[Orders]
+  def cancelAllOrdersSync(): Try[Orders]
   def closePositionSync(): Try[String]
 }
 
@@ -102,6 +104,9 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   def cancelOrderAsync(orderIDs: Seq[String] = Nil, clOrdIDs: Seq[String] = Nil): Future[Orders] =
     cancelOrder(orderIDs, clOrdIDs)
 
+  def cancelAllOrdersAsync(): Future[Orders] =
+    cancelAllOrders()
+
   def closePositionAsync(): Future[String] =
     closePosition()
 
@@ -147,6 +152,12 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       cancelOrder(orderIDs, clOrdIDs),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on cancelOrderSync orderID: ${orderIDs.mkString(", ")}, clOrdID: ${clOrdIDs.mkString(", ")}") }.value.get
+
+  def cancelAllOrdersSync(): Try[Orders] =
+    Await.ready(
+      cancelAllOrders(),
+      Duration(syncTimeoutMs, MILLISECONDS)
+    ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on cancelAllOrdersSync") }.value.get
 
   def closePositionSync(): Try[String] =
     Await.ready(
@@ -214,6 +225,14 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       DELETE,
       "/api/v1/order",
       (orderIDsStr ++ clOrdIDsStr).mkString("&")
+    ).map(_.asInstanceOf[Orders])
+  }
+
+  private def cancelAllOrders(): Future[Orders] = {
+    sendReq(
+      DELETE,
+      "/api/v1/order/all",
+      ""
     ).map(_.asInstanceOf[Orders])
   }
 

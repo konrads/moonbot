@@ -41,7 +41,7 @@
   <root level="debug">
     <appender-ref ref="console"/>
     <appender-ref ref="file"/>
-    <!-- appender-ref ref="file.dbg"/ -->
+    <appender-ref ref="file.dbg"/>
   </root>
 
 </configuration>

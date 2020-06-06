@@ -10,7 +10,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 
 object BotApp extends App {
-  private implicit val log = Logger("BotApp")
+  val log = Logger("BotApp")
 
   class CliConf extends ScallopConf(args) {
     val flush = opt[Boolean](default = Some(true))
@@ -79,8 +79,11 @@ object BotApp extends App {
   val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
   if (cliConf.flush()) {
     log.info("Bootstraping via closePosition...")
-    restGateway.closePositionSync()
-    Thread.sleep(100)  // fire and forget, not consuming the response as it clashes with my model :(
+    // not consuming the response as it clashes with my model :(. Just assumes to have worked
+    for {
+      res1 <- restGateway.closePositionAsync()
+      res2 <- restGateway.cancelAllOrdersAsync()
+    } yield (res1, res2)
   }
   val wsGateway = new WsGateWay(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
   val metrics = Metrics(graphiteHost, graphitePort, namespace)

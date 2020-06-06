@@ -15,25 +15,30 @@ case class LedgerOrder(orderID: String, clOrdID: String=null, price: BigDecimal,
   lazy val fullOrdID = s"$orderID / $clOrdID"
 }
 
-case class LedgerMetrics(metrics: Map[String, BigDecimal], lastOrderTimestamp: DateTime=new DateTime(0), runningPandl: BigDecimal=0)
+case class LedgerMetrics(metrics: Map[String, Any], lastOrderTimestamp: DateTime=new DateTime(0), runningPandl: BigDecimal=0)
 
 case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
                   orderBook: OrderBook=null, trades: Seq[Trade]=Nil,
                   ledgerOrders: SortedSet[LedgerOrder]=SortedSet.empty[LedgerOrder], ledgerOrdersByID: Map[String, LedgerOrder]=Map.empty, ledgerOrdersByClOrdID: Map[String, LedgerOrder]=Map.empty,
                   ledgerMetrics: Option[LedgerMetrics]=None) {
   // rest
-  def record(os: Orders): Ledger = os.orders.foldLeft(this)((soFar, o) => soFar.record(o))
-  def record(o: Order): Ledger =
-    ledgerOrdersByID.get(o.orderID) match {
-      case Some(existing) =>
-        val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), ordStatus=o.ordStatus.get, price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), timestamp=o.timestamp)
-        val ledgerOrdersByClOrdID2 = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2)
-        copy(ledgerOrders=ledgerOrders-existing+existing2, ledgerOrdersByID=ledgerOrdersByID + (existing2.orderID -> existing2), ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
-      case None =>
-        val lo = LedgerOrder(orderID=o.orderID, clOrdID=o.clOrdID.orNull, qty=o.orderQty, price=o.stopPx.getOrElse(o.price.orNull), side=o.side, ordType=o.ordType, timestamp=o.timestamp, ordStatus=o.ordStatus.getOrElse(OrderStatus.New), ordRejReason=o.ordRejReason, myOrder=true)
-        val ledgerOrdersByClOrdID2 = if (lo.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (lo.clOrdID -> lo)
-        copy(ledgerOrders=ledgerOrders+lo, ledgerOrdersByID=ledgerOrdersByID + (lo.orderID -> lo), ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
-    }
+  def record(data: RestModel): Ledger = data match {
+    case os:Orders =>
+      os.orders.foldLeft(this)((soFar, o) => soFar.record(o))
+    case o: Order =>
+      ledgerOrdersByID.get(o.orderID) match {
+        case Some(existing) =>
+          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), ordStatus=o.ordStatus.get, price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), timestamp=o.timestamp)
+          val ledgerOrdersByClOrdID2 = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2)
+          copy(ledgerOrders=ledgerOrders-existing+existing2, ledgerOrdersByID=ledgerOrdersByID + (existing2.orderID -> existing2), ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
+        case None =>
+          val lo = LedgerOrder(orderID=o.orderID, clOrdID=o.clOrdID.orNull, qty=o.orderQty, price=o.stopPx.getOrElse(o.price.orNull), side=o.side, ordType=o.ordType, timestamp=o.timestamp, ordStatus=o.ordStatus.getOrElse(OrderStatus.New), ordRejReason=o.ordRejReason, myOrder=true)
+          val ledgerOrdersByClOrdID2 = if (lo.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (lo.clOrdID -> lo)
+          copy(ledgerOrders=ledgerOrders+lo, ledgerOrdersByID=ledgerOrdersByID + (lo.orderID -> lo), ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
+      }
+    case _ =>
+      this
+  }
   // ws
   def record(data: WsModel): Ledger = data match {
     case o: UpsertOrder => {
@@ -122,15 +127,32 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
   lazy val askPrice: BigDecimal = orderBook.data.headOption.map(_.asks.head.head).getOrElse(0)
 
   def withMetrics(makerRebate: BigDecimal=.00025, takerFee: BigDecimal=.00075): Ledger = {
+    val volume = trades.flatMap(_.data.map(_.size)).sum
+    val tickDirs = trades.flatMap(_.data.map(_.tickDirection))
+    val tickDirScore = if (tickDirs.isEmpty) 0.0 else tickDirs.map {
+      case MinusTick     => -1
+      case ZeroMinusTick => -.5
+      case ZeroPlusTick  => .5
+      case PlusTick      => 1
+    }.sum / tickDirs.length
+    val metricsVals = Map(
+        "data.price"           -> (bidPrice + askPrice) / 2,
+        "data.volume"          -> volume,
+        "data.pandlDelta"      -> 0,
+        "data.tickDir.score"   -> tickDirScore,
+        "data.sentiment.score" -> sentimentScore,
+        "data.myTradesCnt"     -> myOrders.count(_.ordStatus == OrderStatus.Filled)
+      )
+
     val currOrders = ledgerOrders.filter(o => o.myOrder && o.ordStatus == OrderStatus.Filled)
     if (currOrders.isEmpty)
-      this
+      copy(ledgerMetrics=Some(LedgerMetrics(metricsVals)), trades=Nil)
     else {
       val firstSide = currOrders.last.side // note: in descending
       val currOrders2 = currOrders.dropWhile(_.side == firstSide) // eliminate unfinished buy/sell legs
       val currOrders3 = ledgerMetrics.map(m => currOrders2.takeWhile(_.timestamp > m.lastOrderTimestamp)).getOrElse(currOrders2)
       if (currOrders3.isEmpty)
-        copy(ledgerMetrics=Some(LedgerMetrics(Map("price" -> (bidPrice + askPrice) / 2))))
+        copy(ledgerMetrics=Some(LedgerMetrics(metricsVals)), trades=Nil)
       else {
         val pandlDelta = currOrders3.map {
           case LedgerOrder(_, _, price, qty, _, OrderSide.Buy, OrderType.Limit, _, _, true)  =>  qty / price * (1 + makerRebate)
@@ -141,29 +163,12 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
         }.sum
         val runningPandl = ledgerMetrics.map(_.runningPandl).getOrElse(BigDecimal(0))
 
-        val volume = trades.flatMap(_.data.map(_.size)).sum
-        val tickDirs = trades.flatMap(_.data.map(_.tickDirection))
-        val tickDirScore = if (tickDirs.isEmpty) 0.0 else tickDirs.map {
-          case MinusTick     => -1
-          case ZeroMinusTick => -.5
-          case ZeroPlusTick  => .5
-          case PlusTick      => 1
-        }.sum / tickDirs.length
-
-        val metrics = LedgerMetrics(
-          Map(
-            "data.price"          -> (bidPrice + askPrice) / 2,
-            "data.volume"         -> volume,
-            "data.pandl"          -> (runningPandl + pandlDelta),
-            "data.pandlDelta"     -> pandlDelta,
-            "data.tickDirScore"   -> tickDirScore,
-            "data.sentimentScore" -> sentimentScore,
-            "data.myTradesCnt"    -> myOrders.count(_.ordStatus == OrderStatus.Filled)
-          ),
+        val metrics2 = LedgerMetrics(
+          metricsVals + ("data.pandl" -> (runningPandl + pandlDelta)) + ("data.pandlDelta" -> pandlDelta),
           currOrders3.head.timestamp,
           runningPandl + pandlDelta
         )
-        copy(ledgerMetrics=Some(metrics), trades=Nil)
+        copy(ledgerMetrics=Some(metrics2), trades=Nil)
       }
     }
   }

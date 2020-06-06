@@ -159,12 +159,16 @@ object Cli extends App {
         case Success(res) => log.info(s"REST cancel response: $orderIDOpt, $cliOrdOpt, $res")
         case Failure(exc) => log.error(s"REST cancel exception: $orderIDOpt, $cliOrdOpt", exc)
       }
-    case ("closePosition", _, _, _, _, _, _, _, _, _) =>
-      log.info(s"closing position")
+    case ("flush", _, _, _, _, _, _, _, _, _) =>
+      log.info(s"closing position & cancelling orders")
       wsGateway.run(consumeOrder)
       restGateway.closePositionSync() match {
         case Success(res) => log.info(s"REST closePosition response: $res")
         case Failure(exc) => log.error(s"REST closePosition exception", exc)
+      }
+      restGateway.cancelAllOrdersSync() match {
+        case Success(res) => log.info(s"REST cancelAllOrders response: $res")
+        case Failure(exc) => log.error(s"REST cancelAllOrders exception", exc)
       }
     case ("monitorLedger", _, _, _, _, _, _, _, _, _) =>
       log.info(s"monitoring ledger")

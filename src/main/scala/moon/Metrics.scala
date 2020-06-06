@@ -31,6 +31,7 @@ case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: 
 
     if (gauges2.nonEmpty) {
       val now = System.currentTimeMillis() / 1000
+      log.debug(s"Metrics:\n${gauges2.map { case (k, v) => s"- $prefix.$k $v $now" }.mkString("\n")}")
       try {
         graphite.connect()
         for { (k, v) <- gauges2 } graphite.send(s"$prefix.$k", v.toString, now)

@@ -46,9 +46,9 @@
     "links": [],
     "panels": [
       {
-        "content": "<div style=\"text-align:center; color:white; font-family: Andromeda; font-size: 800%\">Moon bot</div>",
+        "content": "<div style=\"text-align:center; color:white; font-family: Andromeda; font-size: 1000%\">moon __pair__</div>",
         "gridPos": {
-          "h": 4,
+          "h": 5,
           "w": 24,
           "x": 0,
           "y": 0
@@ -93,6 +93,10 @@
         "renderer": "flot",
         "seriesOverrides": [
           {
+            "alias": "price",
+            "color": "#badff4"
+          },
+          {
             "alias": "profit",
             "color": "__profit_green__",
             "lines": false,
@@ -120,14 +124,14 @@
             "hide": true,
             "refCount": 1,
             "refId": "B",
-            "target": "alias(divideSeries(removeBelowValue(moon.__pair__.data.pandlDelta, 0), moon.__pair__.data.pandlDelta), 'profit_indicator')",
+            "target": "alias(divideSeries(removeBelowValue(moon.__pair__.data.pandlDelta, 0.00001), moon.__pair__.data.pandlDelta), 'profit_indicator')",
             "textEditor": true
           },
           {
             "hide": true,
             "refCount": 1,
             "refId": "C",
-            "target": "alias(divideSeries(removeAboveValue(moon.__pair__.data.pandlDelta, 0), moon.__pair__.data.pandlDelta), 'loss_indicator')",
+            "target": "alias(divideSeries(removeAboveValue(moon.__pair__.data.pandlDelta, -0.00001), moon.__pair__.data.pandlDelta), 'loss_indicator')",
             "textEditor": true
           },
           {
@@ -219,7 +223,7 @@
         "seriesOverrides": [
           {
             "alias": "volume",
-            "color": "#0a50a1"
+            "color": "#052457"
           }
         ],
         "spaceLength": 10,
@@ -304,7 +308,12 @@
         "pointradius": 5,
         "points": false,
         "renderer": "flot",
-        "seriesOverrides": [],
+        "seriesOverrides": [
+          {
+            "alias": "pandl",
+            "color": "#b7dbab"
+          }
+        ],
         "spaceLength": 10,
         "stack": false,
         "steppedLine": false,
@@ -438,6 +447,88 @@
       },
       {
         "aliasColors": {},
+        "bars": false,
+        "dashLength": 10,
+        "dashes": false,
+        "datasource": "Local Graphite",
+        "fill": 1,
+        "gridPos": {
+          "h": 5,
+          "w": 24,
+          "x": 0,
+          "y": 33
+        },
+        "id": 13,
+        "legend": {
+          "avg": false,
+          "current": false,
+          "max": false,
+          "min": false,
+          "show": true,
+          "total": false,
+          "values": false
+        },
+        "lines": true,
+        "linewidth": 1,
+        "links": [],
+        "nullPointMode": "connected",
+        "percentage": false,
+        "pointradius": 5,
+        "points": false,
+        "renderer": "flot",
+        "seriesOverrides": [],
+        "spaceLength": 10,
+        "stack": false,
+        "steppedLine": false,
+        "targets": [
+          {
+            "refCount": 1,
+            "refId": "A",
+            "target": "aliasByMetric(moon.__pair__.data.tickDirScore)"
+          }
+        ],
+        "thresholds": [],
+        "timeFrom": null,
+        "timeShift": null,
+        "title": "Tick direction score",
+        "tooltip": {
+          "shared": true,
+          "sort": 0,
+          "value_type": "individual"
+        },
+        "type": "graph",
+        "xaxis": {
+          "buckets": null,
+          "mode": "time",
+          "name": null,
+          "show": true,
+          "values": []
+        },
+        "yaxes": [
+          {
+            "format": "short",
+            "label": null,
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true
+          },
+          {
+            "format": "short",
+            "label": null,
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true
+          }
+        ],
+        "yaxis": {
+          "align": false,
+          "alignLevel": null
+        }
+      },
+      {
+        "aliasColors": {},
         "bars": true,
         "dashLength": 10,
         "dashes": false,
@@ -447,7 +538,7 @@
           "h": 5,
           "w": 8,
           "x": 0,
-          "y": 28
+          "y": 33
         },
         "id": 22,
         "legend": {
@@ -467,7 +558,16 @@
         "pointradius": 5,
         "points": false,
         "renderer": "flot",
-        "seriesOverrides": [],
+        "seriesOverrides": [
+          {
+            "alias": "jvm",
+            "color": "#b7dbab"
+          },
+          {
+            "alias": "system",
+            "color": "#badff4"
+          }
+        ],
         "spaceLength": 10,
         "stack": false,
         "steppedLine": false,
@@ -530,7 +630,7 @@
           "h": 5,
           "w": 4,
           "x": 8,
-          "y": 28
+          "y": 33
         },
         "id": 23,
         "legend": {
@@ -550,7 +650,16 @@
         "pointradius": 5,
         "points": false,
         "renderer": "flot",
-        "seriesOverrides": [],
+        "seriesOverrides": [
+          {
+            "alias": "jvm",
+            "color": "#b7dbab"
+          },
+          {
+            "alias": "system",
+            "color": "#badff4"
+          }
+        ],
         "spaceLength": 10,
         "stack": false,
         "steppedLine": false,
@@ -613,7 +722,7 @@
           "h": 5,
           "w": 4,
           "x": 12,
-          "y": 28
+          "y": 33
         },
         "id": 24,
         "legend": {
@@ -633,7 +742,12 @@
         "pointradius": 5,
         "points": false,
         "renderer": "flot",
-        "seriesOverrides": [],
+        "seriesOverrides": [
+          {
+            "alias": "used",
+            "color": "#b7dbab"
+          }
+        ],
         "spaceLength": 10,
         "stack": false,
         "steppedLine": false,
@@ -706,7 +820,7 @@
           "h": 5,
           "w": 4,
           "x": 16,
-          "y": 28
+          "y": 33
         },
         "id": 25,
         "interval": null,
@@ -783,7 +897,7 @@
           "h": 5,
           "w": 4,
           "x": 20,
-          "y": 28
+          "y": 33
         },
         "id": 26,
         "interval": null,
@@ -840,7 +954,7 @@
         "valueName": "total"
       }
     ],
-    "refresh": "10s",
+    "refresh": "30s",
     "schemaVersion": 16,
     "style": "light",
     "tags": [],
