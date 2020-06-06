@@ -5,6 +5,7 @@ import play.api.libs.json._
 import play.api.libs.json.Reads._
 import moon.OrderSide.OrderSide
 import org.joda.time.DateTime
+import moon.OrderStatus._
 import moon.jodaDateReads
 
 
@@ -71,8 +72,8 @@ object RestModel {
         case Some(_) => json.validate[Order]
           .map(o => o.copy(
             ordStatus =
-              if (o.ordStatus.contains(OrderStatus.Canceled) && o.text.exists(_.contains("had execInst of ParticipateDoNotInitiate")))
-                Some(OrderStatus.PostOnlyFailure)
+              if (o.ordStatus.contains(Canceled) && o.text.exists(_.contains("had execInst of ParticipateDoNotInitiate")))
+                Some(PostOnlyFailure)
               else
                 o.ordStatus,
             amended = o.text.map(_.startsWith("Amended"))

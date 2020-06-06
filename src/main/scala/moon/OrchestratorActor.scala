@@ -3,6 +3,7 @@ package moon
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.ActorContext
 import akka.actor.typed.scaladsl.Behaviors
+import moon.OrderSide._
 import moon.OrderStatus._
 import moon.TradeLifecycle._
 
@@ -45,7 +46,7 @@ object OrchestratorActor {
         (ctx, event) match {
           case (_, SendMetrics) =>
             val ledger2 = ctx.ledger.withMetrics()
-            metrics.foreach(_.gauge(ledger2.ledgerMetrics.map(_.metrics).getOrElse(Map.empty)))
+            metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
             loop(ctx.copy(ledger2))
           case (OpenPositionCtx(ledger, _, IssuingNew), RestEvent(Success(o: Order))) if o.clOrdID.isDefined =>
             val ledger2 = ledger.record(o)
@@ -179,7 +180,7 @@ object OrchestratorActor {
           (ctx, wsEvent) match {
             case (_, SendMetrics) =>
               val ledger2 = ctx.ledger.withMetrics()
-              metrics.foreach(_.gauge(ledger2.ledgerMetrics.map(_.metrics).getOrElse(Map.empty)))
+              metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
               loop(ctx.copy(ledger2))
             case (ClosePositionCtx(ledger, takeProfitClOrdID, stoplossClOrdID, lifecycle), RestEvent(Success(os: Orders))) =>
               val ledger2 = ledger.record(os)
@@ -299,7 +300,7 @@ object OrchestratorActor {
         def init(ctx: InitCtx): Behavior[ActorEvent] = Behaviors.receiveMessage[ActorEvent] {
           case SendMetrics =>
             val ledger2 = ctx.ledger.withMetrics()
-            metrics.foreach(_.gauge(ledger2.ledgerMetrics.map(_.metrics).getOrElse(Map.empty)))
+            metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
             init(ctx.copy(ledger2))
           case WsEvent(data) =>
             actorCtx.log.debug(s"init: WsEvent: $data")
@@ -331,7 +332,7 @@ object OrchestratorActor {
         def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receiveMessage[ActorEvent] {
           case SendMetrics =>
             val ledger2 = ctx.ledger.withMetrics()
-            metrics.foreach(_.gauge(ledger2.ledgerMetrics.map(_.metrics).getOrElse(Map.empty)))
+            metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
             idle(ctx.copy(ledger2))
           case WsEvent(wsData) =>
             actorCtx.log.debug(s"idle: WsEvent: $wsData")
@@ -364,7 +365,7 @@ object OrchestratorActor {
             override def openOrder(l: Ledger): (String, Future[Order]) = {
               val price = l.bidPrice
               actorCtx.log.info(s"$desc: opening @ $price")
-              restGateway.placeLimitOrderAsync(tradeQty, price, false, OrderSide.Buy)
+              restGateway.placeLimitOrderAsync(tradeQty, price, false, Buy)
             }
             override def cancelOrder(clOrdID: String): Future[Orders] = {
               actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")
@@ -387,8 +388,8 @@ object OrchestratorActor {
             override def onIrrecoverableError(l: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String, exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long closing takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID", exc)
             override def openOrders(l: Ledger): (String, String, Future[Orders]) = {
               val (o1::o2::Nil, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
-                OrderReq.asLimitOrder(OrderSide.Sell, tradeQty, openPrice + takeProfitMargin, true),
-                OrderReq.asStopOrder(OrderSide.Sell, tradeQty, openPrice - stoplossMargin, true)))
+                OrderReq.asLimitOrder(Sell, tradeQty, openPrice + takeProfitMargin, true),
+                OrderReq.asStopOrder(Sell, tradeQty, openPrice - stoplossMargin, true)))
               )
               (o1, o2, resF)
             }
@@ -407,7 +408,7 @@ object OrchestratorActor {
             override def openOrder(l: Ledger): (String, Future[Order]) = {
               val price = l.askPrice
               actorCtx.log.info(s"$desc: opening @ $price")
-              restGateway.placeLimitOrderAsync(tradeQty, price, false, OrderSide.Sell)
+              restGateway.placeLimitOrderAsync(tradeQty, price, false, Sell)
             }
             override def cancelOrder(clOrdID: String): Future[Orders] = {
               actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")
@@ -430,8 +431,8 @@ object OrchestratorActor {
             override def onIrrecoverableError(l: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String, exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of short closing takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID", exc)
             override def openOrders(l: Ledger): (String, String, Future[Orders]) = {
               val (o1::o2::Nil, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
-                OrderReq.asLimitOrder(OrderSide.Buy, tradeQty, openPrice - takeProfitMargin, true),
-                OrderReq.asStopOrder(OrderSide.Buy, tradeQty, openPrice + stoplossMargin, true)))
+                OrderReq.asLimitOrder(Buy, tradeQty, openPrice - takeProfitMargin, true),
+                OrderReq.asStopOrder(Buy, tradeQty, openPrice + stoplossMargin, true)))
               )
               (o1, o2, resF)
             }

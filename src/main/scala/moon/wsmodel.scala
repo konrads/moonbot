@@ -4,6 +4,7 @@ import com.typesafe.scalalogging.Logger
 import org.joda.time.DateTime
 import play.api.libs.json._
 import play.api.libs.json.Reads._
+import moon.OrderStatus._
 import moon.jodaDateReads
 
 
@@ -66,8 +67,8 @@ object WsModel {
       case (Some("order"), _) => json.validate[UpsertOrder]
         .map(o => o.copy(data = o.data.map(od => od.copy(
           ordStatus =
-            if (od.ordStatus.contains(OrderStatus.Canceled) && od.text.exists(_.contains("had execInst of ParticipateDoNotInitiate")))
-              Some(OrderStatus.PostOnlyFailure)
+            if (od.ordStatus.contains(Canceled) && od.text.exists(_.contains("had execInst of ParticipateDoNotInitiate")))
+              Some(PostOnlyFailure)
             else
               od.ordStatus,
           amended = od.text.map(_.startsWith("Amended"))))))
