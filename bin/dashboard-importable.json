@@ -324,7 +324,7 @@
         "targets": [
           {
             "refId": "A",
-            "target": "aliasByMetric(moon.__pair__.data.*)"
+            "target": "aliasByMetric(moon.__pair__.data.pandl.*)"
           }
         ],
         "thresholds": [],
