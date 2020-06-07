@@ -195,7 +195,7 @@
         "dashLength": 10,
         "dashes": false,
         "datasource": "Local Graphite",
-        "fill": 10,
+        "fill": 7,
         "gridPos": {
           "h": 5,
           "w": 24,
@@ -223,7 +223,7 @@
         "seriesOverrides": [
           {
             "alias": "volume",
-            "color": "#34269e"
+            "color": "#2f575e"
           }
         ],
         "spaceLength": 10,
