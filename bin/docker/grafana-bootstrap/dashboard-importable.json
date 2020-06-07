@@ -124,14 +124,14 @@
             "hide": true,
             "refCount": 1,
             "refId": "B",
-            "target": "alias(divideSeries(removeBelowValue(moon.__pair__.data.pandl.delta, 0.000001), moon.__pair__.data.pandl.delta), 'profit_indicator')",
+            "target": "alias(divideSeries(removeBelowValue(moon.__pair__.data.pandl.delta, 0), moon.__pair__.data.pandl.delta), 'profit_indicator')",
             "textEditor": true
           },
           {
             "hide": true,
             "refCount": 1,
             "refId": "C",
-            "target": "alias(divideSeries(removeAboveValue(moon.__pair__.data.pandl.delta, -0.000001), moon.__pair__.data.pandl.delta), 'loss_indicator')",
+            "target": "alias(divideSeries(removeAboveValue(moon.__pair__.data.pandl.delta, 0), moon.__pair__.data.pandl.delta), 'loss_indicator')",
             "textEditor": true
           },
           {
@@ -814,7 +814,7 @@
         ],
         "format": "none",
         "gauge": {
-          "maxValue": 20,
+          "maxValue": 1000,
           "minValue": 0,
           "show": true,
           "thresholdLabels": false,
@@ -864,7 +864,7 @@
         "targets": [
           {
             "refId": "A",
-            "target": "alias(moon.__pair__.data.myTradeCnt, 'Order Count')"
+            "target": "alias(moon.__pair__.data.myTradeCnt, 'Trade Count')"
           }
         ],
         "thresholds": "",
@@ -878,7 +878,7 @@
             "value": "null"
           }
         ],
-        "valueName": "total"
+        "valueName": "current"
       },
       {
         "cacheTimeout": null,
@@ -891,7 +891,7 @@
         ],
         "format": "none",
         "gauge": {
-          "maxValue": 20,
+          "maxValue": 100,
           "minValue": 0,
           "show": true,
           "thresholdLabels": false,
@@ -955,7 +955,7 @@
             "value": "null"
           }
         ],
-        "valueName": "total"
+        "valueName": "current"
       }
     ],
     "refresh": "30s",
