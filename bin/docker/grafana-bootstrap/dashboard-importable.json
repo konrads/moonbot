@@ -406,7 +406,7 @@
           {
             "refCount": 1,
             "refId": "A",
-            "target": "aliasByMetric(moon.__pair__.data.sentimentScore)"
+            "target": "aliasByMetric(moon.__pair__.data.sentiment.score)"
           }
         ],
         "thresholds": [],
@@ -488,7 +488,7 @@
           {
             "refCount": 1,
             "refId": "A",
-            "target": "aliasByMetric(moon.__pair__.data.tickDirScore)"
+            "target": "aliasByMetric(moon.__pair__.data.tickDir.score)"
           }
         ],
         "thresholds": [],

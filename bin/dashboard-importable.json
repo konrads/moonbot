@@ -406,7 +406,7 @@
           {
             "refCount": 1,
             "refId": "A",
-            "target": "aliasByMetric(moon.__pair__.data.sentimentScore)"
+            "target": "aliasByMetric(moon.__pair__.data.sentiment.score)"
           }
         ],
         "thresholds": [],
@@ -488,7 +488,7 @@
           {
             "refCount": 1,
             "refId": "A",
-            "target": "aliasByMetric(moon.__pair__.data.tickDirScore)"
+            "target": "aliasByMetric(moon.__pair__.data.tickDir.score)"
           }
         ],
         "thresholds": [],
@@ -864,11 +864,11 @@
         "targets": [
           {
             "refId": "A",
-            "target": "alias(moon.__pair__.data.myTradesCnt, 'Trades Count')"
+            "target": "alias(moon.__pair__.data.myOrderCnt, 'Order Count')"
           }
         ],
         "thresholds": "",
-        "title": "myTradesCount",
+        "title": "myOrderCount",
         "type": "singlestat",
         "valueFontSize": "80%",
         "valueMaps": [
