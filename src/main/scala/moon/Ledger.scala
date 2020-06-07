@@ -149,7 +149,7 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
 
     val currOrders = ledgerOrders.filter(o => o.myOrder && o.ordStatus == Filled)
     if (currOrders.isEmpty)
-      copy(ledgerMetrics=ledgerMetrics.copy(metrics=metricsVals, runningPandl=0), trades=Nil)
+      copy(ledgerMetrics=ledgerMetrics.copy(metrics=metricsVals), trades=Nil)
     else {
       val firstSide = currOrders.last.side // note: in descending
       val currOrders2 = currOrders.dropWhile(_.side == firstSide) // eliminate unfinished buy/sell legs
