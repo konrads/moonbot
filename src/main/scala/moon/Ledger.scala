@@ -140,7 +140,8 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
     val metricsVals = Map(
         "data.price"           -> (bidPrice + askPrice) / 2,
         "data.volume"          -> volume,
-        "data.pandl.delta"      -> 0,
+        "data.pandl.pandl"     -> ledgerMetrics.runningPandl,
+        "data.pandl.delta"     -> 0,
         "data.tickDir.score"   -> tickDirScore,
         "data.sentiment.score" -> sentimentScore,
         "data.myTradeCnt"      -> myOrders.count(_.ordStatus == Filled)
