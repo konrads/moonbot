@@ -28,7 +28,7 @@ cd bin
 Start bot:
 ```
 sbt run  # Note: clears position and cancels position orders!
-# or sbt "run --flush false" if you want orders/positions open, but closing of orders may impact the bot...
+# or sbt "run --flush false" if you want to keep positions/orders open, which *may* interfer with the bot...
 # or sbt assembly && java -jar ./target/scala-2.13/MoonBot-assembly-0.1.jar
 ```
 
