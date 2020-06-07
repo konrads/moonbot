@@ -155,7 +155,7 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       val currOrders2 = currOrders.dropWhile(_.side == firstSide) // eliminate unfinished buy/sell legs
       val currOrders3 = currOrders2.takeWhile(_.timestamp > ledgerMetrics.lastOrderTimestamp)
       if (currOrders3.isEmpty)
-        copy(ledgerMetrics=ledgerMetrics.copy(metrics=metricsVals, runningPandl=0), trades=Nil)
+        copy(ledgerMetrics=ledgerMetrics.copy(metrics=metricsVals), trades=Nil)
       else {
         val pandlDelta = currOrders3.map {
           case LedgerOrder(_, _, price, qty, _, Buy, Limit, _, _, true)  =>  qty / price * (1 + makerRebate)
