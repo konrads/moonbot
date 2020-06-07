@@ -29,6 +29,8 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       os.orders.foldLeft(this)((soFar, o) => soFar.record(o))
     case o: Order =>
       ledgerOrdersByID.get(o.orderID) match {
+        case Some(existing) if existing.ordStatus == Filled || existing.ordStatus == Canceled =>
+          this
         case Some(existing) =>
           val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), ordStatus=o.ordStatus.get, price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), timestamp=o.timestamp)
           val ledgerOrdersByClOrdID2 = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2)
