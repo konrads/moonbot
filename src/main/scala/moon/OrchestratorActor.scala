@@ -389,7 +389,8 @@ object OrchestratorActor {
             override def openOrders(l: Ledger): (String, String, Future[Orders]) = {
               val (o1::o2::Nil, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
                 OrderReq.asLimitOrder(Sell, tradeQty, openPrice + takeProfitMargin, true),
-                OrderReq.asStopOrder(Sell, tradeQty, openPrice - stoplossMargin, true)))
+                OrderReq.asTrailingStopOrder(Sell, tradeQty, stoplossMargin, true)))
+                // or for market stop: OrderReq.asStopOrder(Sell, tradeQty, openPrice - stoplossMargin, true)))
               )
               (o1, o2, resF)
             }
@@ -432,7 +433,8 @@ object OrchestratorActor {
             override def openOrders(l: Ledger): (String, String, Future[Orders]) = {
               val (o1::o2::Nil, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
                 OrderReq.asLimitOrder(Buy, tradeQty, openPrice - takeProfitMargin, true),
-                OrderReq.asStopOrder(Buy, tradeQty, openPrice + stoplossMargin, true)))
+                OrderReq.asTrailingStopOrder(Buy, tradeQty, stoplossMargin, true)))
+                // or for market stop: OrderReq.asStopOrder(Buy, tradeQty, openPrice + stoplossMargin, true)))
               )
               (o1, o2, resF)
             }

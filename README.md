@@ -42,9 +42,9 @@ and [RestGateway](src/main/scala/moon/RestGateway.scala) for Rest requests (issu
 - init - wait till enough info is captured to start trading
 - idle - wait till decision is made to go long or short
 - opening long - issue long limit order, amending price if moves in the expected direction, flip to idle if price moves in the opposite direction
-- closing long - issue short limit takeProfit and market stop orders, once filled - cancel the other
+- closing long - issue short limit takeProfit and trailing stop orders, once filled - cancel the other
 - opening short - issue short limit order, amending price if moves in the expected direction, flip to idle if price moves in the opposite direction
-- closing short - issue long limit takeProfit and market stop orders, once filled - cancel the other
+- closing short - issue long limit takeProfit and trailing stop orders, once filled - cancel the other
 
 [Ledger](src/main/scala/moon/Ledger.scala) is the place to record all events, and query for eg. whether to trade long/short. Also place to keep metrics.
 
