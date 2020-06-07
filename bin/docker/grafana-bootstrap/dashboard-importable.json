@@ -864,11 +864,11 @@
         "targets": [
           {
             "refId": "A",
-            "target": "alias(moon.__pair__.data.myTradesCnt, 'Trades Count')"
+            "target": "alias(moon.__pair__.data.myOrderCnt, 'Order Count')"
           }
         ],
         "thresholds": "",
-        "title": "myTradesCount",
+        "title": "myOrderCount",
         "type": "singlestat",
         "valueFontSize": "80%",
         "valueMaps": [

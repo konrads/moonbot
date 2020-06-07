@@ -14,7 +14,7 @@ bitmex.apiKey = "XXX"
 bitmex.apiSecret = "YYY"
 ```
 
-Setup with metrics and point browser @ `localhost:81` (user/pwd - ask me ㋡):
+Setup with metrics and point browser @ `localhost:81` (user/pwd - defined as `grafana_user`/`grafana_pwd` in [devops.sh](bin/devops.sh)):
 ```
 # setup generic graphite/grafana
 cd bin

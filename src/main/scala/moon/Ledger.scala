@@ -143,7 +143,7 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
         "data.pandl.delta"      -> 0,
         "data.tickDir.score"   -> tickDirScore,
         "data.sentiment.score" -> sentimentScore,
-        "data.myTradesCnt"     -> myOrders.count(_.ordStatus == Filled)
+        "data.myOrderCnt"      -> myOrders.count(_.ordStatus == Filled)
       )
 
     val currOrders = ledgerOrders.filter(o => o.myOrder && o.ordStatus == Filled)
