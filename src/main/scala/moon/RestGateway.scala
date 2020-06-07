@@ -269,7 +269,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).map(_.utf8String)
         case HttpResponse(s@StatusCodes.Forbidden, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-            b => Future.failed(BackoffRequiredError(s"Forbidden, assuming due to excessive requests: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+            b => Future.failed(TemporarilyUnavailableError(s"Forbidden, assuming due to excessive requests: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
         case HttpResponse(s@StatusCodes.BadRequest, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
@@ -282,6 +282,10 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
               else
                 Future.failed(new Exception(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
+        case HttpResponse(s@StatusCodes.BadGateway, _headers, entity, _) =>
+          entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
+            b => Future.failed(TemporarilyUnavailableError(s"BadGateway: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+          }
         case HttpResponse(s@StatusCodes.ServiceUnavailable, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
             b => Future.failed(TemporarilyUnavailableError(s"ServiceUnavailable: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
@@ -293,11 +297,10 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   }
 }
 
+sealed trait BackoffRequiredError
 sealed trait RecoverableError
-case class TemporarilyUnavailableError(msg: String) extends Exception(msg) with RecoverableError
+case class TemporarilyUnavailableError(msg: String) extends Exception(msg) with RecoverableError with BackoffRequiredError
 case class TimeoutError(msg: String) extends Exception(msg) with RecoverableError
-
-case class BackoffRequiredError(msg: String) extends Exception(msg)
 
 case class AccountHasInsufficientBalanceError(msg: String) extends Exception(msg)
 

@@ -46,7 +46,7 @@
     "links": [],
     "panels": [
       {
-        "content": "<div style=\"text-align:center; color:white; font-family: Andromeda; font-size: 1000%\">moon __pair__</div>",
+        "content": "<div style=\"text-align:center; color:white; font-family: Andromeda; font-size: 800%\">moon __pair__</div>",
         "gridPos": {
           "h": 5,
           "w": 24,
@@ -124,14 +124,14 @@
             "hide": true,
             "refCount": 1,
             "refId": "B",
-            "target": "alias(divideSeries(removeBelowValue(moon.__pair__.data.pandlDelta, 0.00001), moon.__pair__.data.pandlDelta), 'profit_indicator')",
+            "target": "alias(divideSeries(removeBelowValue(moon.__pair__.data.pandl.delta, 0.000001), moon.__pair__.data.pandl.delta), 'profit_indicator')",
             "textEditor": true
           },
           {
             "hide": true,
             "refCount": 1,
             "refId": "C",
-            "target": "alias(divideSeries(removeAboveValue(moon.__pair__.data.pandlDelta, -0.00001), moon.__pair__.data.pandlDelta), 'loss_indicator')",
+            "target": "alias(divideSeries(removeAboveValue(moon.__pair__.data.pandl.delta, -0.000001), moon.__pair__.data.pandl.delta), 'loss_indicator')",
             "textEditor": true
           },
           {
@@ -312,6 +312,10 @@
           {
             "alias": "pandl",
             "color": "#b7dbab"
+          },
+          {
+            "alias": "delta",
+            "color": "#badff4"
           }
         ],
         "spaceLength": 10,
@@ -320,7 +324,7 @@
         "targets": [
           {
             "refId": "A",
-            "target": "aliasByMetric(moon.__pair__.data.pandl)"
+            "target": "aliasByMetric(moon.__pair__.data.*)"
           }
         ],
         "thresholds": [],

@@ -7,27 +7,49 @@ Run
 First setup `application.private.conf` in $PROJECT_DIR:
 ```
 bitmex.url = "https://www.bitmex.com"
-# bitmex.url = "https://testnet.bitmex.com"
+# or bitmex.url = "https://testnet.bitmex.com"
 bitmex.wsUrl = "wss://testnet.bitmex.com/realtime?subscribe=orderBook10:XBTUSD,trade:XBTUSD,instrument:.BXBT,funding:XBTUSD"
-# bitmex.wsUrl = "wss://www.bitmex.com/realtime?subscribe=orderBook10:XBTUSD,trade:XBTUSD,instrument:.BXBT,funding:XBTUSD"
+# or bitmex.wsUrl = "wss://www.bitmex.com/realtime?subscribe=orderBook10:XBTUSD,trade:XBTUSD,instrument:.BXBT,funding:XBTUSD"
 bitmex.apiKey = "XXX"
 bitmex.apiSecret = "YYY"
 ```
 
-Setup with metrics and point browser @ `localhost:81`:
+Setup with metrics and point browser @ `localhost:81` (user/pwd - ask me ㋡):
 ```
-# setup graphite/grafana
+# setup generic graphite/grafana
 cd bin
 ./devops.sh  # for options
 ./devops.sh grafana-build
 ./devops.sh grafana-run
+# setup moon user/dashboard in another shell
 ./devops.sh grafana-bootstrap-run
 ```
 
 Start bot:
 ```
 sbt run
+# or sbt assembly && java -jar ./target/scala-2.13/MoonBot-assembly-0.1.jar
 ```
+
+
+Design
+------
+Bot communicates with `Bitmex` via [WsGateway](src/main/scala/moon/WsGateway.scala) for listening of websocket events (order lifecycle notifications, trade notifications, orderbook notifications, etc)
+and [RestGateway](src/main/scala/moon/RestGateway.scala) for Rest requests (issue order, cancel, amend, etc). 
+
+[OrchestratorActor](src/main/scala/moon/OrchestratorActor.scala) is the *BIG* FSM that handles both websocket notifications and async REST responses. It divides main states into:
+- init - wait till enough info is captured to start trading
+- idle - wait till decision is made to go long or short
+- opening long - issue long limit order, amending price if moves in the expected direction, flip to idle if price moves in the opposite direction
+- closing long - issue short limit takeProfit and market stop orders, once filled - cancel the other
+- opening short - issue short limit order, amending price if moves in the expected direction, flip to idle if price moves in the opposite direction
+- closing short - issue long limit takeProfit and market stop orders, once filled - cancel the other
+
+[Ledger](src/main/scala/moon/Ledger.scala) is the place to record all events, and query for eg. whether to trade long/short. Also place to keep metrics.
+
+[Metrics](src/main/scala/moon/Metrics.scala) sends graphite packets, potentially adding JVM/system ones.
+
+[Cli](src/main/scala/moon/Cli.scala) allows for command line interactions with REST/websockets, for manual testing.
 
 
 Helpful operations
@@ -51,7 +73,7 @@ sbt "runMain moon.Cli --ordertype limit --side buy --price 9000 --qty 30 order"
 ...etc
 ```
 
-Gather all ws jsons (as per ws application.conf's bitmex.wsUrl)
+Gather all ws jsons:
 ```
 sbt "runMain moon.Cli monitorDebug" | grep "###" | sed 's/.*ws json: //'
 ```

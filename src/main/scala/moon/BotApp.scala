@@ -88,7 +88,7 @@ object BotApp extends App {
       res2 <- restGateway.cancelAllOrdersAsync()
     } yield (res1, res2)
   }
-  val wsGateway = new WsGateWay(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
+  val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
   val metrics = Metrics(graphiteHost, graphitePort, namespace)
 
   // FIXME: need to setup actor guardian (supervisor?) to restart!

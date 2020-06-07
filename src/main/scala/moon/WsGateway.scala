@@ -14,8 +14,8 @@ import scala.concurrent.{Future, Promise}
 import scala.util.{Failure, Success}
 
 // thanks to: https://doc.akka.io/docs/akka-http/10.0.2/scala/http/client-side/websocket-support.html#websocketclientlayer
-class WsGateWay(val wsUrl: String, val apiKey: String, val apiSecret: String, minSleepInMs: Option[Long] = Some(5000))(implicit val system: ActorSystem) {
-  private val log = Logger[WsGateWay]
+class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, minSleepInMs: Option[Long] = Some(5000))(implicit val system: ActorSystem) {
+  private val log = Logger[WsGateway]
 
   private var endOfLivePromise: Promise[Option[Message]] = null // for the purpose of killing the WS connection
 

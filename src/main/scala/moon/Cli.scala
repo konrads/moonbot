@@ -54,7 +54,7 @@ object Cli extends App {
   }
 
   val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
-  val wsGateway = new WsGateWay(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, minSleepInMs = cliConf.minwssleep.toOption)
+  val wsGateway = new WsGateway(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, minSleepInMs = cliConf.minwssleep.toOption)
   val consumeAll: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value, _) => log.info(s"WS ${value.getClass.getSimpleName}: $value")
     case s:JsError           => log.error(s"WS error!: $s")
