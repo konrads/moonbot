@@ -67,7 +67,7 @@ class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
     log.info(s"Sleeping for $minSleepInMs ms...")
     // in a real application you would not side effect here
     connected.onComplete(status => log.info(s"WebSocket connection completed, status: $status"))
-    Thread.sleep(minSleepInMs.getOrElse(5000))  // to capture error messages prior to closing
+    Thread.sleep(minSleepInMs.getOrElse(3000))  // in case of an error, capture messages prior to closing
   }
 
   def buildOpJson(op: String, args: Any*): String = {

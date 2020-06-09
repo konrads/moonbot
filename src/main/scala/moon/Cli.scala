@@ -1,6 +1,6 @@
 package moon
 
-import java.io.File
+import java.io.{File, FileWriter}
 
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.actor.typed.scaladsl.Behaviors
@@ -41,6 +41,8 @@ object Cli extends App {
     val orderid         = opt[String]()
     val clordid         = opt[String]()
     val minwssleep      = opt[Long](default = Some(100))
+    val inputdir        = opt[String](default = Some("data"))
+    val outputcsv       = opt[String](default = Some("data/out.csv"))
     val action          = trailArg[String]()
     verify()
   }
@@ -86,6 +88,8 @@ object Cli extends App {
 
   // validate sets of options
   (cliConf.action(), cliConf.ordertype.toOption, cliConf.price.toOption, cliConf.takeprofitprice.toOption, cliConf.stoplossprice.toOption, cliConf.pegoffsetvalue.toOption, cliConf.qty.toOption, cliConf.orderid.toOption, cliConf.clordid.toOption, cliConf.reduceOnly.toOption) match {
+    case ("processTrades", _, _, _, _, _, _, _, _, _) =>
+      CliUtils.processTradesFromLogs(new File(cliConf.inputdir()), new File(cliConf.outputcsv()))
     case ("order", Some("takeProfitAndStoploss"), _, Some(takeProfitPrice), Some(stoplossPrice), _, Some(qty), _, _, _) =>
       log.info(s"issuing $oSide takeProfitAndStoploss'es: takeProfitPrice: $takeProfitPrice, stoplossPrice: $stoplossPrice, qty: $qty")
       wsGateway.run(consumeOrder)
@@ -224,5 +228,43 @@ object Cli extends App {
     case (action, orderTypeOpt, priceOpt, takeProfitPriceOpt, stoplossPriceOpt, pegOffsetValueOpt, qtyOpt, orderidOpt, clOrdOpt, reduceOnlyOpt) =>
       log.error(s"Unknown params: action: $action, orderType: $orderTypeOpt, price: $priceOpt, takeProfitPriceOpt: $takeProfitPriceOpt, stoplossPriceOpt: $stoplossPriceOpt, pegOffsetValueOpt: $pegOffsetValueOpt, amount: $qtyOpt, orderid: $orderidOpt, clOrdOpt: $clOrdOpt, reduceOnlyOpt: $reduceOnlyOpt")
       sys.exit(-1)
+  }
+}
+
+object CliUtils {
+  case class TradeTick(ts: Long, open: BigDecimal, close: BigDecimal, high: BigDecimal, low: BigDecimal, volume: Int) extends Ordered[TradeTick] {
+    import scala.math.Ordered.orderingToOrdered
+    override def compare(that: TradeTick): Int = ((this.ts, this.close) compare (that.ts, that.close))
+  }
+
+  def processTradesFromLogs(logDir: File, outputCsv: File): Unit = {
+    import scala.io.Source
+
+    val logFiles = logDir.listFiles().filter(_.getName.endsWith(".log"))
+    val trades = logFiles.foldLeft(Seq.empty[Trade]) {
+      case (trades2, f) =>
+        val fSource = Source.fromFile(f)
+        Cli.log.info(s"...Loading: $f")
+        fSource.getLines().foldLeft(trades2) {
+          case (trades3, line) =>
+            WsModel.asModel(line) match {
+              case JsSuccess(t:Trade, _) => trades3 :+ t
+              case JsSuccess(_, _)       => trades3
+              case JsError(errors)       => Cli.log.error(s"Failed ot parse $line due to $errors"); trades3
+            }
+        }
+    }
+    val ticks = trades.flatMap(_.data).groupBy(_.timestamp.getMillis / 60000).map {
+      case (ts, orders) =>
+        TradeTick(ts=ts, open=orders.head.price, close=orders.last.price, high=orders.map(_.price).max, low=orders.map(_.price).min, volume=orders.map(_.size).sum)
+    }.toSeq.sorted
+
+    // output CSV
+    val writer = new FileWriter(outputCsv)
+    for {
+      t <- ticks
+    } writer.write(s"${t.ts},${t.open},${t.close},${t.high},${t.low},${t.volume}\n")
+    writer.close()
+    Cli.log.info(s"Output ${ticks.size} TradeTicks out of ${trades.size} trades, in $outputCsv!")
   }
 }
