@@ -29,10 +29,13 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       os.orders.foldLeft(this)((soFar, o) => soFar.record(o))
     case o: Order =>
       ledgerOrdersByID.get(o.orderID) match {
-        case Some(existing) if existing.ordStatus == Filled || existing.ordStatus == Canceled =>
-          this
+//        case Some(existing) if existing.ordStatus == Filled || existing.ordStatus == Canceled =>
+//          // mark as "mine" only
+//          val existing2 = existing.copy(myOrder = true)
+//          val ledgerOrdersByClOrdID2 = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2)
+//          copy(ledgerOrders=ledgerOrders-existing+existing2, ledgerOrdersByID=ledgerOrdersByID + (existing2.orderID -> existing2), ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
         case Some(existing) =>
-          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), ordStatus=o.ordStatus.get, price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), timestamp=o.timestamp)
+          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), ordStatus=o.ordStatus.getOrElse(existing.ordStatus), price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), timestamp=o.timestamp)
           val ledgerOrdersByClOrdID2 = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2)
           copy(ledgerOrders=ledgerOrders-existing+existing2, ledgerOrdersByID=ledgerOrdersByID + (existing2.orderID -> existing2), ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
         case None =>
@@ -136,18 +139,19 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
     val tickDirScore = if (tickDirs.isEmpty) 0.0 else tickDirs.map {
       case MinusTick     => -1
       case ZeroMinusTick => -.5
-      case ZeroPlusTick  => .5
-      case PlusTick      => 1
+      case ZeroPlusTick  =>  .5
+      case PlusTick      =>  1
     }.sum / tickDirs.length
     val metricsVals = Map(
-        "data.price"           -> (bidPrice + askPrice) / 2,
-        "data.volume"          -> volume,
-        "data.pandl.pandl"     -> ledgerMetrics.runningPandl,
-        "data.pandl.delta"     -> 0,
-        "data.tickDir.score"   -> tickDirScore,
-        "data.sentiment.score" -> sentimentScore,
-        "data.myTradeCnt"      -> myOrders.count(_.ordStatus == Filled)
-      )
+      "data.price"           -> (bidPrice + askPrice) / 2,
+      "data.volume"          -> volume,
+      "data.tickDir.score"   -> tickDirScore,
+      "data.sentiment.score" -> sentimentScore,
+      "data.myTradeCnt"      -> myOrders.count(_.ordStatus == Filled),
+      // following will be updated if have filled myOrders since last withMetrics()
+      "data.pandl.pandl"     -> ledgerMetrics.runningPandl,
+      "data.pandl.delta"     -> 0,
+    )
 
     val currOrders = ledgerOrders.filter(o => o.myOrder && o.ordStatus == Filled)
     if (currOrders.isEmpty)
@@ -156,6 +160,8 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       val firstSide = currOrders.last.side // note: in descending
       val currOrders2 = currOrders.dropWhile(_.side == firstSide) // eliminate unfinished buy/sell legs
       val currOrders3 = currOrders2.takeWhile(_.timestamp > ledgerMetrics.lastOrderTimestamp)
+      // used for debugging ledger's pandl/delta:
+      // import Ledger.log; log.debug(s"Ledger.withMetrics: lastOrderTimestamp: ${ledgerMetrics.lastOrderTimestamp}\nledgerOrders:${ledgerOrders.toSeq.map(o => s"\n- $o").mkString}\ncurrOrders3:${currOrders3.toSeq.map(o => s"\n- $o").mkString}")
       if (currOrders3.isEmpty)
         copy(ledgerMetrics=ledgerMetrics.copy(metrics=metricsVals), trades=Nil)
       else {
@@ -177,4 +183,9 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       }
     }
   }
+}
+
+object Ledger {
+  import com.typesafe.scalalogging.Logger
+  private val log = Logger[Ledger]
 }

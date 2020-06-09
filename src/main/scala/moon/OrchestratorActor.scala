@@ -194,10 +194,10 @@ object OrchestratorActor {
                   actorCtx.log.error(s"${positionCloser.desc}: unexpected rejections on either takeProfit: ${tOrd.fullOrdID} and stoploss: ${sOrd.fullOrdID}")
                   positionCloser.onRejections(ledger2, tOrd, sOrd)
                 case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == Filled && sOrd.ordStatus == Canceled  =>
-                  actorCtx.log.info(s"${positionCloser.desc}: filled takeProfit: ${tOrd.fullOrdID} @ ${tOrd.price} and cancelled stoploss: ${sOrd.fullOrdID} ✔✔✔")
+                  actorCtx.log.info(s"${positionCloser.desc}: ✔✔✔ filled takeProfit: ${tOrd.fullOrdID} @ ${tOrd.price} and cancelled stoploss: ${sOrd.fullOrdID} ✔✔✔")
                   positionCloser.onProfit(ledger2)
                 case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == Canceled && sOrd.ordStatus == Filled  =>
-                  actorCtx.log.info(s"${positionCloser.desc}: cancelled takeProfit: ${tOrd.fullOrdID} and filled stoploss: ${sOrd.fullOrdID} @ ${sOrd.price} ✗✗✗")
+                  actorCtx.log.info(s"${positionCloser.desc}: ✗✗✗ cancelled takeProfit: ${tOrd.fullOrdID} and filled stoploss: ${sOrd.fullOrdID} @ ${sOrd.price} ✗✗✗")
                   positionCloser.onLoss(ledger2)
                 case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == PostOnlyFailure || sOrd.ordStatus == PostOnlyFailure =>
                   // FIXME: not dealing with PostOnlyFailure, in presumption that margins will always be large enough. Otherwise, will need IssueAmend cycle
@@ -214,7 +214,7 @@ object OrchestratorActor {
                   // some other combinations of states - keep going
                   loop(ctx.copy(ledger = ledger2))
                 case _  =>
-                  actorCtx.log.warn(s"${positionCloser.desc}: unexpected RestEvent: $os\nexpected to match takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID")
+                  actorCtx.log.debug(s"${positionCloser.desc}: unexpected RestEvent: $os\nexpected to match takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID")
                   loop(ctx.copy(ledger = ledger2))
               }
             case (_, RestEvent(Success(other))) =>
@@ -224,10 +224,10 @@ object OrchestratorActor {
               positionCloser.cancelOrders(takeProfitClOrdID, stoplossClOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
               actorCtx.log.warn(s"${positionCloser.desc}: re-issuing cancel on takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID")
               Behaviors.same
-            case (ClosePositionCtx(ledger, _, _, IssuingNew), RestEvent(Failure(_: RecoverableError))) =>
+            case (ClosePositionCtx(ledger, _, _, IssuingNew), RestEvent(Failure(exc: RecoverableError))) =>
               val (takeProfitClOrdID, stoplossClOrdID, resF) = positionCloser.openOrders(ledger)
               resF onComplete (res => actorCtx.self ! RestEvent(res))
-              actorCtx.log.info(s"${positionCloser.desc}: re-issued orders: takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID")
+              actorCtx.log.info(s"${positionCloser.desc}: re-issued orders: takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID, due to err: $exc")
               loop(ctx.copy(ledger, takeProfitClOrdID, stoplossClOrdID))
 
             case (_, RestEvent(Failure(_: IgnorableError))) => Behaviors.same
@@ -248,10 +248,10 @@ object OrchestratorActor {
                   actorCtx.log.error(s"${positionCloser.desc}: rejections on either takeProfit: ${tOrd.fullOrdID} and stoploss: ${sOrd.fullOrdID}")
                   positionCloser.onRejections(ledger2, tOrd, sOrd)
                 case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == Filled && sOrd.ordStatus == Canceled  =>
-                  actorCtx.log.info(s"${positionCloser.desc}: filled takeProfit: ${tOrd.fullOrdID} @ ${tOrd.price} and cancelled stoploss: ${sOrd.fullOrdID} ✔✔✔")
+                  actorCtx.log.info(s"${positionCloser.desc}: ✔✔✔ filled takeProfit: ${tOrd.fullOrdID} @ ${tOrd.price} and cancelled stoploss: ${sOrd.fullOrdID} ✔✔✔")
                   positionCloser.onProfit(ledger2)
                 case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == Canceled && sOrd.ordStatus == Filled  =>
-                  actorCtx.log.info(s"${positionCloser.desc}: cancelled takeProfit: ${tOrd.fullOrdID} and filled stoploss: ${sOrd.fullOrdID} @ ${sOrd.price} ✗✗✗")
+                  actorCtx.log.info(s"${positionCloser.desc}: ✗✗✗ cancelled takeProfit: ${tOrd.fullOrdID} and filled stoploss: ${sOrd.fullOrdID} @ ${sOrd.price} ✗✗✗")
                   positionCloser.onLoss(ledger2)
                 case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == PostOnlyFailure || sOrd.ordStatus == PostOnlyFailure =>
                   // FIXME: not dealing with PostOnlyFailure, in presumption that margins will always be large enough. Otherwise, will need IssueAmend cycle
@@ -381,8 +381,8 @@ object OrchestratorActor {
         def closeLong(ledger: Ledger, openPrice: BigDecimal): Behavior[ActorEvent] =
           closePosition(actorCtx, ledger, new PositionCloser {
             override val desc = "Long Close"
-            override def onProfit(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(ledger))
-            override def onLoss(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(ledger))
+            override def onProfit(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
+            override def onLoss(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
             override def onExternalCancels(l: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long closing takeProfitClOrdID: $takeProfitClOrdID or stoplossClOrdID: $stoplossClOrdID")
             override def onRejections(l: Ledger, orders: LedgerOrder*): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long closing orderID: ${orders.mkString(", ")}")
             override def onIrrecoverableError(l: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String, exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long closing takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID", exc)
@@ -425,8 +425,8 @@ object OrchestratorActor {
         def closeShort(ledger: Ledger, openPrice: BigDecimal): Behavior[ActorEvent] =
           closePosition(actorCtx, ledger, new PositionCloser {
             override val desc = "Short Close"
-            override def onProfit(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(ledger))
-            override def onLoss(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(ledger))
+            override def onProfit(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
+            override def onLoss(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
             override def onExternalCancels(l: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of short closing takeProfitClOrdID: $takeProfitClOrdID or stoplossClOrdID: $stoplossClOrdID")
             override def onRejections(l: Ledger, orders: LedgerOrder*): Behavior[ActorEvent] = throw new Exception(s"Unexpected rejection of long closing orders: ${orders.mkString(", ")}")
             override def onIrrecoverableError(l: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String, exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of short closing takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID", exc)
