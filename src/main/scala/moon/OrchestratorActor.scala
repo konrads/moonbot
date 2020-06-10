@@ -106,7 +106,7 @@ object OrchestratorActor {
                 actorCtx.log.warn(s"${positionOpener.desc}: unexpected cancellation of orderID: ${order.fullOrdID}")
                 positionOpener.onExternalCancel(ledger2, order.orderID)
               case other => // presumingly amended
-                actorCtx.log.debug(s"${positionOpener.desc}: catchall: $other in lifecycle: ${ctx.lifecycle}")
+                actorCtx.log.debug(s"${positionOpener.desc}: catchall: $other in lifecycle: ${ctx.lifecycle}, order: $o")
                 loop(ctx.copy(ledger = ledger2, lifecycle = Waiting))
             }
           case (OpenPositionCtx(ledger, clOrdID, IssuingAmend), RestEvent(Failure(_: RecoverableError))) =>
@@ -161,7 +161,7 @@ object OrchestratorActor {
                   }
                 }
               case other => // catch all
-                actorCtx.log.debug(s"${positionOpener.desc}: catchall: $other in lifecycle: $lifecycle")
+                actorCtx.log.debug(s"${positionOpener.desc}: catchall: $other in lifecycle: $lifecycle, data: $data")
                 loop(ctx.copy(ledger = ledger2))
             }
         }
@@ -258,11 +258,11 @@ object OrchestratorActor {
                   throw new Exception(s"PostOnlyFailure on closing position... need to deal?\ntakeProfitOrder: $takeProfitOrder\nstoplossOrder = $stoplossOrder")
                 case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == Filled && lifecycle != IssuingCancel =>
                   positionCloser.cancelOrders(sOrd.clOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
-                  actorCtx.log.info(s"${positionCloser.desc}: filled takeProfit: ${tOrd.fullOrdID} straight away, issuing cancel on stoploss: ${sOrd.fullOrdID}")
+                  actorCtx.log.info(s"${positionCloser.desc}: filled takeProfit: ${tOrd.fullOrdID}, issuing cancel on stoploss: ${sOrd.fullOrdID}")
                   loop(ctx.copy(ledger = ledger2, lifecycle = IssuingCancel))
                 case (Some(tOrd), Some(sOrd)) if sOrd.ordStatus == Filled && lifecycle != IssuingCancel =>
                   positionCloser.cancelOrders(tOrd.clOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
-                  actorCtx.log.info(s"${positionCloser.desc}: filled stoploss: ${sOrd.fullOrdID} straight away, issuing cancel on takeProfit: ${tOrd.fullOrdID}")
+                  actorCtx.log.info(s"${positionCloser.desc}: filled stoploss: ${sOrd.fullOrdID}, issuing cancel on takeProfit: ${tOrd.fullOrdID}")
                   loop(ctx.copy(ledger = ledger2, lifecycle = IssuingCancel))
                 case (Some(tOrd), Some(sOrd)) =>
                   // some other combinations of states - keep going
@@ -270,7 +270,7 @@ object OrchestratorActor {
                   loop(ctx.copy(ledger = ledger2))
                 case other  =>
                   // if not our orders or non Order(s)
-                  actorCtx.log.debug(s"${positionCloser.desc}: catchall: $other in lifecycle: $lifecycle")
+                  actorCtx.log.debug(s"${positionCloser.desc}: catchall: $other in lifecycle: $lifecycle, data: $data")
                   loop(ctx.copy(ledger = ledger2))
               }
           }

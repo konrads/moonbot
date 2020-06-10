@@ -284,7 +284,11 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
           }
         case HttpResponse(s@StatusCodes.BadGateway, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-            b => Future.failed(TemporarilyUnavailableError(s"BadGateway: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+            b =>
+              if (method == POST)
+                Future.failed(TemporarilyUnavailableOnPostError(s"BadGateway(on POST): urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+              else
+                Future.failed(TemporarilyUnavailableError(s"BadGateway: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
         case HttpResponse(s@StatusCodes.ServiceUnavailable, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
@@ -306,3 +310,5 @@ case class AccountHasInsufficientBalanceError(msg: String) extends Exception(msg
 
 sealed trait IgnorableError
 case class InvalidOrdStatusError(msg: String) extends Exception(msg) with IgnorableError
+
+case class TemporarilyUnavailableOnPostError(msg: String) extends Exception(msg)

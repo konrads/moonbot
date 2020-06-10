@@ -154,33 +154,28 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
     )
 
     val currOrders = ledgerOrders.filter(o => o.myOrder && o.ordStatus == Filled)
-    if (currOrders.isEmpty)
+    // FIXME: *BIG* assumption - counting filled order pairs. Probably should instead use a concept of legs/roundtrips
+    val currOrders2 = currOrders.takeWhile(_.timestamp > ledgerMetrics.lastOrderTimestamp)
+    val currOrders3 = if (currOrders2.size % 2 == 1) currOrders2.drop(1) else currOrders2
+    if (currOrders3.isEmpty)
       copy(ledgerMetrics=ledgerMetrics.copy(metrics=metricsVals), trades=Nil)
     else {
-      val firstSide = currOrders.last.side // note: in descending
-      val currOrders2 = currOrders.dropWhile(_.side == firstSide) // eliminate unfinished buy/sell legs
-      val currOrders3 = currOrders2.takeWhile(_.timestamp > ledgerMetrics.lastOrderTimestamp)
-      // used for debugging ledger's pandl/delta:
-      // import Ledger.log; log.debug(s"Ledger.withMetrics: lastOrderTimestamp: ${ledgerMetrics.lastOrderTimestamp}\nledgerOrders:${ledgerOrders.toSeq.map(o => s"\n- $o").mkString}\ncurrOrders3:${currOrders3.toSeq.map(o => s"\n- $o").mkString}")
-      if (currOrders3.isEmpty)
-        copy(ledgerMetrics=ledgerMetrics.copy(metrics=metricsVals), trades=Nil)
-      else {
-        val pandlDelta = currOrders3.map {
-          case LedgerOrder(_, _, price, qty, _, Buy, Limit, _, _, true)  =>  qty / price * (1 + makerRebate)
-          case LedgerOrder(_, _, price, qty, _, Buy, _, _, _, true)      =>  qty / price * (1 - takerFee)
-          case LedgerOrder(_, _, price, qty, _, Sell, Limit, _, _, true) => -qty / price * (1 - makerRebate)
-          case LedgerOrder(_, _, price, qty, _, Sell, _, _, _, true)     => -qty / price * (1 + takerFee)
-          case _                                                         =>  BigDecimal(0)
-        }.sum
+      import Ledger.log; log.debug(s"Ledger.withMetrics: lastOrderTimestamp: ${ledgerMetrics.lastOrderTimestamp}\nledgerOrders:${ledgerOrders.toSeq.map(o => s"\n- $o").mkString}\ncurrOrders3:${currOrders3.toSeq.map(o => s"\n- $o").mkString}")
+      val pandlDelta = currOrders3.map {
+        case LedgerOrder(_, _, price, qty, _, Buy, Limit, _, _, true)  =>  qty / price * (1 + makerRebate)
+        case LedgerOrder(_, _, price, qty, _, Buy, _, _, _, true)      =>  qty / price * (1 - takerFee)
+        case LedgerOrder(_, _, price, qty, _, Sell, Limit, _, _, true) => -qty / price * (1 - makerRebate)
+        case LedgerOrder(_, _, price, qty, _, Sell, _, _, _, true)     => -qty / price * (1 + takerFee)
+        case _                                                         =>  BigDecimal(0)
+      }.sum
 
-        val runningPandl2 = ledgerMetrics.runningPandl + pandlDelta
-        val ledgerMetrics2 = ledgerMetrics.copy(
-          metrics = metricsVals + ("data.pandl.pandl" -> runningPandl2) + ("data.pandl.delta" -> pandlDelta),
-          lastOrderTimestamp = currOrders3.head.timestamp,
-          runningPandl = runningPandl2
-        )
-        copy(ledgerMetrics=ledgerMetrics2, trades=Nil)
-      }
+      val runningPandl2 = ledgerMetrics.runningPandl + pandlDelta
+      val ledgerMetrics2 = ledgerMetrics.copy(
+        metrics = metricsVals + ("data.pandl.pandl" -> runningPandl2) + ("data.pandl.delta" -> pandlDelta),
+        lastOrderTimestamp = currOrders3.head.timestamp,
+        runningPandl = runningPandl2
+      )
+      copy(ledgerMetrics=ledgerMetrics2, trades=Nil)
     }
   }
 }

@@ -24,16 +24,20 @@ class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
 
     val incoming: Sink[Message, Future[Done]] =
       Sink.foreach[Message] {
-        case message: TextMessage.Strict =>
-          val asModel = WsModel.asModel(message.text)
+        case TextMessage.Strict(text) =>
+          val asModel = WsModel.asModel(text)
           if (wsConsume.isDefinedAt(asModel))
             wsConsume(asModel)
           else
             log.debug(s"Ignored ws message: $asModel")
-        case message: TextMessage =>
-          message.toStrict(30.seconds).onComplete {
-            case Success(message) =>
-              val asModel = WsModel.asModel(message.text)
+        case TextMessage.Streamed(stream) =>
+          stream
+            .limit(100)
+            .completionTimeout(5.seconds)
+            .runFold("")(_ + _)
+            .onComplete {
+            case Success(text) =>
+              val asModel = WsModel.asModel(text)
               if (wsConsume.isDefinedAt(asModel))
                 wsConsume(asModel)
               else
@@ -41,6 +45,18 @@ class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
             case Failure(exc) =>
               log.error(s"Unexpected error on ws message fetch", exc)
           }
+          // Note: switched to above as can also limit to 100 frames. toStrict() does the same without the limit()...
+//        case message: TextMessage.Streamed =>
+//          message.toStrict(5.seconds).onComplete {
+//            case Success(message) =>
+//              val asModel = WsModel.asModel(message.text)
+//              if (wsConsume.isDefinedAt(asModel))
+//                wsConsume(asModel)
+//              else
+//                log.debug(s"Ignored ws message: $asModel")
+//            case Failure(exc) =>
+//              log.error(s"Unexpected error on ws message fetch", exc)
+//          }
         case other  =>
           log.error(s"Unexpected non-text message: $other")
       }
