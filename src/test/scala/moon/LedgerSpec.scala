@@ -4,10 +4,15 @@ import org.scalatest._
 import org.scalatest.matchers.should._
 import play.api.libs.json.JsSuccess
 import moon.ModelsSpec._
+import moon.OrderStatus._
+import moon.OrderSide._
+import moon.OrderType._
 
 import scala.collection.SortedSet
 import com.github.nscala_time.time.Imports._
-import org.joda.time.DateTimeZone
+import org.joda.time.{DateTime, DateTimeZone}
+
+import scala.util.Success
 
 
 class LedgerSpec extends FlatSpec with Matchers with Inside {
@@ -122,7 +127,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
 
     val l5 = l4.withMetrics()
     val metrics5 = l5.ledgerMetrics
-    metrics5 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("-0.2313269230769230769230769230769231"), "data.pandl.delta" -> BigDecimal("-0.2313269230769230769230769230769231"), "data.sentiment.score" -> BigDecimal(0), "data.myTradeCnt" -> 3, "data.volume" -> 0.0, "data.tickDir.score" -> 0.0), parseDateTime("2010-01-05T00:00:00.000Z"), BigDecimal("-0.2313269230769230769230769230769231"))  // no buy/sell as yet
+    metrics5 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("0.3524439102564102564102564102564102"), "data.pandl.delta" -> BigDecimal("0.3524439102564102564102564102564102"), "data.sentiment.score" -> BigDecimal(0), "data.myTradeCnt" -> 3, "data.volume" -> 0, "data.tickDir.score" -> 0.0), parseDateTime("2010-01-05T12:00:00.000Z"), BigDecimal("0.3524439102564102564102564102564102"))  // no buy/sell as yet
 
     // add sell, recalculate metrics
     val l6 = buildLedger(l5,
@@ -133,7 +138,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     )
     val l7 = l6.withMetrics()
     val metrics7 = l7.ledgerMetrics
-    metrics7 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("-0.2328269230769230769230769230769231"), "data.pandl.delta" -> BigDecimal("-0.00150"), "data.sentiment.score" -> BigDecimal(0), "data.myTradeCnt" -> 4, "data.volume" -> 0.0, "data.tickDir.score" -> 0.0), parseDateTime("2010-01-07T00:00:00.000Z"), BigDecimal("-0.2328269230769230769230769230769231"))  // no buy/sell as yet
+    metrics7 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("1.600881410256410256410256410256410"), "data.pandl.delta" -> BigDecimal("1.2484375"), "data.sentiment.score" -> BigDecimal(0), "data.myTradeCnt" -> 4, "data.volume" -> 0.0, "data.tickDir.score" -> 0.0), parseDateTime("2010-01-07T12:00:00.000Z"), BigDecimal("1.600881410256410256410256410256410"))  // no buy/sell as yet
   }
 
   it should "order LedgerOrders desc" in {
@@ -144,6 +149,73 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
       LedgerOrder("o2",   "clo2",   12, 23, null, null, null, None, parseDateTime("2010-01-02T00:00:00.000Z"), true),
     )
     set.toSeq.map(_.orderID) shouldBe Seq("o3.5", "o3", "o2", "o1")
+  }
+
+  it should "do basic pandl" in {
+    // do p and l on: long b & s -> long b & s -> short s & b -> short s & b -> long b & s
+    import ModelsSpec._
+    def addToLedger(l: Ledger, expPandl: BigDecimal, expPandlDelta: BigDecimal, orders: Seq[(String, String)]): Ledger = {
+      val l2 = orders.foldLeft(l) {
+        case (soFar, ("rest", order)) => soFar.record(RestModel.asModel(order).get)
+        case (soFar, ("ws", order)) => soFar.record(WsModel.asModel(order).get)
+      }
+      val l3 = l2.withMetrics()
+      l3.ledgerMetrics.metrics("data.pandl.pandl") shouldBe expPandl
+      l3.ledgerMetrics.metrics("data.pandl.delta") shouldBe expPandlDelta
+      l3
+    }
+
+    val l0 = Ledger(orderBook = OrderBook("b1", "b2", data=Nil))
+
+    // long buy & sell, split
+    val l1_1 = addToLedger(l0, 0, 0, Seq(
+      ("rest", restOrderNew("o1", Buy, 10, 1, Limit, "2010-01-01T00:00:00.000Z")),
+      ("ws",   wsOrderAmend("o1", 100 /* ignored */, "2010-01-01T00:00:00.000Z")),
+    ))
+    val expPandlDelta1 = BigDecimal("0.0500375")  // 1/10.0*1.00025-1/20.0*.99975
+    val l1_2 = addToLedger(l1_1, expPandlDelta1, expPandlDelta1, Seq(
+      ("ws",   wsOrderFilled("o1", 10, 10, 1, Limit, "2010-01-01T00:00:01.000Z")),
+      ("rest", restOrderNew("o2", Sell, 20, 1, Limit, "2010-01-01T00:00:01.000Z")),
+      ("ws",   wsOrderFilled("o2", 20, 20, 1, Limit, "2010-01-01T00:00:01.000Z")),
+    ))
+
+    // long buy & sell, no profit (except for rebate)
+    val expPandlDelta2 = BigDecimal("0.00005")  // 1/10.0*1.00025-1/10.0*.99975
+    val l2 = addToLedger(l1_2, expPandlDelta1 + expPandlDelta2, expPandlDelta2, Seq(
+      ("rest", restOrderNew("o3", Buy, 10, 1, Limit, "2010-01-01T00:00:03.000Z")),
+      ("ws",   wsOrderFilled("o3", 10, 10, 1, Limit, "2010-01-01T00:00:03.000Z")),
+      ("rest", restOrderNew("o4", Sell, 10, 1, Limit, "2010-01-01T00:00:04.000Z")),
+      ("ws",   wsOrderFilled("o4", 10, 10, 1, Limit, "2010-01-01T00:00:04.000Z")),
+    ))
+
+    // short sell & buy, tiny loss due to stop
+    val expPandlDelta3 = BigDecimal("-0.00005")  // -1/10.0*1.00075+1/10.0*1.00025
+    val l3 = addToLedger(l2, expPandlDelta1 + expPandlDelta2 + expPandlDelta3, expPandlDelta3, Seq(
+      ("rest", restOrderNew("o5", Sell, 10, 1, Limit, "2010-01-01T00:00:05.000Z")),
+      ("ws",   wsOrderFilled("o5", 10, 10, 1, Limit, "2010-01-01T00:00:05.000Z")),
+      ("rest", restOrderNew("o6", Buy, 10, 1, Stop, "2010-01-01T00:00:06.000Z")),
+      ("ws",   wsOrderFilled("o6", 10, 10, 1, Stop, "2010-01-01T00:00:06.000Z")),
+    ))
+
+    // short sell & buy, parially
+    val l4_1 = addToLedger(l3, expPandlDelta1 + expPandlDelta2 + expPandlDelta3, 0, Seq(
+      ("ws",   wsOrderFilled("o7", 20, 20, 10, Limit, "2010-01-01T00:00:07.000Z")),
+      ("ws",   wsOrderFilled("o8", 10, 10, 10, Stop, "2010-01-01T00:00:08.000Z")),
+    ))
+    val expPandlDelta4 = BigDecimal("0.499375")  // -10/20.0*.99975+10/10.0*.99925
+    val l4_2 = addToLedger(l4_1, expPandlDelta1 + expPandlDelta2 + expPandlDelta3 + expPandlDelta4, expPandlDelta4, Seq(
+      ("rest", restOrderNew("o7", Sell, 20, 10, Limit, "2010-01-01T00:00:07.000Z")),
+      ("rest", restOrderNew("o8", Buy, 10, 10, Stop, "2010-01-01T00:00:08.000Z")),
+    ))
+
+    // long buy & sell
+    val expPandlDelta5 = BigDecimal("-0.500625")  // 10/20.0*1.00025-10/10.0*1.00075
+    val l5 = addToLedger(l4_2, expPandlDelta1 + expPandlDelta2 + expPandlDelta3 + expPandlDelta4 + expPandlDelta5, expPandlDelta5, Seq(
+      ("rest", restOrderNew("o9", Buy, 20, 10, Limit, "2010-01-01T00:00:09.000Z")),
+      ("ws",   wsOrderFilled("o9", 20, 20, 10, Limit, "2010-01-01T00:00:09.000Z")),
+      ("rest", restOrderNew("o10", Sell, 10, 10, Stop, "2010-01-01T00:00:10.000Z")),
+      ("ws",   wsOrderFilled("o10", 10, 10, 10, Stop, "2010-01-01T00:00:10.000Z")),
+    ))
   }
 
   def buildLedger(l: Ledger, reqs: (String, String)*) =

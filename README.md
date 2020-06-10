@@ -18,17 +18,18 @@ Setup with metrics and point browser @ `localhost:81` (user/pwd - defined as `gr
 ```
 # setup generic graphite/grafana
 cd bin
-./devops.sh  # for options
+./devops.sh  # to show options
 ./devops.sh grafana-build
 ./devops.sh grafana-run
 # setup moon user/dashboard in another shell
 ./devops.sh grafana-bootstrap-run
 ```
 
-Start bot:
+Start bot.
+
+**Note**: *this clears position and cancels orders, as part of the `actor restart` policy. To avoid this, set `bot.flushSessionOnRestart = false` in `application.conf`.*
 ```
 sbt run  # Note: clears position and cancels position orders!
-# or sbt "run --flush false" if you want to keep positions/orders open, which *may* interfer with the bot...
 # or sbt assembly && java -jar ./target/scala-2.13/MoonBot-assembly-0.1.jar
 ```
 
@@ -74,7 +75,7 @@ sbt "runMain moon.Cli --ordertype limit --side buy --price 9000 --qty 30 order"
 ...etc
 ```
 
-Gather all ws jsons:
+Gather all ws json events, for analysis:
 ```
 sbt "runMain moon.Cli monitorDebug" | grep "###" | sed 's/.*ws json: //'
 ```

@@ -284,7 +284,8 @@ object OrchestratorActor {
       }
 
 
-  def apply(restGateway: IRestGateway,
+  def apply(flushSessionOnRestart: Boolean=true,
+            restGateway: IRestGateway,
             tradeQty: Int, minTradeVol: BigDecimal,
             openPositionExpiryMs: Long,
             bullScoreThreshold: BigDecimal=0.5, bearScoreThreshold: BigDecimal= -0.5,
@@ -294,6 +295,16 @@ object OrchestratorActor {
 
     Behaviors.withTimers[ActorEvent] { timers =>
       Behaviors.setup[ActorEvent] { actorCtx =>
+
+        if (flushSessionOnRestart) {
+          actorCtx.log.info("init: Bootstraping via closePosition/orderCancels...")
+          // not consuming the response as it clashes with my model :(. Just assumes to have worked
+          for {
+            res1 <- restGateway.closePositionAsync()
+            res2 <- restGateway.cancelAllOrdersAsync()
+          } yield (res1, res2)
+        }
+
         /**
          * Gather enough WS data to trade, then switch to idle
          */
@@ -319,7 +330,7 @@ object OrchestratorActor {
             } else
               init(ctx.copy(ledger2))
           case RestEvent(Success(data)) =>
-            actorCtx.log.debug(s"init: unexpected RestEvent: $data")
+            actorCtx.log.debug(s"init: RestEvent: $data")
             init(ctx.copy(ledger = ctx.ledger.record(data)))
           case RestEvent(Failure(exc)) =>
             actorCtx.log.debug(s"init: unexpected failure: $exc", exc)

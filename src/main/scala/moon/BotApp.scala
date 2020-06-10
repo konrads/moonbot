@@ -2,23 +2,19 @@ package moon
 
 import java.io.File
 
-import akka.actor.typed.{ActorRef, ActorSystem}
+import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.{ActorSystem, SupervisorStrategy}
 import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
-import org.rogach.scallop.ScallopConf
+import moon.BotApp.flushSessionOnRestart
 import play.api.libs.json._
 
+import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 
 object BotApp extends App {
   val log = Logger("BotApp")
-
-  class CliConf extends ScallopConf(args) {
-    val flush = opt[Boolean](default = Some(true))
-    verify()
-  }
-  val cliConf = new CliConf()
 
   val conf = ConfigFactory.load()
     .withFallback(ConfigFactory.parseResources("application.conf"))
@@ -35,6 +31,7 @@ object BotApp extends App {
   val graphitePort      = conf.getInt("graphite.port")
 
   val namespace              = conf.getString("bot.namespace")
+  val flushSessionOnRestart  = conf.getBoolean("bot.flushSessionOnRestart")
   val tradeQty               = conf.getInt("bot.tradeQty")
   val minTradeVol            = conf.getInt("bot.minTradeVol")
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
@@ -80,20 +77,11 @@ object BotApp extends App {
 
   implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
   val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
-  if (cliConf.flush()) {
-    log.info("Bootstraping via closePosition...")
-    // not consuming the response as it clashes with my model :(. Just assumes to have worked
-    for {
-      res1 <- restGateway.closePositionAsync()
-      res2 <- restGateway.cancelAllOrdersAsync()
-    } yield (res1, res2)
-  }
   val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
   val metrics = Metrics(graphiteHost, graphitePort, namespace)
 
-  // FIXME: need to setup actor guardian (supervisor?) to restart!
-
   val orchestrator = OrchestratorActor(
+    flushSessionOnRestart=flushSessionOnRestart,
     restGateway=restGateway,
     tradeQty=tradeQty, minTradeVol=minTradeVol,
     openPositionExpiryMs=openPositionExpiryMs,
@@ -101,7 +89,16 @@ object BotApp extends App {
     reqRetries=reqRetries, markupRetries=markupRetries,
     takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,
     metrics=Some(metrics))
-  val orchestratorActor: ActorRef[ActorEvent] = ActorSystem(orchestrator, "orchestrator-actor")
+
+  // Supervision of my actor, with backoff restarts, and pass through messages, so that wsMessageConsumer can utilize the valid ActorRef
+  // Note: not sure such complexity is warranted... On supervision & backoff
+  // https://manuel.bernhardt.io/2019/09/05/tour-of-akka-typed-supervision-and-signals/
+  // presuming ActorRef being reusable between restarts:
+  // https://stackoverflow.com/questions/35332897/is-an-actorref-updated-when-the-associated-actor-is-restarted-by-the-supervisor
+  // https://doc.akka.io/docs/akka/current/typed/fault-tolerance.html
+  val orchestratorActor = ActorSystem(
+    Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
+    "orchestrator-actor")
 
   val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value, _) => orchestratorActor ! WsEvent(value)

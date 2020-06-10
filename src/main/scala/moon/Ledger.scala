@@ -29,11 +29,11 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       os.orders.foldLeft(this)((soFar, o) => soFar.record(o))
     case o: Order =>
       ledgerOrdersByID.get(o.orderID) match {
-//        case Some(existing) if existing.ordStatus == Filled || existing.ordStatus == Canceled =>
-//          // mark as "mine" only
-//          val existing2 = existing.copy(myOrder = true)
-//          val ledgerOrdersByClOrdID2 = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2)
-//          copy(ledgerOrders=ledgerOrders-existing+existing2, ledgerOrdersByID=ledgerOrdersByID + (existing2.orderID -> existing2), ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
+        case Some(existing) if existing.ordStatus == Filled || existing.ordStatus == Canceled =>
+          // copy all except for ordStatus
+          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), side=o.side, ordType=o.ordType, timestamp=o.timestamp)
+          val ledgerOrdersByClOrdID2 = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2)
+          copy(ledgerOrders=ledgerOrders-existing+existing2, ledgerOrdersByID=ledgerOrdersByID + (existing2.orderID -> existing2), ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
         case Some(existing) =>
           val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), ordStatus=o.ordStatus.getOrElse(existing.ordStatus), price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), timestamp=o.timestamp)
           val ledgerOrdersByClOrdID2 = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2)
@@ -104,7 +104,7 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
               (ls - lo + lo2, lsById + (lo2.orderID -> lo2), lsByClOrdID2)
             case None =>
               // expecting REST to fill in the initial order...
-              val lo = LedgerOrder(orderID=od.orderID, clOrdID=od.clOrdID.orNull, price=od.stopPx.getOrElse(od.avgPx.getOrElse(od.price.getOrElse(-1))), qty=od.orderQty.orNull, side=od.side.orNull, ordType=od.ordType.orNull, timestamp=od.timestamp, ordStatus=od.ordStatus.getOrElse(New), ordRejReason=od.ordRejReason)
+              val lo = LedgerOrder(orderID=od.orderID, clOrdID=od.clOrdID.orNull, price=od.stopPx.getOrElse(od.avgPx.getOrElse(od.price.getOrElse(-1))), qty=od.cumQty.getOrElse(od.orderQty.orNull), side=od.side.orNull, ordType=od.ordType.orNull, timestamp=od.timestamp, ordStatus=od.ordStatus.getOrElse(New), ordRejReason=od.ordRejReason)
               val lsByClOrdID2 = if (lo.clOrdID == null) lsByClOrdID else lsByClOrdID + (lo.clOrdID -> lo)
               (ls + lo, lsById + (lo.orderID -> lo), lsByClOrdID2)
           }
