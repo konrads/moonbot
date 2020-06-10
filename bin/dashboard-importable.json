@@ -578,13 +578,13 @@
         "targets": [
           {
             "refId": "A",
-            "target": "aliasByMetric(moon.__pair__.memory.used.*)"
+            "target": "aliasByMetric(moon.__pair__.memory.used.jvm)"
           }
         ],
         "thresholds": [],
         "timeFrom": null,
         "timeShift": null,
-        "title": "Memory %",
+        "title": "Memory",
         "tooltip": {
           "shared": false,
           "sort": 0,
@@ -602,7 +602,7 @@
         },
         "yaxes": [
           {
-            "format": "short",
+            "format": "decbytes",
             "label": null,
             "logBase": 1,
             "max": null,
@@ -676,7 +676,7 @@
         "thresholds": [],
         "timeFrom": null,
         "timeShift": null,
-        "title": "Process CPU %",
+        "title": "CPU",
         "tooltip": {
           "shared": false,
           "sort": 0,
@@ -694,7 +694,7 @@
         },
         "yaxes": [
           {
-            "format": "short",
+            "format": "percentunit",
             "label": null,
             "logBase": 1,
             "max": null,
@@ -764,7 +764,7 @@
         "thresholds": [],
         "timeFrom": null,
         "timeShift": null,
-        "title": "Disk usage %",
+        "title": "Disk",
         "tooltip": {
           "shared": false,
           "sort": 0,
@@ -782,7 +782,7 @@
         },
         "yaxes": [
           {
-            "format": "short",
+            "format": "decbytes",
             "label": null,
             "logBase": 1,
             "max": null,
