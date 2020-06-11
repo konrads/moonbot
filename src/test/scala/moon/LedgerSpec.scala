@@ -216,6 +216,16 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
       ("rest", restOrderNew("o10", Sell, 10, 10, Stop, "2010-01-01T00:00:10.000Z")),
       ("ws",   wsOrderFilled("o10", 10, 10, 10, Stop, "2010-01-01T00:00:10.000Z")),
     ))
+
+    // no pandl diff on PostOnlyFailure and cancels
+    val l6 = addToLedger(l5, expPandlDelta1 + expPandlDelta2 + expPandlDelta3 + expPandlDelta4 + expPandlDelta5, 0, Seq(
+      ("rest", restOrderNew("o11", Buy, 20, 10, Limit, "2010-01-01T00:00:11.000Z")),
+      ("ws",   wsOrderPostOnlyFailure("o11", Buy, 20, 10, "2010-01-01T00:00:11.000Z")),
+      ("rest", restOrderPostOnlyFailure("o12", Buy, 20, 10, "2010-01-01T00:00:12.000Z")),
+      ("rest", restOrderNew("o13", Sell, 10, 10, Stop, "2010-01-01T00:00:13.000Z")),
+      ("ws",   wsOrderCancelled("o13", "2010-01-01T00:00:13.000Z")),
+      ("rest", restOrderCancelled("o14", "2010-01-01T00:00:14.000Z")),
+    ))
   }
 
   def buildLedger(l: Ledger, reqs: (String, String)*) =
