@@ -1,6 +1,7 @@
 package moon
 
 import com.github.nscala_time.time.Imports._
+import moon.talib.ema
 import moon.OrderSide.OrderSide
 import moon.OrderSide._
 import moon.OrderStatus._
@@ -123,8 +124,8 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       BigDecimal(0)
     else {
       val (bullTrades, bearTrades) = trades.flatMap(_.data).partition(_.side == Buy)
-      val bullVolume = ema(emaSmoothing)(bullTrades.map(_.size))
-      val bearVolume = ema(emaSmoothing)(bearTrades.map(_.size))
+      val bullVolume = ema(bullTrades.map(_.size), emaSmoothing)
+      val bearVolume = ema(bearTrades.map(_.size), emaSmoothing)
       val volumeScore = (bullVolume - bearVolume) / (bullVolume + bearVolume)
       volumeScore
     }

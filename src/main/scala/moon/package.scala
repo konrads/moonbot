@@ -6,7 +6,6 @@ import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, DateTimeZone}
 import play.api.libs.json.{Json, Reads}
 
-import scala.collection.Seq
 
 package object moon {
   def getBitmexApiSignature(keyString: String, apiSecret: String): String = {
@@ -15,19 +14,6 @@ package object moon {
     sha256HMAC.init(secretKey)
     val hash = DatatypeConverter.printHexBinary(sha256HMAC.doFinal(keyString.getBytes))
     hash
-  }
-
-  // http://stackoverflow.com/questions/24705011/how-to-optimise-a-exponential-moving-average-algorithm-in-php
-  def ema(emaSmoothing: BigDecimal=2)(vals: Seq[BigDecimal]): BigDecimal = {
-    if (vals.isEmpty)
-      0
-    else {
-      val k = emaSmoothing / (vals.length + 1)
-      val mean = vals.sum / vals.length
-      vals.foldLeft(mean)(
-        (last, s) => (1 - k) * last + k * s
-      )
-    }
   }
 
   object OrderSide extends Enumeration {
