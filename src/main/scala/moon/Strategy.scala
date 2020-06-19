@@ -30,9 +30,9 @@ object Strategy {
       val minMs = maxMs - periodMs
       val (pre, post) = tds.partition(_.timestamp.getMillis < minMs)
       if (dropLast)
-        pre.last +: post
-      else
         post
+      else
+        pre.lastOption.toSeq ++ post
     }
   }
 }
@@ -52,9 +52,9 @@ class TickDirectionStrategy(val config: Config) extends Strategy {
       case ZeroPlusTick  =>  .5
       case PlusTick      =>  1
     }.sum / tickDirs.length
-    val sentiment = if (tickDirScore >= upper)
+    val sentiment = if (tickDirScore > upper)
       Bull
-    else if (tickDirScore <= lower)
+    else if (tickDirScore < lower)
       Bear
     else
       Neutral
@@ -80,9 +80,9 @@ class BullBearEmaStrategy(val config: Config) extends Strategy {
       val bearVolume = ema(bearTrades.map(_.size), emaSmoothing)
       (bullVolume - bearVolume) / (bullVolume + bearVolume)
     }
-    val sentiment = if (volumeScore >= upper)
+    val sentiment = if (volumeScore > upper)
       Bull
-    else if (volumeScore <= lower)
+    else if (volumeScore < lower)
       Bear
     else
       Neutral
@@ -100,21 +100,21 @@ class BBandsStrategy(val config: Config) extends Strategy {
   override def strategize(ledger: Ledger): StrategyResult = {
     val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, window * resamplePeriodMs, dropLast=false)
     val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
-    val ffilled = ffill(resampledTicks)
-    val closePrices = ffilled.map(_._2.close)
+    val ffilled = ffill(resampledTicks).takeRight(window)
+    val closePrices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also it suggests taking calendar minutes, not minutes since now
     val (sentiment, bbandsScore, upper, middle, lower) = bbands(closePrices, devUp=devUp, devDown=devDown) match {
-      case Some((upper, middle, lower)) =>
+      case Some((upper, middle, lower)) if closePrices.size == window =>  // make sure we have a full window, otherwise go neutral
         val currPrice = (ledger.askPrice + ledger.bidPrice) / 2
-        if (currPrice >= upper)
-          (Bull, BigDecimal(1), upper, middle, lower)
-        else if (currPrice <= lower)
-          (Bear, BigDecimal(-1), upper, middle, lower)
+        if (currPrice > upper)
+          (Bull, BigDecimal(Bull.id), upper, middle, lower)
+        else if (currPrice < lower)
+          (Bear, BigDecimal(Bear.id), upper, middle, lower)
         else {
           val score = 2 * (currPrice - lower)/(upper - lower) - 1
           (Neutral, score, upper, middle, lower)
         }
-      case None =>
-        (Neutral, BigDecimal(0), BigDecimal(0), BigDecimal(0), BigDecimal(0))
+      case _ =>
+        (Neutral, BigDecimal(Neutral.id), BigDecimal(0), BigDecimal(0), BigDecimal(0))
     }
     StrategyResult(sentiment, Map("data.bbands.score" -> bbandsScore, "data.bbands.upper" -> upper, "data.bbands.middle" -> middle, "data.bbands.lower" -> lower), ledger.copy(tradeDatas = tradeDatas2))
   }

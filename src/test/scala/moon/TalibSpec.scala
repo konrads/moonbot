@@ -60,6 +60,7 @@ class TalibSpec extends FlatSpec with Matchers with Inside  {
     bbands(Seq(1, 2, 3, 4, 5), devUp=3, devDown=1) shouldBe Some((BigDecimal("7.2426406871192853"), 3, BigDecimal("1.5857864376269049")))
     // FIXME: maType=EMA doesn't validate against python...  Keeping the check for regression
     bbands(Seq(1, 2, 3, 4, 5), devUp=3, devDown=1, maType=MA.EMA) shouldBe Some((BigDecimal("8.338376836591840247325102880658435"), BigDecimal("3.658436213991769547325102880658435"), BigDecimal("2.098456006458412647325102880658435")))
+    bbands(Seq(BigDecimal("9357.498906886614329722746695816357"), BigDecimal("9357.234543433969253565475087979255"))) shouldBe Some((BigDecimal("9357.631088612936867804110891897805"), BigDecimal("9357.366725160291791644110891897805"), BigDecimal("9357.102361707646715484110891897805")))
     // validated with python talib:
     // from talib import BBANDS
     // import numpy as np

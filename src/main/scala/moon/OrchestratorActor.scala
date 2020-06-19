@@ -146,7 +146,7 @@ object OrchestratorActor {
               case (Some(order), Waiting, _) =>
                 // will sentiment force a change of heart?
                 val (shouldKeepGoing, ledger3) = positionOpener.shouldKeepGoing(ledger2)
-                if (shouldKeepGoing) {
+                if (! shouldKeepGoing) {
                   actorCtx.log.info(s"${positionOpener.desc}: having a change of heart, cancelling ${order.fullOrdID}...")
                   positionOpener.cancelOrder(clOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
                   loop(ctx.copy(ledger = ledger3, lifecycle = IssuingCancel))
@@ -341,7 +341,7 @@ object OrchestratorActor {
         }
 
         /**
-         * Waiting for market conditions to change to volumous bull or bear
+         * Waiting for market conditions to change to bull or bear
          */
         def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receiveMessage[ActorEvent] {
           case SendMetrics =>
@@ -353,14 +353,14 @@ object OrchestratorActor {
             val ledger2 = ctx.ledger.record(wsData)
             val strategyRes = strategy.strategize(ledger2)
             val (sentiment, ledger3) = (strategyRes.sentiment, strategyRes.ledger)
+            actorCtx.log.debug(s"idle: Sentiment is $sentiment")
             if (sentiment == Bull)
               openLong(ledger3)
             else if (sentiment == Bear)
               openShort(ledger3)
-            else {
-              actorCtx.log.debug(s"idle: Ledger suggests to hold back, orderBookHeadVolume: ${ledger3.orderBookHeadVolume}, sentiment: ${strategyRes.sentiment}")
+            else
               idle(ctx.copy(ledger = ledger3))
-            }
+
           case RestEvent(Success(data)) =>
             actorCtx.log.debug(s"idle: unexpected RestEvent: $data")
             idle(ctx.copy(ledger = ctx.ledger.record(data)))
@@ -394,7 +394,7 @@ object OrchestratorActor {
             override def shouldKeepGoing(l: Ledger): (Boolean, Ledger) = {
               val strategyRes = strategy.strategize(l)
               val (sentiment, l2) = (strategyRes.sentiment, strategyRes.ledger)
-              (sentiment == Bear, l2)
+              (sentiment != Bear, l2)
             }
           }, metrics, strategy)
 
@@ -442,7 +442,7 @@ object OrchestratorActor {
             override def shouldKeepGoing(l: Ledger): (Boolean, Ledger) = {
               val strategyRes = strategy.strategize(l)
               val (sentiment, l2) = (strategyRes.sentiment, strategyRes.ledger)
-              (sentiment == Bull, l2)
+              (sentiment != Bull, l2)
             }
           }, metrics, strategy)
 
