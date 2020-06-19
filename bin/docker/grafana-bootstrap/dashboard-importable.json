@@ -94,7 +94,7 @@
         "seriesOverrides": [
           {
             "alias": "price",
-            "color": "#badff4"
+            "color": "#70dbed"
           },
           {
             "alias": "profit",
@@ -223,7 +223,7 @@
         "seriesOverrides": [
           {
             "alias": "volume",
-            "color": "#2f575e"
+            "color": "#29748c"
           }
         ],
         "spaceLength": 10,
@@ -311,11 +311,11 @@
         "seriesOverrides": [
           {
             "alias": "pandl",
-            "color": "#b7dbab"
+            "color": "#9ac48a"
           },
           {
             "alias": "delta",
-            "color": "#badff4"
+            "color": "#70dbed"
           }
         ],
         "spaceLength": 10,
@@ -483,11 +483,12 @@
         "seriesOverrides": [
           {
             "alias": "price",
-            "color": "#badff4"
+            "color": "#70dbed"
           },
           {
             "alias": "upper",
-            "color": "#dcdcdc"
+            "color": "#dcdcdc",
+            "dashes": true
           },
           {
             "alias": "middle",
@@ -495,7 +496,8 @@
           },
           {
             "alias": "lower",
-            "color": "#969696"
+            "color": "#969696",
+            "dashes": true
           }
         ],
         "spaceLength": 10,
@@ -597,11 +599,11 @@
         "seriesOverrides": [
           {
             "alias": "jvm",
-            "color": "#b7dbab"
+            "color": "#9ac48a"
           },
           {
             "alias": "system",
-            "color": "#badff4"
+            "color": "#70dbed"
           }
         ],
         "spaceLength": 10,
@@ -689,11 +691,11 @@
         "seriesOverrides": [
           {
             "alias": "jvm",
-            "color": "#b7dbab"
+            "color": "#9ac48a"
           },
           {
             "alias": "system",
-            "color": "#badff4"
+            "color": "#70dbed"
           }
         ],
         "spaceLength": 10,
@@ -781,7 +783,7 @@
         "seriesOverrides": [
           {
             "alias": "used",
-            "color": "#b7dbab"
+            "color": "#9ac48a"
           }
         ],
         "spaceLength": 10,
