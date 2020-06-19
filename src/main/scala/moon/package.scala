@@ -1,4 +1,5 @@
 
+import com.typesafe.config.Config
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import javax.xml.bind.DatatypeConverter
@@ -40,9 +41,13 @@ package object moon {
     implicit val aFormat = Json.formatEnum(this)
   }
 
+  // adding "value" as per:
+  // https://stackoverflow.com/questions/42275983/scala-how-to-define-an-enum-with-extra-attributes
   object Sentiment extends Enumeration {
     type Sentiment = Value
-    val Bull, Bear, Neutral = Value
+    val Bull = Value(1, "Bull")
+    val Bear = Value(-1, "Bear")
+    val Neutral = Value(0, "Neutral")
     implicit val aFormat = Json.formatEnum(this)
   }
 
@@ -51,4 +56,15 @@ package object moon {
   def parseDateTime(asStr: String) = DateTime.parse(asStr, dateFormat)
 
   implicit val jodaDateReads = Reads[DateTime](js => js.validate[String].map[DateTime](parseDateTime))
+
+  // For optional values:
+  // https://stackoverflow.com/questions/52144157/providing-default-value-on-typesafe-config-getters
+  implicit class RichConfig(val config: Config) extends AnyVal {
+    def optString(path: String): Option[String]   = if (config.hasPath(path)) Some(config.getString(path)) else None
+    def optBoolean(path: String): Option[Boolean] = if (config.hasPath(path)) Some(config.getBoolean(path)) else None
+    def optInt(path: String): Option[Int]         = if (config.hasPath(path)) Some(config.getInt(path)) else None
+    def optLong(path: String): Option[Long]       = if (config.hasPath(path)) Some(config.getLong(path)) else None
+    def optDouble(path: String): Option[Double]   = if (config.hasPath(path)) Some(config.getDouble(path)) else None
+    // ...etc, will add if needed
+  }
 }

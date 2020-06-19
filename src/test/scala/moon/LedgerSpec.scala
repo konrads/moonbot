@@ -1,21 +1,19 @@
 package moon
 
+import com.typesafe.config.{ConfigFactory, ConfigObject}
 import org.scalatest._
 import org.scalatest.matchers.should._
 import play.api.libs.json.JsSuccess
 import moon.ModelsSpec._
-import moon.OrderStatus._
 import moon.OrderSide._
 import moon.OrderType._
 
 import scala.collection.SortedSet
-import com.github.nscala_time.time.Imports._
-import org.joda.time.{DateTime, DateTimeZone}
-
-import scala.util.Success
 
 
 class LedgerSpec extends FlatSpec with Matchers with Inside {
+  val bbandsStrategy = new BBandsStrategy(ConfigFactory.parseString(""))
+
   "Ledger" should "work with WS and REST orders" in {
     val ws1 = UpsertOrder(Some("insert"), data=Seq(
       OrderData(orderID="o1", price=Some(1), orderQty=Some(1), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-01T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
@@ -108,7 +106,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     // add orderbook data
     val l2 = l.record(OrderBook("blah", "update", Seq(OrderBookData("xbtusd", parseDateTime("2001-01-01T00:00:00.000Z"), asks=Seq(Seq(10, 20), Seq(20, 30)), bids=Seq(Seq(100, 200), Seq(200, 300))))))
 
-    val l3 = l2.withMetrics()
+    val l3 = l2.withMetrics(strategy = bbandsStrategy)
     val metrics3 = l2.ledgerMetrics
     metrics3.metrics shouldBe Map.empty  // no buy/sell as yet
 
@@ -125,9 +123,9 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     )
     l4.ledgerOrders.toSeq.map(_.orderID) shouldBe Seq("o6", "o5", "o4", "o3", "o2", "o1")
 
-    val l5 = l4.withMetrics()
+    val l5 = l4.withMetrics(strategy = bbandsStrategy)
     val metrics5 = l5.ledgerMetrics
-    metrics5 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("0.3524439102564102564102564102564102"), "data.pandl.delta" -> BigDecimal("0.3524439102564102564102564102564102"), "data.sentiment.score" -> BigDecimal(0), "data.myTradeCnt" -> 3, "data.volume" -> 0, "data.tickDir.score" -> 0.0), parseDateTime("2010-01-05T12:00:00.000Z"), BigDecimal("0.3524439102564102564102564102564102"))  // no buy/sell as yet
+    metrics5 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("0.3524439102564102564102564102564102"), "data.pandl.delta" -> BigDecimal("0.3524439102564102564102564102564102"), "data.sentiment" -> BigDecimal(0), "data.bbands.score" -> BigDecimal(0), "data.bbands.upper" -> BigDecimal(0), "data.bbands.middle" -> BigDecimal(0), "data.bbands.lower" -> BigDecimal(0), "data.myTradeCnt" -> 3, "data.volume" -> 0), parseDateTime("2010-01-05T12:00:00.000Z"), null, BigDecimal("0.3524439102564102564102564102564102"))  // no buy/sell as yet
 
     // add sell, recalculate metrics
     val l6 = buildLedger(l5,
@@ -136,9 +134,9 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
       ("ws",   wsOrderNew("o7", OrderSide.Sell, 11, 10, OrderType.Market, "2010-01-07T00:00:00.000Z")),
       ("ws",   wsOrderFilled("o7", 20, 24, 10, OrderType.Market, "2010-01-07T12:00:00.000Z")),
     )
-    val l7 = l6.withMetrics()
+    val l7 = l6.withMetrics(strategy = bbandsStrategy)
     val metrics7 = l7.ledgerMetrics
-    metrics7 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("1.600881410256410256410256410256410"), "data.pandl.delta" -> BigDecimal("1.2484375"), "data.sentiment.score" -> BigDecimal(0), "data.myTradeCnt" -> 4, "data.volume" -> 0.0, "data.tickDir.score" -> 0.0), parseDateTime("2010-01-07T12:00:00.000Z"), BigDecimal("1.600881410256410256410256410256410"))  // no buy/sell as yet
+    metrics7 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("1.600881410256410256410256410256410"), "data.pandl.delta" -> BigDecimal("1.2484375"), "data.sentiment" -> BigDecimal(0), "data.bbands.score" -> BigDecimal(0), "data.bbands.upper" -> BigDecimal(0), "data.bbands.middle" -> BigDecimal(0), "data.bbands.lower" -> BigDecimal(0), "data.myTradeCnt" -> 4, "data.volume" -> 0.0), parseDateTime("2010-01-07T12:00:00.000Z"), null, BigDecimal("1.600881410256410256410256410256410"))  // no buy/sell as yet
   }
 
   it should "order LedgerOrders desc" in {
@@ -159,13 +157,13 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
         case (soFar, ("rest", order)) => soFar.record(RestModel.asModel(order).get)
         case (soFar, ("ws", order)) => soFar.record(WsModel.asModel(order).get)
       }
-      val l3 = l2.withMetrics()
+      val l3 = l2.withMetrics(strategy = bbandsStrategy)
       l3.ledgerMetrics.metrics("data.pandl.pandl") shouldBe expPandl
       l3.ledgerMetrics.metrics("data.pandl.delta") shouldBe expPandlDelta
       l3
     }
 
-    val l0 = Ledger(orderBook = OrderBook("b1", "b2", data=Nil))
+    val l0 = Ledger(orderBook=OrderBook("b1", "b2", data=Nil))
 
     // long buy & sell, split
     val l1_1 = addToLedger(l0, 0, 0, Seq(

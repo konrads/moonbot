@@ -1,12 +1,10 @@
 package moon
 
 import com.github.nscala_time.time.Imports._
-import moon.talib.ema
 import moon.OrderSide.OrderSide
 import moon.OrderSide._
 import moon.OrderStatus._
 import moon.OrderType._
-import moon.TickDirection._
 import org.joda.time.DateTime
 
 import scala.collection.SortedSet
@@ -18,10 +16,9 @@ case class LedgerOrder(orderID: String, clOrdID: String=null, price: BigDecimal,
   lazy val fullOrdID = s"$orderID / $clOrdID"
 }
 
-case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, lastOrderTimestamp: DateTime=new DateTime(0), runningPandl: BigDecimal=0)
+case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, lastOrderTimestamp: DateTime=new DateTime(0), lastTradeData: TradeData=null, runningPandl: BigDecimal=0)
 
-case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
-                  orderBook: OrderBook=null, trades: Seq[Trade]=Nil,
+case class Ledger(orderBook: OrderBook=null, tradeDatas: Seq[TradeData]=Nil,
                   ledgerOrders: SortedSet[LedgerOrder]=SortedSet.empty[LedgerOrder], ledgerOrdersByID: Map[String, LedgerOrder]=Map.empty, ledgerOrdersByClOrdID: Map[String, LedgerOrder]=Map.empty,
                   ledgerMetrics: LedgerMetrics=LedgerMetrics()) {
   // rest
@@ -113,55 +110,42 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
       copy(ledgerOrders=ledgerOrders2, ledgerOrdersByID=ledgerOrdersByID2, ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
     }
     case o: OrderBook => copy(orderBook = o)
-    case t: Trade => copy(trades = (t +: trades).take(emaWindow))
+    case t: Trade => copy(tradeDatas = tradeDatas ++ t.data)
+    case td: TradeData => copy(tradeDatas = tradeDatas :+ td)
     case _ => this
   }
-  lazy val myOrders = ledgerOrders.filter(_.myOrder)
-  lazy val isMinimallyFilled: Boolean = orderBook != null && trades.nonEmpty
-  lazy val sentimentScore = {
-    if (trades.isEmpty)
-      // should not get in here...
-      BigDecimal(0)
-    else {
-      val (bullTrades, bearTrades) = trades.flatMap(_.data).partition(_.side == Buy)
-      val bullVolume = ema(bullTrades.map(_.size), emaSmoothing)
-      val bearVolume = ema(bearTrades.map(_.size), emaSmoothing)
-      val volumeScore = (bullVolume - bearVolume) / (bullVolume + bearVolume)
-      volumeScore
-    }
-  }
+  lazy val myOrders: SortedSet[LedgerOrder] = ledgerOrders.filter(_.myOrder)
+  lazy val isMinimallyFilled: Boolean = orderBook != null && tradeDatas.nonEmpty
   lazy val orderBookHeadVolume: BigDecimal = orderBook.data.headOption.map(_.bids.headOption.map(_(1)).getOrElse(BigDecimal(0))).getOrElse(0)
   lazy val bidPrice: BigDecimal = orderBook.data.headOption.map(_.bids.head.head).getOrElse(0)
   lazy val askPrice: BigDecimal = orderBook.data.headOption.map(_.asks.head.head).getOrElse(0)
 
-  def withMetrics(makerRebate: BigDecimal=.00025, takerFee: BigDecimal=.00075): Ledger = {
-    val volume = trades.flatMap(_.data.map(_.size)).sum
-    val tickDirs = trades.flatMap(_.data.map(_.tickDirection))
-    val tickDirScore = if (tickDirs.isEmpty) 0.0 else tickDirs.map {
-      case MinusTick     => -1
-      case ZeroMinusTick => -.5
-      case ZeroPlusTick  =>  .5
-      case PlusTick      =>  1
-    }.sum / tickDirs.length
+  def withMetrics(makerRebate: BigDecimal=.00025, takerFee: BigDecimal=.00075, strategy: Strategy): Ledger = {
+    val currTradeDatas = if (ledgerMetrics.lastTradeData == null)
+      tradeDatas
+    else
+      tradeDatas.dropWhile(_ != ledgerMetrics.lastTradeData).drop(1)
+    val volume = currTradeDatas.map(_.size).sum
+    lazy val strategyRes = strategy.strategize(this)
+    val (s, m, l) = (strategyRes.sentiment, strategyRes.metrics, strategyRes.ledger)
     val metricsVals = Map(
-      "data.price"           -> (bidPrice + askPrice) / 2,
+      "data.price"           -> (l.bidPrice + l.askPrice) / 2,
       "data.volume"          -> volume,
-      "data.tickDir.score"   -> tickDirScore,
-      "data.sentiment.score" -> sentimentScore,
-      "data.myTradeCnt"      -> myOrders.count(_.ordStatus == Filled),
+      "data.sentiment"       -> s.id,
+      "data.myTradeCnt"      -> l.myOrders.count(_.ordStatus == Filled),
       // following will be updated if have filled myOrders since last withMetrics()
-      "data.pandl.pandl"     -> ledgerMetrics.runningPandl,
+      "data.pandl.pandl"     -> l.ledgerMetrics.runningPandl,
       "data.pandl.delta"     -> 0,
-    )
+    ) ++ m
 
-    val currOrders = ledgerOrders.filter(o => o.myOrder && o.ordStatus == Filled)
+    val currOrders = l.ledgerOrders.filter(o => o.myOrder && o.ordStatus == Filled)
     // FIXME: *BIG* assumption - counting filled order pairs. Probably should instead use a concept of legs/roundtrips
-    val currOrders2 = currOrders.takeWhile(_.timestamp > ledgerMetrics.lastOrderTimestamp)
+    val currOrders2 = currOrders.takeWhile(_.timestamp > l.ledgerMetrics.lastOrderTimestamp)
     val currOrders3 = if (currOrders2.size % 2 == 1) currOrders2.drop(1) else currOrders2
     if (currOrders3.isEmpty)
-      copy(ledgerMetrics=ledgerMetrics.copy(metrics=metricsVals), trades=Nil)
+      l.copy(ledgerMetrics=l.ledgerMetrics.copy(metrics=metricsVals, lastTradeData=currTradeDatas.lastOption.orNull))
     else {
-      import Ledger.log; log.debug(s"Ledger.withMetrics: lastOrderTimestamp: ${ledgerMetrics.lastOrderTimestamp}\nledgerOrders:${ledgerOrders.toSeq.map(o => s"\n- $o").mkString}\ncurrOrders3:${currOrders3.toSeq.map(o => s"\n- $o").mkString}")
+      // import Ledger.log; log.debug(s"Ledger.withMetrics: lastOrderTimestamp: ${ledgerMetrics.lastOrderTimestamp}\nledgerOrders:${ledgerOrders.toSeq.map(o => s"\n- $o").mkString}\ncurrOrders3:${currOrders3.toSeq.map(o => s"\n- $o").mkString}")
       val pandlDelta = currOrders3.map {
         case LedgerOrder(_, _, price, qty, _, Buy, Limit, _, _, true)  =>  qty / price * (1 + makerRebate)
         case LedgerOrder(_, _, price, qty, _, Buy, _, _, _, true)      =>  qty / price * (1 - takerFee)
@@ -170,13 +154,14 @@ case class Ledger(emaWindow: Int=20, emaSmoothing: BigDecimal=2.0,
         case _                                                         =>  BigDecimal(0)
       }.sum
 
-      val runningPandl2 = ledgerMetrics.runningPandl + pandlDelta
-      val ledgerMetrics2 = ledgerMetrics.copy(
+      val runningPandl2 = l.ledgerMetrics.runningPandl + pandlDelta
+      val ledgerMetrics2 = l.ledgerMetrics.copy(
         metrics = metricsVals + ("data.pandl.pandl" -> runningPandl2) + ("data.pandl.delta" -> pandlDelta),
         lastOrderTimestamp = currOrders3.head.timestamp,
-        runningPandl = runningPandl2
+        runningPandl = runningPandl2,
+        lastTradeData=currTradeDatas.lastOption.orNull
       )
-      copy(ledgerMetrics=ledgerMetrics2, trades=Nil)
+      l.copy(ledgerMetrics=ledgerMetrics2, tradeDatas=currTradeDatas)
     }
   }
 }

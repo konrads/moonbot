@@ -43,7 +43,7 @@ case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsM
 }
 object UpsertOrder { implicit val aReads: Reads[UpsertOrder] = Json.reads[UpsertOrder] }
 
-case class TradeData(side: OrderSide.Value, size: Int, price: BigDecimal, tickDirection: TickDirection.Value, timestamp: DateTime) extends WsModel
+case class TradeData(side: OrderSide.Value, size: BigDecimal, price: BigDecimal, tickDirection: TickDirection.Value, timestamp: DateTime) extends WsModel
 object TradeData { implicit val aReads: Reads[TradeData] = Json.reads[TradeData] }
 
 case class Trade(data: Seq[TradeData]) extends WsModel

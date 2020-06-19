@@ -1,6 +1,5 @@
 package moon
 
-import org.joda.time.DateTime
 import scala.collection.Seq
 
 object talib {
@@ -19,9 +18,9 @@ object talib {
    * lower = MA - dev_down * delta
    * upper = MA + dev_up * delta
    */
-  def bbands(xs: Seq[BigDecimal], devUp: BigDecimal=2, devDown: BigDecimal=2, maType: MA.Value=MA.SMA): (BigDecimal, BigDecimal, BigDecimal) =
+  def bbands(xs: Seq[BigDecimal], devUp: BigDecimal=2, devDown: BigDecimal=2, maType: MA.Value=MA.SMA): Option[(BigDecimal, BigDecimal, BigDecimal)] =
     if (xs.isEmpty)
-      (0, 0, 0)
+      None
     else {
       val ma = maType match {
         case MA.SMA => sma(xs)
@@ -33,26 +32,31 @@ object talib {
       val lower = ma - devDown * stdev
       val middle = ma
       val upper = ma + devUp * stdev
-      (upper, middle, lower)
+      Some((upper, middle, lower))
     }
 
-  case class TickData(weightedPrice: BigDecimal, open: BigDecimal, close: BigDecimal, high: BigDecimal, low: BigDecimal, volume: BigDecimal)
+  case class TradeTick(weightedPrice: BigDecimal, open: BigDecimal, close: BigDecimal, high: BigDecimal, low: BigDecimal, volume: BigDecimal)
 
-  def resample1min(orders: Seq[LedgerOrder]): Seq[(Long, TickData)] =
-    orders.groupMap(o => (o.timestamp.getMillis / MS_IN_MINUTE))(o => (o.timestamp, o.price, o.qty)).view.mapValues {
-      tsPriceAndQty =>
-        val tsPriceAndQty2 = tsPriceAndQty.sortBy(_._1)
-        val volume = tsPriceAndQty2.map(_._3).sum
-        val prices = tsPriceAndQty2.map(_._2)
-        val low = prices.min
-        val high = prices.max
-        val open = prices.head
-        val close = prices.last
-        val weightedPrice = tsPriceAndQty2.map { case (ts, price, qty) => price * qty }.sum / volume
-        TickData(weightedPrice=weightedPrice, high=high, low=low, open=open, close=close, volume=volume)
-    }.toSeq.sortBy(_._1)
+  def resample(trades: Seq[TradeData], periodMs: Long = MS_IN_MINUTE): Seq[(Long, TradeTick)] =
+    if (trades.isEmpty)
+      Nil
+    else {
+      val lastMillis = trades.map(_.timestamp.getMillis).view.max
+      trades.groupMap(o => (o.timestamp.getMillis - lastMillis) / periodMs)(o => (o.timestamp, o.price, o.size)).view.mapValues {
+        tsPriceAndQty =>
+          val tsPriceAndQty2 = tsPriceAndQty.sortBy(_._1)
+          val volume = tsPriceAndQty2.map(_._3).sum
+          val prices = tsPriceAndQty2.map(_._2)
+          val low = prices.min
+          val high = prices.max
+          val open = prices.head
+          val close = prices.last
+          val weightedPrice = tsPriceAndQty2.map { case (ts, price, qty) => price * qty }.sum / volume
+          TradeTick(weightedPrice=weightedPrice, high=high, low=low, open=open, close=close, volume=volume)
+      }.toSeq.sortBy(_._1)
+    }
 
-  def ffill(minAndVals: Seq[(Long, TickData)]): Seq[(Long, TickData)] =
+  def ffill(minAndVals: Seq[(Long, TradeTick)]): Seq[(Long, TradeTick)] =
     if (minAndVals.isEmpty)
       Nil
     else {

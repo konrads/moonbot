@@ -406,13 +406,13 @@
           {
             "refCount": 1,
             "refId": "A",
-            "target": "aliasByMetric(moon.__pair__.data.sentiment.score)"
+            "target": "aliasByMetric(moon.__pair__.data.sentiment)"
           }
         ],
         "thresholds": [],
         "timeFrom": null,
         "timeShift": null,
-        "title": "Sentiment score",
+        "title": "Sentiment",
         "tooltip": {
           "shared": true,
           "sort": 0,
@@ -480,7 +480,24 @@
         "pointradius": 5,
         "points": false,
         "renderer": "flot",
-        "seriesOverrides": [],
+        "seriesOverrides": [
+          {
+            "alias": "price",
+            "color": "#badff4"
+          },
+          {
+            "alias": "upper",
+            "color": "#dcdcdc"
+          },
+          {
+            "alias": "middle",
+            "color": "white"
+          },
+          {
+            "alias": "lower",
+            "color": "#969696"
+          }
+        ],
         "spaceLength": 10,
         "stack": false,
         "steppedLine": false,
@@ -488,13 +505,28 @@
           {
             "refCount": 1,
             "refId": "A",
-            "target": "aliasByMetric(moon.__pair__.data.tickDir.score)"
+            "target": "aliasByMetric(moon.__pair__.data.price)"
+          },
+          {
+            "refCount": 2,
+            "refId": "B",
+            "target": "aliasByMetric(moon.__pair__.data.bbands.upper)"
+          },
+          {
+            "refCount": 3,
+            "refId": "C",
+            "target": "aliasByMetric(moon.__pair__.data.bbands.middle)"
+          },
+          {
+            "refCount": 4,
+            "refId": "D",
+            "target": "aliasByMetric(moon.__pair__.data.bbands.lower)"
           }
         ],
         "thresholds": [],
         "timeFrom": null,
         "timeShift": null,
-        "title": "Tick direction score",
+        "title": "Bollinger Bands",
         "tooltip": {
           "shared": true,
           "sort": 0,

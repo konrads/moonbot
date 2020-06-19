@@ -5,6 +5,7 @@ import akka.actor.typed.scaladsl.ActorContext
 import akka.actor.typed.scaladsl.Behaviors
 import moon.OrderSide._
 import moon.OrderStatus._
+import moon.Sentiment._
 import moon.TradeLifecycle._
 
 import scala.concurrent.duration._
@@ -21,7 +22,7 @@ object OrchestratorActor {
     def onRejection(l: Ledger, order: LedgerOrder): Behavior[ActorEvent]             // unexpected rejection
     def onIrrecoverableError(l: Ledger, clOrdID: String, exc: Throwable): Behavior[ActorEvent]  // coding error???
     def bestPrice(l: Ledger): BigDecimal
-    def shouldKeepGoing(l: Ledger): Boolean
+    def shouldKeepGoing(l: Ledger): (Boolean, Ledger)
     def openOrder(l: Ledger): (String, Future[Order])                                // how to open order
     def cancelOrder(clOrdID: String): Future[Orders]                                 // how to cancel order
     def amendOrder(clOrdID: String, newPrice: BigDecimal): Future[Order]             // how to open order
@@ -40,12 +41,12 @@ object OrchestratorActor {
     def backoffStrategy(retry: Int): Int = Array(0, 100, 200, 500, 1000, 2000, 5000, 1000)(math.max(retry, 7))
   }
 
-  def openPosition(actorCtx: ActorContext[ActorEvent], initLedger: Ledger, positionOpener: PositionOpener, metrics: Option[Metrics]=None)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
+  def openPosition(actorCtx: ActorContext[ActorEvent], initLedger: Ledger, positionOpener: PositionOpener, metrics: Option[Metrics]=None, strategy: Strategy)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
     def loop(ctx: OpenPositionCtx): Behavior[ActorEvent] =
       Behaviors.receiveMessage[ActorEvent] { event =>
         (ctx, event) match {
           case (_, SendMetrics) =>
-            val ledger2 = ctx.ledger.withMetrics()
+            val ledger2 = ctx.ledger.withMetrics(strategy = strategy)
             metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
             loop(ctx.copy(ledger2))
           case (OpenPositionCtx(ledger, _, IssuingNew), RestEvent(Success(o: Order))) if o.clOrdID.isDefined =>
@@ -144,20 +145,21 @@ object OrchestratorActor {
                 positionOpener.onRejection(ledger2, order)
               case (Some(order), Waiting, _) =>
                 // will sentiment force a change of heart?
-                if (!positionOpener.shouldKeepGoing(ledger2)) {
+                val (shouldKeepGoing, ledger3) = positionOpener.shouldKeepGoing(ledger2)
+                if (shouldKeepGoing) {
                   actorCtx.log.info(s"${positionOpener.desc}: having a change of heart, cancelling ${order.fullOrdID}...")
                   positionOpener.cancelOrder(clOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
-                  loop(ctx.copy(ledger = ledger2, lifecycle = IssuingCancel))
+                  loop(ctx.copy(ledger = ledger3, lifecycle = IssuingCancel))
                 } else {
                   // need to update best price?
-                  val bestPrice = positionOpener.bestPrice(ledger2)
+                  val bestPrice = positionOpener.bestPrice(ledger3)
                   if (order.price != bestPrice) {
                     positionOpener.amendOrder(clOrdID, bestPrice) onComplete (res => actorCtx.self ! RestEvent(res))
                     actorCtx.log.info(s"${positionOpener.desc}: best price moved, will change: ${order.price} -> $bestPrice")
-                    loop(ctx.copy(ledger = ledger2, lifecycle = IssuingAmend))
+                    loop(ctx.copy(ledger = ledger3, lifecycle = IssuingAmend))
                   } else {
                     actorCtx.log.debug(s"${positionOpener.desc}: noop @ orderID: ${order.fullOrdID}, lifecycle: $lifecycle, data: $data")
-                    loop(ctx.copy(ledger = ledger2))
+                    loop(ctx.copy(ledger = ledger3))
                   }
                 }
               case other => // catch all
@@ -174,12 +176,12 @@ object OrchestratorActor {
       loop(OpenPositionCtx(ledger = initLedger, clOrdID = clOrdID, lifecycle = IssuingNew))
     }
 
-  def closePosition(actorCtx: ActorContext[ActorEvent], initLedger: Ledger, positionCloser: PositionCloser, metrics: Option[Metrics]=None)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
+  def closePosition(actorCtx: ActorContext[ActorEvent], initLedger: Ledger, positionCloser: PositionCloser, metrics: Option[Metrics]=None, strategy: Strategy)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
       def loop(ctx: ClosePositionCtx): Behavior[ActorEvent] =
         Behaviors.receiveMessage[ActorEvent] { wsEvent =>
           (ctx, wsEvent) match {
             case (_, SendMetrics) =>
-              val ledger2 = ctx.ledger.withMetrics()
+              val ledger2 = ctx.ledger.withMetrics(strategy = strategy)
               metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
               loop(ctx.copy(ledger2))
             case (ClosePositionCtx(ledger, takeProfitClOrdID, stoplossClOrdID, lifecycle), RestEvent(Success(os: Orders))) =>
@@ -284,7 +286,8 @@ object OrchestratorActor {
       }
 
 
-  def apply(flushSessionOnRestart: Boolean=true,
+  def apply(strategy: Strategy,
+            flushSessionOnRestart: Boolean=true,
             restGateway: IRestGateway,
             tradeQty: Int, minTradeVol: BigDecimal,
             openPositionExpiryMs: Long,
@@ -310,7 +313,7 @@ object OrchestratorActor {
          */
         def init(ctx: InitCtx): Behavior[ActorEvent] = Behaviors.receiveMessage[ActorEvent] {
           case SendMetrics =>
-            val ledger2 = ctx.ledger.withMetrics()
+            val ledger2 = ctx.ledger.withMetrics(strategy = strategy)
             metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
             init(ctx.copy(ledger2))
           case WsEvent(data) =>
@@ -342,19 +345,21 @@ object OrchestratorActor {
          */
         def idle(ctx: IdleCtx): Behavior[ActorEvent] = Behaviors.receiveMessage[ActorEvent] {
           case SendMetrics =>
-            val ledger2 = ctx.ledger.withMetrics()
+            val ledger2 = ctx.ledger.withMetrics(strategy = strategy)
             metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
             idle(ctx.copy(ledger2))
           case WsEvent(wsData) =>
             actorCtx.log.debug(s"idle: WsEvent: $wsData")
             val ledger2 = ctx.ledger.record(wsData)
-            if (ledger2.orderBookHeadVolume > minTradeVol && ledger2.sentimentScore >= bullScoreThreshold)
-              openLong(ledger2)
-            else if (ledger2.orderBookHeadVolume > minTradeVol && ledger2.sentimentScore <= bearScoreThreshold)
-              openShort(ledger2)
+            val strategyRes = strategy.strategize(ledger2)
+            val (sentiment, ledger3) = (strategyRes.sentiment, strategyRes.ledger)
+            if (sentiment == Bull)
+              openLong(ledger3)
+            else if (sentiment == Bear)
+              openShort(ledger3)
             else {
-              actorCtx.log.debug(s"idle: Ledger suggests to hold back, orderBookHeadVolume: ${ledger2.orderBookHeadVolume}, sentimentScore: ${ledger2.sentimentScore}")
-              idle(ctx.copy(ledger = ledger2))
+              actorCtx.log.debug(s"idle: Ledger suggests to hold back, orderBookHeadVolume: ${ledger3.orderBookHeadVolume}, sentiment: ${strategyRes.sentiment}")
+              idle(ctx.copy(ledger = ledger3))
             }
           case RestEvent(Success(data)) =>
             actorCtx.log.debug(s"idle: unexpected RestEvent: $data")
@@ -386,8 +391,12 @@ object OrchestratorActor {
               actorCtx.log.info(s"$desc: amending clOrdID: $clOrdID, newPrice: $newPrice")
               restGateway.amendOrderAsync(orderID=None, origClOrdID=Some(clOrdID), price=newPrice)
             }
-            override def shouldKeepGoing(l: Ledger): Boolean = l.sentimentScore >= bearScoreThreshold
-          }, metrics)
+            override def shouldKeepGoing(l: Ledger): (Boolean, Ledger) = {
+              val strategyRes = strategy.strategize(l)
+              val (sentiment, l2) = (strategyRes.sentiment, strategyRes.ledger)
+              (sentiment == Bear, l2)
+            }
+          }, metrics, strategy)
 
         def closeLong(ledger: Ledger, openPrice: BigDecimal): Behavior[ActorEvent] =
           closePosition(actorCtx, ledger, new PositionCloser {
@@ -406,7 +415,7 @@ object OrchestratorActor {
               (o1, o2, resF)
             }
             override def cancelOrders(clOrdIDs: String*): Future[Orders] = restGateway.cancelOrderAsync(clOrdIDs=clOrdIDs)
-          }, metrics)
+          }, metrics, strategy)
 
         def openShort(ledger: Ledger): Behavior[ActorEvent] =
           openPosition(actorCtx, ledger, new PositionOpener {
@@ -430,8 +439,12 @@ object OrchestratorActor {
               actorCtx.log.info(s"$desc: amending clOrdID: $clOrdID, newPrice: $newPrice")
               restGateway.amendOrderAsync(orderID=None, origClOrdID=Some(clOrdID), price=newPrice)
             }
-            override def shouldKeepGoing(l: Ledger): Boolean = l.sentimentScore <= bullScoreThreshold
-          }, metrics)
+            override def shouldKeepGoing(l: Ledger): (Boolean, Ledger) = {
+              val strategyRes = strategy.strategize(l)
+              val (sentiment, l2) = (strategyRes.sentiment, strategyRes.ledger)
+              (sentiment == Bull, l2)
+            }
+          }, metrics, strategy)
 
         def closeShort(ledger: Ledger, openPrice: BigDecimal): Behavior[ActorEvent] =
           closePosition(actorCtx, ledger, new PositionCloser {
@@ -450,7 +463,7 @@ object OrchestratorActor {
               (o1, o2, resF)
             }
             override def cancelOrders(clOrdIDs: String*): Future[Orders] = restGateway.cancelOrderAsync(clOrdIDs=clOrdIDs)
-          }, metrics)
+          }, metrics, strategy)
 
         assert(bullScoreThreshold > bearScoreThreshold, s"bullScoreThreshold ($bullScoreThreshold) <= bearScoreThreshold ($bearScoreThreshold)")
         init(InitCtx(ledger = Ledger()))

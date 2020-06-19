@@ -9,6 +9,7 @@ import com.typesafe.scalalogging.Logger
 import org.rogach.scallop._
 import play.api.libs.json.{JsError, JsResult, JsSuccess}
 import org.slf4j.LoggerFactory
+import moon.Sentiment._
 
 import scala.util.{Failure, Success}
 
@@ -179,17 +180,22 @@ object Cli extends App {
       }
     case ("monitorLedger", _, _, _, _, _, _, _, _, _) =>
       log.info(s"monitoring ledger")
+      import scala.jdk.CollectionConverters._
+      val bbandsConfig = ConfigFactory.parseMap(Map.empty[String, Any].asJava)
+      val strategy = new BBandsStrategy(bbandsConfig)
       def consumeWs(ledger: Ledger=Ledger()): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
         case WsEvent(wsData) =>
           val ledger2 = ledger.record(wsData)
           log.info(s"...wsData: $wsData\n                                ledgerOrders:${ledger2.ledgerOrders.map(o => s"\n                                - $o").mkString}")
           if (ledger2.isMinimallyFilled) {
-            if (ledger2.sentimentScore >= 0.25)
-              log.info(s"bullish - ${ledger2.sentimentScore}! would buy @ ${ledger2.bidPrice}")
-            else if (ledger2.sentimentScore <= -0.25)
-              log.info(s"bearish - ${ledger2.sentimentScore}! would sell @ ${ledger2.askPrice}")
+            val strategyRes = strategy.strategize(ledger2)
+            val (s, m, l) = (strategyRes.sentiment, strategyRes.metrics, strategyRes.ledger)
+            if (s == Bull)
+              log.info(s"bullish - $s! would buy @ ${l.bidPrice}, metrics: $m")
+            else if (s == Bear)
+              log.info(s"bearish - $s! would sell @ ${l.askPrice}, metrics: $m")
             else
-              log.info(s"neutral - ${ledger2.sentimentScore}...")
+              log.info(s"neutral - $s..., metrics: $m")
           } else {
             log.warn("ledger not yet minimally filled...")
           }
@@ -232,7 +238,7 @@ object Cli extends App {
 }
 
 object CliUtils {
-  case class TradeTick(ts: Long, open: BigDecimal, close: BigDecimal, high: BigDecimal, low: BigDecimal, volume: Int) extends Ordered[TradeTick] {
+  case class TradeTick(ts: Long, open: BigDecimal, close: BigDecimal, high: BigDecimal, low: BigDecimal, volume: BigDecimal) extends Ordered[TradeTick] {
     import scala.math.Ordered.orderingToOrdered
     override def compare(that: TradeTick): Int = ((this.ts, this.close) compare (that.ts, that.close))
   }

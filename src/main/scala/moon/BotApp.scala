@@ -6,7 +6,6 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorSystem, SupervisorStrategy}
 import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
-import moon.BotApp.flushSessionOnRestart
 import play.api.libs.json._
 
 import scala.concurrent.duration._
@@ -44,6 +43,8 @@ object BotApp extends App {
   val bullScoreThreshold     = conf.getDouble("bot.bullScoreThreshold")
   val bearScoreThreshold     = conf.getDouble("bot.bearScoreThreshold")
 
+  val strategyName = conf.getString("strategy.selection")
+
   log.info(
     s"""
       |
@@ -79,8 +80,10 @@ object BotApp extends App {
   val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
   val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
   val metrics = Metrics(graphiteHost, graphitePort, namespace)
+  val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig)
 
   val orchestrator = OrchestratorActor(
+    strategy=strategy,
     flushSessionOnRestart=flushSessionOnRestart,
     restGateway=restGateway,
     tradeQty=tradeQty, minTradeVol=minTradeVol,
