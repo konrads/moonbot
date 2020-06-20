@@ -161,7 +161,7 @@ case class Ledger(orderBook: OrderBook=null, tradeDatas: Seq[TradeData]=Nil,
         runningPandl = runningPandl2,
         lastTradeData=currTradeDatas.lastOption.orNull
       )
-      l.copy(ledgerMetrics=ledgerMetrics2, tradeDatas=currTradeDatas)
+      l.copy(ledgerMetrics=ledgerMetrics2)
     }
   }
 }

@@ -267,6 +267,7 @@ object CliUtils {
 
     // output CSV
     val writer = new FileWriter(outputCsv)
+    writer.write("timestamp,open,close,high,low,volume\n")
     for {
       t <- ticks
     } writer.write(s"${t.ts},${t.open},${t.close},${t.high},${t.low},${t.volume}\n")

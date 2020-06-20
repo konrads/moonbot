@@ -101,22 +101,42 @@ class BBandsStrategy(val config: Config) extends Strategy {
     val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, window * resamplePeriodMs, dropLast=false)
     val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
     val ffilled = ffill(resampledTicks).takeRight(window)
-    val closePrices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also it suggests taking calendar minutes, not minutes since now
+    val closePrices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
+//    if (closePrices.size != window) {
+//      val tradeDatas2Millis = tradeDatas2.map(_.timestamp.getMillis)
+//      val tradeDatas2Delta = tradeDatas2Millis.maxOption.map(x => x - tradeDatas2Millis.minOption.getOrElse(0l)).getOrElse(0l)
+//
+//      val resampledTicksMillis = resampledTicks.map(_._1)
+//      val resampledTicksDelta = resampledTicksMillis.maxOption.map(x => x - resampledTicksMillis.minOption.getOrElse(0l)).getOrElse(0l)
+//
+//      val ffilledMillis = ffilled.map(_._1)
+//      val ffilledDelta = ffilledMillis.maxOption.map(x => x - ffilledMillis.minOption.getOrElse(0l)).getOrElse(0l)
+//
+//      log.info(
+//        s"""#### bbands: ${closePrices.size} != ${window} != ${resampledTicks.size} != ${ffilled.size} != ${tradeDatas2.size}
+//           |tradeDatas2:         delta: ${tradeDatas2Delta}ms - ${tradeDatas2Delta / 60000}m min: ${tradeDatas2Millis.minOption} max: ${tradeDatas2Millis.maxOption}
+//           |resampledTicksDelta: delta: ${resampledTicksDelta} min ${resampledTicksMillis.minOption} max: ${resampledTicksMillis.maxOption}
+//           |ffilledDelta:        delta: ${ffilledDelta} min: ${ffilledMillis.minOption} max: ${ffilledMillis.maxOption}
+//          ####""".stripMargin)
+//    }
     val (sentiment, bbandsScore, upper, middle, lower) = bbands(closePrices, devUp=devUp, devDown=devDown) match {
       case Some((upper, middle, lower)) if closePrices.size == window =>  // make sure we have a full window, otherwise go neutral
         val currPrice = (ledger.askPrice + ledger.bidPrice) / 2
         if (currPrice > upper)
-          (Bull, BigDecimal(Bull.id), upper, middle, lower)
+          (Bull, BigDecimal(Bull.id), Some(upper), Some(middle), Some(lower))
         else if (currPrice < lower)
-          (Bear, BigDecimal(Bear.id), upper, middle, lower)
+          (Bear, BigDecimal(Bear.id), Some(upper), Some(middle), Some(lower))
         else {
           val score = 2 * (currPrice - lower)/(upper - lower) - 1
-          (Neutral, score, upper, middle, lower)
+          (Neutral, score, Some(upper), Some(middle), Some(lower))
         }
       case _ =>
-        (Neutral, BigDecimal(Neutral.id), BigDecimal(0), BigDecimal(0), BigDecimal(0))
+        (Neutral, BigDecimal(Neutral.id), None, None, None)
     }
-    StrategyResult(sentiment, Map("data.bbands.score" -> bbandsScore, "data.bbands.upper" -> upper, "data.bbands.middle" -> middle, "data.bbands.lower" -> lower), ledger.copy(tradeDatas = tradeDatas2))
+    StrategyResult(
+      sentiment,
+      (Seq("data.bbands.score" -> bbandsScore) ++ upper.map("data.bbands.upper" -> _).toSeq ++ middle.map("data.bbands.middle" -> _).toSeq ++ lower.map("data.bbands.lower" -> _).toSeq).toMap,
+      ledger.copy(tradeDatas = tradeDatas2))
   }
 }
 
