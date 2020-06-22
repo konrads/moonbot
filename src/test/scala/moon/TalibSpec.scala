@@ -66,4 +66,18 @@ class TalibSpec extends FlatSpec with Matchers with Inside  {
     // import numpy as np
     // [x[-1] for x in BBANDS(xs, timeperiod=len(xs), nbdevup=2, nbdevdn=2, matype=0)]  # or matype=1 for ema, note - seems to produce same results as 0 (ie. SMA)
   }
+
+  it should "work with rsi" in {
+    rsi(Nil) shouldBe None
+    rsi(Seq(1)) shouldBe None // need at least 2
+    rsi(Seq(1, 2)) shouldBe Some(100)
+    rsi(Seq(1, 2, 3, 4, 5)) shouldBe Some(100)
+    rsi(Seq(2, 1)) shouldBe Some(0)
+    rsi(Seq(5, 4, 3, 2, 1)) shouldBe Some(0)
+    rsi(Seq(1, 2, 3, 10, 6, 7)) shouldBe Some(BigDecimal("71.42857142857142857142857142857143"))
+    // validated with python talib:
+    // from talib import RSI
+    // import numpy as np
+    // RSI(xs, timeperiod=len(xs)-1)[-1]
+  }
 }

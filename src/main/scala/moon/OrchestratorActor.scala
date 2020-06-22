@@ -291,7 +291,6 @@ object OrchestratorActor {
             restGateway: IRestGateway,
             tradeQty: Int, minTradeVol: BigDecimal,
             openPositionExpiryMs: Long,
-            bullScoreThreshold: BigDecimal=0.5, bearScoreThreshold: BigDecimal= -0.5,
             reqRetries: Int, markupRetries: Int,
             takeProfitMargin: BigDecimal, stoplossMargin: BigDecimal, postOnlyPriceAdj: BigDecimal,
             metrics: Option[Metrics]=None)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
@@ -465,7 +464,6 @@ object OrchestratorActor {
             override def cancelOrders(clOrdIDs: String*): Future[Orders] = restGateway.cancelOrderAsync(clOrdIDs=clOrdIDs)
           }, metrics, strategy)
 
-        assert(bullScoreThreshold > bearScoreThreshold, s"bullScoreThreshold ($bullScoreThreshold) <= bearScoreThreshold ($bearScoreThreshold)")
         init(InitCtx(ledger = Ledger()))
       }
     }

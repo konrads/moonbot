@@ -125,7 +125,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
 
     val l5 = l4.withMetrics(strategy = bbandsStrategy)
     val metrics5 = l5.ledgerMetrics
-    metrics5 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("0.3524439102564102564102564102564102"), "data.pandl.delta" -> BigDecimal("0.3524439102564102564102564102564102"), "data.sentiment" -> BigDecimal(0), "data.bbands.score" -> BigDecimal(0), "data.bbands.upper" -> BigDecimal(0), "data.bbands.middle" -> BigDecimal(0), "data.bbands.lower" -> BigDecimal(0), "data.myTradeCnt" -> 3, "data.volume" -> 0), parseDateTime("2010-01-05T12:00:00.000Z"), null, BigDecimal("0.3524439102564102564102564102564102"))  // no buy/sell as yet
+    metrics5 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("0.3524439102564102564102564102564102"), "data.pandl.delta" -> BigDecimal("0.3524439102564102564102564102564102"), "data.sentiment" -> BigDecimal(0), "data.bbands.score" -> BigDecimal(0), "data.myTradeCnt" -> 3, "data.volume" -> 0), parseDateTime("2010-01-05T12:00:00.000Z"), null, BigDecimal("0.3524439102564102564102564102564102"))  // no buy/sell as yet
 
     // add sell, recalculate metrics
     val l6 = buildLedger(l5,
@@ -136,7 +136,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     )
     val l7 = l6.withMetrics(strategy = bbandsStrategy)
     val metrics7 = l7.ledgerMetrics
-    metrics7 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("1.600881410256410256410256410256410"), "data.pandl.delta" -> BigDecimal("1.2484375"), "data.sentiment" -> BigDecimal(0), "data.bbands.score" -> BigDecimal(0), "data.bbands.upper" -> BigDecimal(0), "data.bbands.middle" -> BigDecimal(0), "data.bbands.lower" -> BigDecimal(0), "data.myTradeCnt" -> 4, "data.volume" -> 0.0), parseDateTime("2010-01-07T12:00:00.000Z"), null, BigDecimal("1.600881410256410256410256410256410"))  // no buy/sell as yet
+    metrics7 shouldBe LedgerMetrics(Map("data.price" -> BigDecimal(55), "data.pandl.pandl" -> BigDecimal("1.600881410256410256410256410256410"), "data.pandl.delta" -> BigDecimal("1.2484375"), "data.sentiment" -> BigDecimal(0), "data.bbands.score" -> BigDecimal(0), "data.myTradeCnt" -> 4, "data.volume" -> 0.0), parseDateTime("2010-01-07T12:00:00.000Z"), null, BigDecimal("1.600881410256410256410256410256410"))  // no buy/sell as yet
   }
 
   it should "order LedgerOrders desc" in {

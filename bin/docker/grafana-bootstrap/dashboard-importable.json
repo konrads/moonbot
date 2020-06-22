@@ -460,7 +460,7 @@
           "h": 5,
           "w": 24,
           "x": 0,
-          "y": 33
+          "y": 28
         },
         "id": 13,
         "legend": {
@@ -529,6 +529,113 @@
         "timeFrom": null,
         "timeShift": null,
         "title": "Bollinger Bands",
+        "tooltip": {
+          "shared": true,
+          "sort": 0,
+          "value_type": "individual"
+        },
+        "type": "graph",
+        "xaxis": {
+          "buckets": null,
+          "mode": "time",
+          "name": null,
+          "show": true,
+          "values": []
+        },
+        "yaxes": [
+          {
+            "format": "short",
+            "label": null,
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true
+          },
+          {
+            "format": "short",
+            "label": null,
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true
+          }
+        ],
+        "yaxis": {
+          "align": false,
+          "alignLevel": null
+        }
+      },
+      {
+        "aliasColors": {},
+        "bars": false,
+        "dashLength": 10,
+        "dashes": false,
+        "datasource": "Local Graphite",
+        "fill": 1,
+        "gridPos": {
+          "h": 5,
+          "w": 24,
+          "x": 0,
+          "y": 33
+        },
+        "id": 14,
+        "legend": {
+          "avg": false,
+          "current": false,
+          "max": false,
+          "min": false,
+          "show": true,
+          "total": false,
+          "values": false
+        },
+        "lines": true,
+        "linewidth": 1,
+        "links": [],
+        "nullPointMode": "connected",
+        "percentage": false,
+        "pointradius": 5,
+        "points": false,
+        "renderer": "flot",
+        "seriesOverrides": [
+          {
+            "alias": "score",
+            "color": "#70dbed"
+          },
+          {
+            "alias": "upper",
+            "color": "#dcdcdc",
+            "dashes": true
+          },
+          {
+            "alias": "lower",
+            "color": "#969696",
+            "dashes": true
+          }
+        ],
+        "spaceLength": 10,
+        "stack": false,
+        "steppedLine": false,
+        "targets": [
+          {
+            "refCount": 1,
+            "refId": "A",
+            "target": "aliasByMetric(moon.__pair__.data.rsi.score)"
+          },
+          {
+            "refCount": 2,
+            "refId": "B",
+            "target": "aliasByMetric(moon.__pair__.data.rsi.upper)"
+          },
+          {
+            "refCount": 4,
+            "refId": "C",
+            "target": "aliasByMetric(moon.__pair__.data.rsi.lower)"
+          }
+        ],
+        "thresholds": [],
+        "timeFrom": null,
+        "timeShift": null,
+        "title": "RSI",
         "tooltip": {
           "shared": true,
           "sort": 0,

@@ -22,18 +22,37 @@ object talib {
     if (xs.isEmpty)
       None
     else {
-      val ma = maType match {
-        case MA.SMA => sma(xs)
-        case MA.EMA => ema(xs)
-      }
-      val variance = xs.map(a => (a - ma).pow(2)).sum / xs.size
+      val ma_ = ma(xs, maType)
+      val variance = xs.map(a => (a - ma_).pow(2)).sum / xs.size
       val stdev = math.sqrt(variance.doubleValue)  // FIXME: loosing accuracy by converting to a Double...?
 
-      val lower = ma - devDown * stdev
-      val middle = ma
-      val upper = ma + devUp * stdev
+      val lower = ma_ - devDown * stdev
+      val middle = ma_
+      val upper = ma_ + devUp * stdev
       Some((upper, middle, lower))
     }
+
+  /**
+   * For further strategies:
+   * https://www.investopedia.com/terms/r/rsi.asp
+   */
+  def rsi(xs: Seq[BigDecimal], maType: MA.Value=MA.SMA): Option[BigDecimal] = {
+    if (xs.size <= 1)
+      None
+    else {
+      val xsShifted = (BigDecimal(0) +: xs).take(xs.size)
+      val deltas = (xs zip xsShifted).drop(1).map { case (x, y) => x - y }
+      val wins = deltas.map(x => if (x > 0) x else BigDecimal(0))
+      val losses = deltas.map(x => if (x < 0) -x else BigDecimal(0))
+      val winsMa = ma(wins, maType)
+      val lossesMa = ma(losses, maType)
+      val rsi = if (lossesMa == BigDecimal(0))
+        BigDecimal(100)
+      else
+        100 - (100 / (1 + winsMa / lossesMa))
+      Some(rsi)
+    }
+  }
 
   case class TradeTick(weightedPrice: BigDecimal, open: BigDecimal, close: BigDecimal, high: BigDecimal, low: BigDecimal, volume: BigDecimal)
 
@@ -74,7 +93,10 @@ object talib {
     else
       xs.sum / xs.size
 
-  def ma(xs: Seq[BigDecimal]): BigDecimal = sma(xs)
+  def ma(xs: Seq[BigDecimal], maType: MA.Value): BigDecimal = maType match {
+    case MA.SMA => sma(xs)
+    case MA.EMA => ema(xs)
+  }
 
   // http://stackoverflow.com/questions/24705011/how-to-optimise-a-exponential-moving-average-algorithm-in-php
   def ema(xs: Seq[BigDecimal], emaSmoothing: BigDecimal=2): BigDecimal = {

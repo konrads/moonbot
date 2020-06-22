@@ -20,6 +20,7 @@ object Strategy {
     case "tickdirection" => new TickDirectionStrategy(config)
     case "bullbear" => new BullBearEmaStrategy(config)
     case "bbands" => new BBandsStrategy(config)
+    case "rsi" => new RSIStrategy(config)
   }
 
   def latestTradesData(tds: Seq[TradeData], periodMs: Int, dropLast: Boolean = true): Seq[TradeData] = {
@@ -101,9 +102,9 @@ class BBandsStrategy(val config: Config) extends Strategy {
     val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, window * resamplePeriodMs, dropLast=false)
     val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
     val ffilled = ffill(resampledTicks).takeRight(window)
-    val closePrices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
-    val (sentiment, bbandsScore, upper, middle, lower) = bbands(closePrices, devUp=devUp, devDown=devDown) match {
-      case Some((upper, middle, lower)) if closePrices.size == window =>  // make sure we have a full window, otherwise go neutral
+    val prices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
+    val (sentiment, bbandsScore, upper, middle, lower) = bbands(prices, devUp=devUp, devDown=devDown) match {
+      case Some((upper, middle, lower)) if prices.size == window =>  // make sure we have a full window, otherwise go neutral
         val currPrice = (ledger.askPrice + ledger.bidPrice) / 2
         if (currPrice > upper)
           (Bull, BigDecimal(Bull.id), Some(upper), Some(middle), Some(lower))
@@ -126,7 +127,32 @@ class BBandsStrategy(val config: Config) extends Strategy {
 
 // FIXME: implement if makes sense?
 class RSIStrategy(val config: Config) extends Strategy {
-  override def strategize(ledger: Ledger): StrategyResult = ???
+  val window = config.optInt("window").getOrElse(10)
+  val resamplePeriodMs = config.optInt("resamplePeriodMs").getOrElse(60 * 1000)
+  val upper = config.optDouble("upper").getOrElse(55.0)
+  val lower = config.optDouble("lower").getOrElse(45.0)
+  log.info(s"Strategy ${this.getClass.getSimpleName}: window: $window, resamplePeriodMs: $resamplePeriodMs, upper: $upper, lower: $lower")
+  override def strategize(ledger: Ledger): StrategyResult = {
+    val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, (window+1) * resamplePeriodMs, dropLast=false)
+    val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
+    val ffilled = ffill(resampledTicks).takeRight(window+1)
+    val prices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
+    val (sentiment, id, scoreVal) = rsi(prices) match {
+      case Some(res) if prices.size > window =>  // make sure we have a full window (+1), otherwise go neutral
+        if (res > upper)
+          (Bull, BigDecimal(Bull.id), Some(res))
+        else if (res < lower)
+          (Bear, BigDecimal(Bear.id), Some(res))
+        else
+          (Neutral, BigDecimal(Neutral.id), Some(res))
+      case _ =>
+        (Neutral, BigDecimal(Neutral.id), None)
+    }
+    StrategyResult(
+      sentiment,
+      (scoreVal.map("data.rsi.score" -> _).toSeq :+ ("data.rsi.upper" -> BigDecimal(upper)) :+ ("data.rsi.lower" -> BigDecimal(lower))).toMap,
+      ledger.copy(tradeDatas = tradeDatas2))
+  }
 }
 
 class MACDStrategy(val config: Config) extends Strategy {

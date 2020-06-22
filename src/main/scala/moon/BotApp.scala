@@ -40,8 +40,6 @@ object BotApp extends App {
   val takeProfitMargin       = conf.getDouble("bot.takeProfitMargin")
   val stoplossMargin         = conf.getDouble("bot.stoplossMargin")
   val postOnlyPriceAdj       = conf.getDouble("bot.postOnlyPriceAdj")
-  val bullScoreThreshold     = conf.getDouble("bot.bullScoreThreshold")
-  val bearScoreThreshold     = conf.getDouble("bot.bearScoreThreshold")
 
   val strategyName = conf.getString("strategy.selection")
 
@@ -88,13 +86,11 @@ object BotApp extends App {
     restGateway=restGateway,
     tradeQty=tradeQty, minTradeVol=minTradeVol,
     openPositionExpiryMs=openPositionExpiryMs,
-    bullScoreThreshold=bullScoreThreshold, bearScoreThreshold=bearScoreThreshold,
     reqRetries=reqRetries, markupRetries=markupRetries,
     takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,
     metrics=Some(metrics))
 
-  // Supervision of my actor, with backoff restarts, and pass through messages, so that wsMessageConsumer can utilize the valid ActorRef
-  // Note: not sure such complexity is warranted... On supervision & backoff
+  // Supervision of my actor, with backoff restarts. On supervision & backoff:
   // https://manuel.bernhardt.io/2019/09/05/tour-of-akka-typed-supervision-and-signals/
   // presuming ActorRef being reusable between restarts:
   // https://stackoverflow.com/questions/35332897/is-an-actorref-updated-when-the-associated-actor-is-restarted-by-the-supervisor
