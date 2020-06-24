@@ -84,6 +84,7 @@ object Cli extends App {
     case s:JsError                      => log.error(s"WS error!: $s")
   }
   val consumeNone: PartialFunction[JsResult[WsModel], Unit] = {
+    case JsSuccess(_, _)                => ()  // forces no debug
     case s:JsError                      => log.error(s"WS error!: $s")
   }
 

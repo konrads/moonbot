@@ -5,7 +5,7 @@ import scala.collection.Seq
 object talib {
   object MA extends Enumeration {
     type MA = Value
-    val SMA, EMA = Value
+    val SMA, EMA, EMA_2 = Value
   }
 
   val MS_IN_MINUTE = 1000 * 60
@@ -22,7 +22,7 @@ object talib {
     if (xs.isEmpty)
       None
     else {
-      val ma_ = ma(xs, maType)
+      val ma_ = ma(xs, xs.size, maType)
       val variance = xs.map(a => (a - ma_).pow(2)).sum / xs.size
       val stdev = math.sqrt(variance.doubleValue)  // FIXME: loosing accuracy by converting to a Double...?
 
@@ -44,14 +44,73 @@ object talib {
       val deltas = (xs zip xsShifted).drop(1).map { case (x, y) => x - y }
       val wins = deltas.map(x => if (x > 0) x else BigDecimal(0))
       val losses = deltas.map(x => if (x < 0) -x else BigDecimal(0))
-      val winsMa = ma(wins, maType)
-      val lossesMa = ma(losses, maType)
+      val winsMa = ma(wins, wins.size, maType)
+      val lossesMa = ma(losses, losses.size, maType)
       val rsi = if (lossesMa == BigDecimal(0))
         BigDecimal(100)
       else
         100 - (100 / (1 + winsMa / lossesMa))
       Some(rsi)
     }
+  }
+
+  // https://stackoverflow.com/questions/34427530/macd-function-returning-incorrect-values/34453997#34453997
+  def macd(xs: Seq[BigDecimal], slow: Int=26, fast: Int=12, signal: Int=9, maType: MA.Value=MA.EMA): Option[(BigDecimal /* macd */, BigDecimal /* signal */, BigDecimal /* histogram */)] = {  // note - ignoring signal (default = 9)
+    if (xs.size < (slow + signal) - 1)
+      None
+    else {
+      val slowMas = for(i <- slow - fast to xs.size) yield ma(xs.take(i), slow, maType)
+      val xs2 = xs.drop(slow - fast)
+      val fastMas = for(i <- 0 to xs2.size) yield ma(xs2.take(i), fast, maType)
+      val macds = (fastMas zip slowMas).map { case (f, s) => f - s }
+      val macds2 = macds.drop(slow - fast + 1)
+      val signal_ = ma(macds2, signal, maType)
+      val histogram = macds.last - signal_
+      Some((macds.last, signal_, histogram))
+    }
+  }
+
+  /**
+   * Given a MACD histogram graph:
+   *
+   *      *+
+   *     *  +
+   *  0 -----------
+   *          #  @
+   *           #@
+   *
+   *  * - increasing above minHigh => 1
+   *  + - decreasing above minHigh => proportional to highest
+   *  # - decreasing below minLow => -1
+   *  @ - increasing below minLow => proportional to lowest
+   *
+   *  Where upper and lower are some static boundaries.
+   */
+  def macdCap(minHigh: BigDecimal=0.00000000001, minLow: BigDecimal= -0.00000000001): BigDecimal => BigDecimal = {
+    assert(minHigh > 0 && minLow < 0)
+    var high = minHigh
+    var low = minLow
+    def cap(x: BigDecimal): BigDecimal =
+      if (x > minHigh && x > high) {
+        low = minLow
+        high = x
+        BigDecimal(1)
+      } else if (x > minHigh) {
+        low = minLow
+        (x - minHigh) / (high - minHigh)
+      } else if (x < minLow && x < low) {
+        high = minHigh
+        low = x
+        BigDecimal(-1)
+      } else if (x < minLow) {
+        high = minHigh
+        (x - minLow) / -(low - minLow)
+      } else {  // between minUpper and minLower
+        low = minLow
+        high = minHigh
+        BigDecimal(0)
+      }
+    cap
   }
 
   case class TradeTick(weightedPrice: BigDecimal, open: BigDecimal, close: BigDecimal, high: BigDecimal, low: BigDecimal, volume: BigDecimal)
@@ -87,26 +146,28 @@ object talib {
       res
     }
 
-  def sma(xs: Seq[BigDecimal]): BigDecimal =
+  def ma(xs: Seq[BigDecimal], period: Int, maType: MA.Value): BigDecimal = maType match {
+    case MA.SMA => sma(xs, period)
+    case MA.EMA => ema(xs, period)
+  }
+
+  def sma(xs: Seq[BigDecimal], period: Int): BigDecimal =
     if (xs.isEmpty)
       0
     else
-      xs.sum / xs.size
+      xs.takeRight(period).sum / period
 
-  def ma(xs: Seq[BigDecimal], maType: MA.Value): BigDecimal = maType match {
-    case MA.SMA => sma(xs)
-    case MA.EMA => ema(xs)
-  }
-
-  // http://stackoverflow.com/questions/24705011/how-to-optimise-a-exponential-moving-average-algorithm-in-php
-  def ema(xs: Seq[BigDecimal], emaSmoothing: BigDecimal=2): BigDecimal = {
+  // https://www.investopedia.com/ask/answers/122314/what-exponential-moving-average-ema-formula-and-how-ema-calculated.asp
+  // https://www.investopedia.com/articles/trading/10/simple-exponential-moving-averages-compare.asp
+  // https://www.youtube.com/watch?v=ezcwBDsDviE
+  def ema(xs: Seq[BigDecimal], period: Int, emaSmoothing: BigDecimal=2): BigDecimal = {
     if (xs.isEmpty)
       0
     else {
-      val k = emaSmoothing / (xs.length + 1)
-      val mean = xs.sum / xs.length
-      xs.foldLeft(mean)(
-        (last, s) => (1 - k) * last + k * s
+      val k = emaSmoothing / (period + 1)
+      val ema0 = xs.take(period).sum / period
+      xs.drop(period).foldLeft(ema0)(
+        (ema, t1) => ema * (1 - k) + t1 * k
       )
     }
   }

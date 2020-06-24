@@ -12,15 +12,18 @@ case class StrategyResult(sentiment: Sentiment.Value, metrics: Map[String, BigDe
 
 trait Strategy {
   val log = Logger[Strategy]
+  val MIN_EMA_WINDOW = 200  // from experiments, EMA is unlikely to change once window > 200
   def strategize(ledger: Ledger): StrategyResult
 }
 
 object Strategy {
   def apply(name: String, config: Config): Strategy = name.toLowerCase match {
     case "tickdirection" => new TickDirectionStrategy(config)
-    case "bullbear" => new BullBearEmaStrategy(config)
-    case "bbands" => new BBandsStrategy(config)
-    case "rsi" => new RSIStrategy(config)
+    case "bullbear"      => new BullBearEmaStrategy(config)
+    case "bbands"        => new BBandsStrategy(config)
+    case "rsi"           => new RSIStrategy(config)
+    case "macd"          => new MACDStrategy(config)
+    case "weighted"      => new WeightedStrategy(config)
   }
 
   def latestTradesData(tds: Seq[TradeData], periodMs: Int, dropLast: Boolean = true): Seq[TradeData] = {
@@ -77,8 +80,8 @@ class BullBearEmaStrategy(val config: Config) extends Strategy {
       BigDecimal(0)
     else {
       val (bullTrades, bearTrades) = tradeDatas2.partition(_.side == Buy)
-      val bullVolume = ema(bullTrades.map(_.size), emaSmoothing)
-      val bearVolume = ema(bearTrades.map(_.size), emaSmoothing)
+      val bullVolume = ema(bullTrades.map(_.size), bullTrades.size, emaSmoothing)
+      val bearVolume = ema(bearTrades.map(_.size), bearTrades.size, emaSmoothing)
       (bullVolume - bearVolume) / (bullVolume + bearVolume)
     }
     val sentiment = if (volumeScore > upper)
@@ -101,7 +104,7 @@ class BBandsStrategy(val config: Config) extends Strategy {
   override def strategize(ledger: Ledger): StrategyResult = {
     val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, window * resamplePeriodMs, dropLast=false)
     val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
-    val ffilled = ffill(resampledTicks).takeRight(window)
+    val ffilled = ffill(resampledTicks).takeRight(window)  // in case change from SMA => EMA
     val prices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
     val (sentiment, bbandsScore, upper, middle, lower) = bbands(prices, devUp=devUp, devDown=devDown) match {
       case Some((upper, middle, lower)) if prices.size == window =>  // make sure we have a full window, otherwise go neutral
@@ -125,7 +128,6 @@ class BBandsStrategy(val config: Config) extends Strategy {
 }
 
 
-// FIXME: implement if makes sense?
 class RSIStrategy(val config: Config) extends Strategy {
   val window = config.optInt("window").getOrElse(10)
   val resamplePeriodMs = config.optInt("resamplePeriodMs").getOrElse(60 * 1000)
@@ -135,18 +137,18 @@ class RSIStrategy(val config: Config) extends Strategy {
   override def strategize(ledger: Ledger): StrategyResult = {
     val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, (window+1) * resamplePeriodMs, dropLast=false)
     val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
-    val ffilled = ffill(resampledTicks).takeRight(window+1)
+    val ffilled = ffill(resampledTicks).takeRight(MIN_EMA_WINDOW)  // in case change from SMA => EMA
     val prices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
-    val (sentiment, id, scoreVal) = rsi(prices) match {
+    val (sentiment, scoreVal) = rsi(prices) match {
       case Some(res) if prices.size > window =>  // make sure we have a full window (+1), otherwise go neutral
         if (res > upper)
-          (Bull, BigDecimal(Bull.id), Some(res))
+          (Bull, Some(res))
         else if (res < lower)
-          (Bear, BigDecimal(Bear.id), Some(res))
+          (Bear, Some(res))
         else
-          (Neutral, BigDecimal(Neutral.id), Some(res))
+          (Neutral, Some(res))
       case _ =>
-        (Neutral, BigDecimal(Neutral.id), None)
+        (Neutral, None)
     }
     StrategyResult(
       sentiment,
@@ -156,5 +158,47 @@ class RSIStrategy(val config: Config) extends Strategy {
 }
 
 class MACDStrategy(val config: Config) extends Strategy {
-  override def strategize(ledger: Ledger): StrategyResult = ???
+  val slowWindow = config.optInt("slowWindow").getOrElse(26)
+  val fastWindow = config.optInt("fastWindow").getOrElse(12)
+  val signalWindow = config.optInt("signalWindow").getOrElse(9)
+  val resamplePeriodMs = config.optInt("resamplePeriodMs").getOrElse(60 * 1000)
+  val minUpper = config.optDouble("minUpper").getOrElse(0.00000000001)
+  val minLower = config.optDouble("minLower").getOrElse(-0.00000000001)
+  val capFun = macdCap(minUpper, minLower)
+  assert(fastWindow < slowWindow)
+  log.info(s"Strategy ${this.getClass.getSimpleName}: slowWindow: $slowWindow, fastWindow: $fastWindow, signalWindow: $signalWindow, resamplePeriodMs: $resamplePeriodMs, minUpper: $minUpper, minLower: $minLower")
+  override def strategize(ledger: Ledger): StrategyResult = {
+    val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, (slowWindow + signalWindow) * resamplePeriodMs, dropLast=false)
+    val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
+    val ffilled = ffill(resampledTicks).takeRight(MIN_EMA_WINDOW)
+    val prices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
+    val (sentiment, macdVal, macdSignal, macdHistogram, macdCapScore) = macd(prices, slowWindow, fastWindow, signalWindow) match {
+      case Some((macd, signal, histogram)) =>
+        val capScore = capFun(histogram)
+        val sentiment = if (capScore > 0)
+          Bull
+        else if (capScore < 0)
+          Bear
+        else
+          Neutral
+        (sentiment, Some(macd), Some(signal), Some(histogram), Some(capScore))
+      case other =>
+        (Neutral, None, None, None, None)
+    }
+    StrategyResult(
+      sentiment,
+      // note: keeping macd's sentiment as a seperate metric to show indicator specific sentiment
+      (Seq("data.macd.sentiment" -> BigDecimal(sentiment.id)) ++ macdVal.map("data.macd.macd" -> _).toSeq ++ macdSignal.map("data.macd.signal" -> _).toSeq ++ macdHistogram.map("data.macd.histogram" -> _).toSeq ++ macdCapScore.map("data.macd.cap" -> _).toSeq).toMap,
+      ledger.copy(tradeDatas = tradeDatas2))
+  }
+}
+
+
+class WeightedStrategy(val config: Config) extends Strategy {
+  import scala.jdk.CollectionConverters._
+  val weights = (for (k <- config.getObject("weights").keySet().asScala) yield k -> config.getInt(s"weights.$k")).toMap
+
+  override def strategize(ledger: Ledger): StrategyResult = {
+    ???
+  }
 }

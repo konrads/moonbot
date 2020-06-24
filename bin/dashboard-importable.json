@@ -315,7 +315,9 @@
           },
           {
             "alias": "delta",
-            "color": "#70dbed"
+            "color": "#70dbed",
+            "bars": true,
+            "lines": false
           }
         ],
         "spaceLength": 10,
@@ -674,6 +676,166 @@
       },
       {
         "aliasColors": {},
+        "bars": false,
+        "dashLength": 10,
+        "dashes": false,
+        "datasource": "Local Graphite",
+        "fill": 1,
+        "gridPos": {
+          "h": 5,
+          "w": 24,
+          "x": 0,
+          "y": 38
+        },
+        "id": 15,
+        "legend": {
+          "avg": false,
+          "current": false,
+          "max": false,
+          "min": false,
+          "show": true,
+          "total": false,
+          "values": false
+        },
+        "lines": true,
+        "linewidth": 1,
+        "links": [],
+        "nullPointMode": "connected",
+        "percentage": false,
+        "pointradius": 5,
+        "points": false,
+        "renderer": "flot",
+        "seriesOverrides": [
+          {
+            "alias": "macd",
+            "color": "#70dbed"
+          },
+          {
+            "alias": "signal",
+            "color": "#e0752d"
+          },
+          {
+            "alias": "histogram_pos",
+            "color": "#9ac48a",
+            "bars": true,
+            "lines": false
+          },
+          {
+            "alias": "histogram_neg",
+            "color": "#f29191",
+            "bars": true,
+            "lines": false
+          },
+          {
+            "alias": "bull",
+            "color": "__profit_green__",
+            "lines": false,
+            "pointradius": 4,
+            "points": true
+          },
+          {
+            "alias": "bear",
+            "color": "__loss_red__",
+            "lines": false,
+            "pointradius": 4,
+            "points": true
+          }
+        ],
+        "spaceLength": 10,
+        "stack": false,
+        "steppedLine": false,
+        "targets": [
+          {
+            "hide": true,
+            "refId": "A",
+            "target": "aliasByMetric(moon.__pair__.data.macd.cap)"
+          },
+          {
+            "hide": true,
+            "refId": "B",
+            "target": "aliasByMetric(moon.__pair__.data.macd.macd)"
+          },
+          {
+            "refId": "C",
+            "target": "aliasByMetric(moon.__pair__.data.macd.signal)"
+          },
+          {
+            "refId": "D",
+            "target": "alias(removeBelowValue(moon.__pair__.data.macd.histogram, 0), 'histogram_pos')"
+          },
+          {
+            "refId": "E",
+            "target": "alias(removeAboveValue(moon.__pair__.data.macd.histogram, 0), 'histogram_neg')"
+          },
+          {
+            "hide": true,
+            "refCount": 1,
+            "refId": "F",
+            "target": "alias(divideSeries(removeAboveValue(moon.__pair__.data.macd.sentiment, 0), moon.__pair__.data.macd.sentiment), 'bear_indicator')",
+            "textEditor": true
+          },
+          {
+            "hide": true,
+            "refCount": 1,
+            "refId": "G",
+            "target": "alias(divideSeries(removeBelowValue(moon.__pair__.data.macd.sentiment, 0), moon.__pair__.data.macd.sentiment), 'bull_indicator')",
+            "textEditor": true
+          },
+          {
+            "refCount": 1,
+            "refId": "H",
+            "target": "alias(multiplySeries(moon.__pair__.data.macd.histogram, #F), 'bear')",
+            "textEditor": true
+          },
+          {
+            "refCount": 1,
+            "refId": "I",
+            "target": "alias(multiplySeries(moon.__pair__.data.macd.histogram, #G), 'bull')",
+            "textEditor": true
+          }
+        ],
+        "thresholds": [],
+        "timeFrom": null,
+        "timeShift": null,
+        "title": "MACD",
+        "tooltip": {
+          "shared": true,
+          "sort": 0,
+          "value_type": "individual"
+        },
+        "type": "graph",
+        "xaxis": {
+          "buckets": null,
+          "mode": "time",
+          "name": null,
+          "show": true,
+          "values": []
+        },
+        "yaxes": [
+          {
+            "format": "short",
+            "label": null,
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true
+          },
+          {
+            "format": "short",
+            "label": null,
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true
+          }
+        ],
+        "yaxis": {
+          "align": false,
+          "alignLevel": null
+        }
+      },
+      {
+        "aliasColors": {},
         "bars": true,
         "dashLength": 10,
         "dashes": false,
@@ -683,7 +845,7 @@
           "h": 5,
           "w": 8,
           "x": 0,
-          "y": 33
+          "y": 43
         },
         "id": 22,
         "legend": {
@@ -775,7 +937,7 @@
           "h": 5,
           "w": 4,
           "x": 8,
-          "y": 33
+          "y": 43
         },
         "id": 23,
         "legend": {
@@ -867,7 +1029,7 @@
           "h": 5,
           "w": 4,
           "x": 12,
-          "y": 33
+          "y": 43
         },
         "id": 24,
         "legend": {
@@ -965,7 +1127,7 @@
           "h": 5,
           "w": 4,
           "x": 16,
-          "y": 33
+          "y": 43
         },
         "id": 25,
         "interval": null,
@@ -1042,7 +1204,7 @@
           "h": 5,
           "w": 4,
           "x": 20,
-          "y": 33
+          "y": 43
         },
         "id": 26,
         "interval": null,
