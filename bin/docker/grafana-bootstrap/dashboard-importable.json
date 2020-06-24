@@ -716,7 +716,7 @@
           },
           {
             "alias": "histogram_pos",
-            "color": "#9ac48a",
+            "color": "#e1ffd4",
             "bars": true,
             "lines": false
           },
@@ -730,14 +730,14 @@
             "alias": "bull",
             "color": "__profit_green__",
             "lines": false,
-            "pointradius": 4,
+            "pointradius": 2,
             "points": true
           },
           {
             "alias": "bear",
             "color": "__loss_red__",
             "lines": false,
-            "pointradius": 4,
+            "pointradius": 2,
             "points": true
           }
         ],
