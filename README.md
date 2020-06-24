@@ -51,6 +51,10 @@ and [RestGateway](src/main/scala/moon/RestGateway.scala) for Rest requests (issu
 
 [Metrics](src/main/scala/moon/Metrics.scala) sends graphite packets, potentially adding JVM/system ones.
 
+[Strategy](src/main/scala/moon/Strategy.scala) applies a strategy, returning a sentiment (`Bull`/`Bear`/`Neutral`), metrics, cut down ledger.
+
+[talib](src/main/scala/moon/talib.scala) technical analysis library, validated against [C/Python talib](https://github.com/mrjbq7/ta-lib).
+
 [Cli](src/main/scala/moon/Cli.scala) allows for command line interactions with REST/websockets, for manual testing.
 
 

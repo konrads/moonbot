@@ -78,7 +78,7 @@ object BotApp extends App {
   val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
   val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
   val metrics = Metrics(graphiteHost, graphitePort, namespace)
-  val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig)
+  val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig, parentConfig = conf.getObject(s"strategy").toConfig)
 
   val orchestrator = OrchestratorActor(
     strategy=strategy,

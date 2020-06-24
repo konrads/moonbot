@@ -100,44 +100,35 @@ class TalibSpec extends FlatSpec with Matchers with Inside  {
   }
 
   it should "work with macdCap" in {
-    val capFun = macdCap(0.5, -.5)
+    val capFun = macdCap()
     // going up > 0
     capFun(0) shouldBe 0
-    capFun(0.05) shouldBe 0
+    capFun(0.05) shouldBe 1
     capFun(0.6) shouldBe 1
     capFun(1) shouldBe 1
-    capFun(.8) shouldBe 0.6
-    capFun(.85) shouldBe 0.7
+    capFun(.8) shouldBe 0.8
+    capFun(.85) shouldBe 0.85
     capFun(1.5) shouldBe 1
-    capFun(1) shouldBe 0.5
+    capFun(1) shouldBe BigDecimal(2)/3
     // going down > 0
-    capFun(0.6) shouldBe 0.1
-    capFun(0.5) shouldBe 0
-    capFun(0.1) shouldBe 0
+    capFun(0.6) shouldBe 0.4
+    capFun(0.5) shouldBe BigDecimal(1)/3
+    capFun(0.1) shouldBe BigDecimal(1)/15
     // going down < 0
-    capFun(-0.3) shouldBe 0
+    capFun(-0.3) shouldBe -1
     capFun(-0.6) shouldBe -1
     capFun(-1) shouldBe -1
-    capFun(-0.8) shouldBe -0.6
-    capFun(-0.9) shouldBe -0.8
+    capFun(-0.8) shouldBe -0.8
+    capFun(-0.9) shouldBe -0.9
     capFun(-2.5) shouldBe -1
-    capFun(-1.5) shouldBe -0.5
+    capFun(-1.5) shouldBe -0.6
     // going up < 0
-    capFun(-1) shouldBe -0.25
-    capFun(-.5) shouldBe 0
-    capFun(-.4) shouldBe 0
+    capFun(-1) shouldBe -0.4
+    capFun(-.5) shouldBe -0.2
+    capFun(-.4) shouldBe -0.16
     // peek-a-boo above 0
-    capFun(0.5) shouldBe 0
-    capFun(0.6) shouldBe 1
-    capFun(0.55) shouldBe 0.5
+    capFun(0.4) shouldBe 1
+    capFun(0.5) shouldBe 1
+    capFun(0.4) shouldBe 0.8
   }
-
-//  it should "work with macdCap2" in {
-//    val capFun = macdCap(0.8, -.8)
-//    // going up > 0
-//    capFun(0) shouldBe 0
-//    capFun(0.5) shouldBe 0
-//    capFun(0.6) shouldBe 1
-//    capFun(1) shouldBe 1
-//  }
 }

@@ -86,29 +86,28 @@ object talib {
    *
    *  Where upper and lower are some static boundaries.
    */
-  def macdCap(minHigh: BigDecimal=0.00000000001, minLow: BigDecimal= -0.00000000001): BigDecimal => BigDecimal = {
-    assert(minHigh > 0 && minLow < 0)
-    var high = minHigh
-    var low = minLow
+  def macdCap(): BigDecimal => BigDecimal = {
+    var high: BigDecimal = 0
+    var low: BigDecimal = 0
     def cap(x: BigDecimal): BigDecimal =
-      if (x > minHigh && x > high) {
-        low = minLow
+      if (x > 0 && x > high) {
+        low = 0
         high = x
         BigDecimal(1)
-      } else if (x > minHigh) {
-        low = minLow
-        (x - minHigh) / (high - minHigh)
-      } else if (x < minLow && x < low) {
-        high = minHigh
+      } else if (x > 0) {
+        low = 0
+        x / high
+      } else if (x < 0 && x < low) {
+        high = 0
         low = x
         BigDecimal(-1)
-      } else if (x < minLow) {
-        high = minHigh
-        (x - minLow) / -(low - minLow)
+      } else if (x < 0) {
+        high = 0
+        -x / low
       } else {  // between minUpper and minLower
-        low = minLow
-        high = minHigh
-        BigDecimal(0)
+        low = 0
+        high = 0
+        0
       }
     cap
   }

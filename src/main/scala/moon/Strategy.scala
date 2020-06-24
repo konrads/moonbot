@@ -17,13 +17,13 @@ trait Strategy {
 }
 
 object Strategy {
-  def apply(name: String, config: Config): Strategy = name.toLowerCase match {
+  def apply(name: String, config: Config, parentConfig: Config): Strategy = name.toLowerCase match {
     case "tickdirection" => new TickDirectionStrategy(config)
     case "bullbear"      => new BullBearEmaStrategy(config)
     case "bbands"        => new BBandsStrategy(config)
     case "rsi"           => new RSIStrategy(config)
     case "macd"          => new MACDStrategy(config)
-    case "weighted"      => new WeightedStrategy(config)
+    case "weighted"      => new WeightedStrategy(config, parentConfig)
   }
 
   def latestTradesData(tds: Seq[TradeData], periodMs: Int, dropLast: Boolean = true): Seq[TradeData] = {
@@ -162,9 +162,9 @@ class MACDStrategy(val config: Config) extends Strategy {
   val fastWindow = config.optInt("fastWindow").getOrElse(12)
   val signalWindow = config.optInt("signalWindow").getOrElse(9)
   val resamplePeriodMs = config.optInt("resamplePeriodMs").getOrElse(60 * 1000)
-  val minUpper = config.optDouble("minUpper").getOrElse(0.00000000001)
-  val minLower = config.optDouble("minLower").getOrElse(-0.00000000001)
-  val capFun = macdCap(minUpper, minLower)
+  val minUpper = config.optDouble("minUpper").getOrElse(0.8)
+  val minLower = config.optDouble("minLower").getOrElse(-0.8)
+  val capFun = macdCap()
   assert(fastWindow < slowWindow)
   log.info(s"Strategy ${this.getClass.getSimpleName}: slowWindow: $slowWindow, fastWindow: $fastWindow, signalWindow: $signalWindow, resamplePeriodMs: $resamplePeriodMs, minUpper: $minUpper, minLower: $minLower")
   override def strategize(ledger: Ledger): StrategyResult = {
@@ -175,14 +175,14 @@ class MACDStrategy(val config: Config) extends Strategy {
     val (sentiment, macdVal, macdSignal, macdHistogram, macdCapScore) = macd(prices, slowWindow, fastWindow, signalWindow) match {
       case Some((macd, signal, histogram)) =>
         val capScore = capFun(histogram)
-        val sentiment = if (capScore > 0)
+        val sentiment = if (capScore > minUpper)
           Bull
-        else if (capScore < 0)
+        else if (capScore < minLower)
           Bear
         else
           Neutral
         (sentiment, Some(macd), Some(signal), Some(histogram), Some(capScore))
-      case other =>
+      case _ =>
         (Neutral, None, None, None, None)
     }
     StrategyResult(
@@ -194,11 +194,22 @@ class MACDStrategy(val config: Config) extends Strategy {
 }
 
 
-class WeightedStrategy(val config: Config) extends Strategy {
+class WeightedStrategy(val config: Config, val parentConfig: Config) extends Strategy {
   import scala.jdk.CollectionConverters._
-  val weights = (for (k <- config.getObject("weights").keySet().asScala) yield k -> config.getInt(s"weights.$k")).toMap
+  val weights = (for (k <- config.getObject("weights").keySet().asScala) yield k -> BigDecimal(config.getDouble(s"weights.$k"))).toMap
+  val minUpper = config.optDouble("minUpper").getOrElse(0.7)
+  val minLower = config.optDouble("minLower").getOrElse(-0.7)
+  val weightSum = weights.values.sum
+  log.info(s"Strategy ${this.getClass.getSimpleName}: weights: ${weights.map {case (n, w) => s"$n: $w"}.mkString(", ")}, minUpper: $minUpper, minLower: $minLower, children below...")
+  val weightedStrategies = weights.map { case (name, weight) => (Strategy(name, parentConfig.getConfig(name), null /* only weighted uses parent */), weight) }
 
   override def strategize(ledger: Ledger): StrategyResult = {
-    ???
+    val individualReses = weightedStrategies.map { case (s, w) => (s.strategize(ledger), w) }
+    val sentimentScoreAvg = individualReses.map { case (r, w) => r.sentiment.id * w }.sum / weightSum
+    val ledgerWithMostData = individualReses.toSeq.sortBy(_._1.ledger.tradeDatas.length).last._1.ledger
+    StrategyResult(
+      if (sentimentScoreAvg > minUpper) Bull else if (sentimentScoreAvg < minLower) Bear else Neutral,
+      individualReses.map(_._1.metrics).reduce(_ ++ _),
+      ledgerWithMostData)
   }
 }

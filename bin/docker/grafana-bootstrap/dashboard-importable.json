@@ -751,7 +751,6 @@
             "target": "aliasByMetric(moon.__pair__.data.macd.cap)"
           },
           {
-            "hide": true,
             "refId": "B",
             "target": "aliasByMetric(moon.__pair__.data.macd.macd)"
           },
