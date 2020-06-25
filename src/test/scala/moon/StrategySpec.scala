@@ -33,10 +33,11 @@ class StrategySpec extends FlatSpec with Matchers with Inside {
     res.ledger.tradeDatas.size shouldBe 6
     res.sentiment shouldBe Neutral
     res.metrics shouldBe Map(
-      "data.bbands.score"  -> BigDecimal("-0.8535533905932737494008443621048495"),
-      "data.bbands.upper"  -> BigDecimal("7.24264068711928530"),
-      "data.bbands.middle" -> BigDecimal(3),  // (1+2+3+4+5)/4
-      "data.bbands.lower"  -> BigDecimal("1.58578643762690490"),
+      "data.bbands.sentiment" -> BigDecimal(0),
+      "data.bbands.score"     -> BigDecimal("-0.8535533905932737494008443621048495"),
+      "data.bbands.upper"     -> BigDecimal("7.24264068711928530"),
+      "data.bbands.middle"    -> BigDecimal(3),  // (1+2+3+4+5)/4
+      "data.bbands.lower"     -> BigDecimal("1.58578643762690490"),
     )
 
     // round 2 - with big gap, multiple trades rolled into 1 minute
@@ -48,10 +49,11 @@ class StrategySpec extends FlatSpec with Matchers with Inside {
     res2.ledger.tradeDatas.size shouldBe 6
     res2.sentiment shouldBe Bear
     res2.metrics shouldBe Map(
-      "data.bbands.score"  -> BigDecimal("-1"),
-      "data.bbands.upper"  -> BigDecimal("10.14758001544890040"),
-      "data.bbands.middle" -> BigDecimal(5.5),  // (4+5+5+5+(7+8+4*9)/6)/5
-      "data.bbands.lower"  -> BigDecimal("3.95080666151703320"),
+      "data.bbands.sentiment" -> BigDecimal(-1),
+      "data.bbands.score"     -> BigDecimal(-1),
+      "data.bbands.upper"     -> BigDecimal("10.14758001544890040"),
+      "data.bbands.middle"    -> BigDecimal(5.5),  // (4+5+5+5+(7+8+4*9)/6)/5
+      "data.bbands.lower"     -> BigDecimal("3.95080666151703320"),
     )
 
     // round 3 - with enormous gap, ie. this trade is last known
@@ -61,10 +63,11 @@ class StrategySpec extends FlatSpec with Matchers with Inside {
     res3.ledger.tradeDatas.size shouldBe 2
     res3.sentiment shouldBe Bear
     res3.metrics shouldBe Map(
-      "data.bbands.score"  -> BigDecimal("-1"),
-      "data.bbands.upper"  -> BigDecimal("10.4"),
-      "data.bbands.middle" -> BigDecimal(9.2),  // (9+9+9+9+10)/5
-      "data.bbands.lower"  -> BigDecimal("8.8"),
+      "data.bbands.sentiment" -> BigDecimal(-1),
+      "data.bbands.score"     -> BigDecimal(-1),
+      "data.bbands.upper"     -> BigDecimal(10.4),
+      "data.bbands.middle"    -> BigDecimal(9.2),  // (9+9+9+9+10)/5
+      "data.bbands.lower"     -> BigDecimal(8.8),
     )
   }
 }

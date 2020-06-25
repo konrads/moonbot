@@ -500,6 +500,20 @@
             "alias": "lower",
             "color": "#969696",
             "dashes": true
+          },
+          {
+            "alias": "bull",
+            "color": "__profit_green__",
+            "lines": false,
+            "pointradius": 2,
+            "points": true
+          },
+          {
+            "alias": "bear",
+            "color": "__loss_red__",
+            "lines": false,
+            "pointradius": 2,
+            "points": true
           }
         ],
         "spaceLength": 10,
@@ -525,7 +539,20 @@
             "refCount": 4,
             "refId": "D",
             "target": "aliasByMetric(moon.__pair__.data.bbands.lower)"
+          },
+          {
+            "refCount": 1,
+            "refId": "E",
+            "target": "alias(multiplySeries(moon.__pair__.data.price, divideSeries(removeAboveValue(moon.__pair__.data.bbands.sentiment, 0), moon.__pair__.data.bbands.sentiment)), 'bear')",
+            "textEditor": true
+          },
+          {
+            "refCount": 1,
+            "refId": "F",
+            "target": "alias(multiplySeries(moon.__pair__.data.price, divideSeries(removeBelowValue(moon.__pair__.data.bbands.sentiment, 0), moon.__pair__.data.bbands.sentiment)), 'bull')",
+            "textEditor": true
           }
+
         ],
         "thresholds": [],
         "timeFrom": null,
@@ -612,6 +639,20 @@
             "alias": "lower",
             "color": "#969696",
             "dashes": true
+          },
+          {
+            "alias": "bull",
+            "color": "__profit_green__",
+            "lines": false,
+            "pointradius": 2,
+            "points": true
+          },
+          {
+            "alias": "bear",
+            "color": "__loss_red__",
+            "lines": false,
+            "pointradius": 2,
+            "points": true
           }
         ],
         "spaceLength": 10,
@@ -632,7 +673,20 @@
             "refCount": 4,
             "refId": "C",
             "target": "aliasByMetric(moon.__pair__.data.rsi.lower)"
+          },
+          {
+            "refCount": 1,
+            "refId": "D",
+            "target": "alias(multiplySeries(moon.__pair__.data.rsi.score, divideSeries(removeAboveValue(moon.__pair__.data.rsi.sentiment, 0), moon.__pair__.data.rsi.sentiment)), 'bear')",
+            "textEditor": true
+          },
+          {
+            "refCount": 1,
+            "refId": "E",
+            "target": "alias(multiplySeries(moon.__pair__.data.rsi.score, divideSeries(removeBelowValue(moon.__pair__.data.rsi.sentiment, 0), moon.__pair__.data.rsi.sentiment)), 'bull')",
+            "textEditor": true
           }
+
         ],
         "thresholds": [],
         "timeFrom": null,
@@ -767,29 +821,15 @@
             "target": "alias(removeAboveValue(moon.__pair__.data.macd.histogram, 0), 'histogram_neg')"
           },
           {
-            "hide": true,
             "refCount": 1,
             "refId": "F",
-            "target": "alias(divideSeries(removeAboveValue(moon.__pair__.data.macd.sentiment, 0), moon.__pair__.data.macd.sentiment), 'bear_indicator')",
+            "target": "alias(multiplySeries(moon.__pair__.data.macd.histogram, divideSeries(removeAboveValue(moon.__pair__.data.macd.sentiment, 0), moon.__pair__.data.macd.sentiment)), 'bear')",
             "textEditor": true
           },
           {
-            "hide": true,
             "refCount": 1,
             "refId": "G",
-            "target": "alias(divideSeries(removeBelowValue(moon.__pair__.data.macd.sentiment, 0), moon.__pair__.data.macd.sentiment), 'bull_indicator')",
-            "textEditor": true
-          },
-          {
-            "refCount": 1,
-            "refId": "H",
-            "target": "alias(multiplySeries(moon.__pair__.data.macd.histogram, #F), 'bear')",
-            "textEditor": true
-          },
-          {
-            "refCount": 1,
-            "refId": "I",
-            "target": "alias(multiplySeries(moon.__pair__.data.macd.histogram, #G), 'bull')",
+            "target": "alias(multiplySeries(moon.__pair__.data.macd.histogram, divideSeries(removeBelowValue(moon.__pair__.data.macd.sentiment, 0), moon.__pair__.data.macd.sentiment)), 'bull')",
             "textEditor": true
           }
         ],

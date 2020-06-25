@@ -80,13 +80,13 @@ object talib {
    *           #@
    *
    *  * - increasing above minHigh => 1
-   *  + - decreasing above minHigh => proportional to highest
+   *  + - decreasing above minHigh => proportional to latest peak
    *  # - decreasing below minLow => -1
    *  @ - increasing below minLow => proportional to lowest
    *
    *  Where upper and lower are some static boundaries.
    */
-  def macdCap(): BigDecimal => BigDecimal = {
+  def capProportionalExtremes(): BigDecimal => BigDecimal = {
     var high: BigDecimal = 0
     var low: BigDecimal = 0
     def cap(x: BigDecimal): BigDecimal =
@@ -109,6 +109,36 @@ object talib {
         high = 0
         0
       }
+    cap
+  }
+
+  def capPeakTrough(): BigDecimal => BigDecimal = {
+    var high: BigDecimal = 0
+    var low: BigDecimal = 0
+    var prev: BigDecimal = 0
+    def cap(x: BigDecimal): BigDecimal = {
+      val res = if (x > 0 && x > prev) {
+        low = 0
+        high = x
+        BigDecimal(1)
+      } else if (x > 0) {
+        low = 0
+        x / high
+      } else if (x < 0 && x < prev) {
+        high = 0
+        low = x
+        BigDecimal(-1)
+      } else if (x < 0) {
+        high = 0
+        -x / low
+      } else {  // between minUpper and minLower
+        low = 0
+        high = 0
+        BigDecimal(0)
+      }
+      prev = x
+      res
+    }
     cap
   }
 

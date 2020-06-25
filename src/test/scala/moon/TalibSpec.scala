@@ -99,8 +99,8 @@ class TalibSpec extends FlatSpec with Matchers with Inside  {
     // [x[-1] for x in MACD(xs, fastperiod=fast, slowperiod=slow, signalperiod=1)]
   }
 
-  it should "work with macdCap" in {
-    val capFun = macdCap()
+  it should "work with capProportionalExtremes" in {
+    val capFun = capProportionalExtremes()
     // going up > 0
     capFun(0) shouldBe 0
     capFun(0.05) shouldBe 1
@@ -131,4 +131,43 @@ class TalibSpec extends FlatSpec with Matchers with Inside  {
     capFun(0.5) shouldBe 1
     capFun(0.4) shouldBe 0.8
   }
+
+  it should "work with capPeakTrough" in {
+    val capFun = capPeakTrough()
+    // going up > 0
+    capFun(0) shouldBe 0
+    capFun(0.05) shouldBe 1
+    capFun(0.6) shouldBe 1
+    capFun(1) shouldBe 1
+    capFun(.8) shouldBe 0.8
+    capFun(.85) shouldBe 1
+    capFun(1.5) shouldBe 1
+    capFun(1) shouldBe BigDecimal(2)/3
+    // going down > 0
+    capFun(0.6) shouldBe 0.4
+    capFun(0.5) shouldBe BigDecimal(1)/3
+    capFun(0.1) shouldBe BigDecimal(1)/15
+    // going down < 0
+    capFun(-0.3) shouldBe -1
+    capFun(-0.6) shouldBe -1
+    capFun(-1) shouldBe -1
+    capFun(-0.8) shouldBe -0.8
+    capFun(-0.9) shouldBe -1
+    capFun(-2.5) shouldBe -1
+    capFun(-1.5) shouldBe -0.6
+    // going up < 0
+    capFun(-1) shouldBe -0.4
+    capFun(-.5) shouldBe -0.2
+    capFun(-.4) shouldBe -0.16
+    // peek-a-boo above 0
+    capFun(0.4) shouldBe 1
+    capFun(0.5) shouldBe 1
+    capFun(0.4) shouldBe 0.8
+  }
+
+//  it should "work with capPeakTrough2" in {
+//    val capFun = capPeakTrough()
+//    // going up > 0
+//    for (x <- Seq(-5000, 5000, 10, 7, 25, 14)) yield println(s"$x ${x - 30}  ${capFun(x - 30)}")
+//  }
 }
