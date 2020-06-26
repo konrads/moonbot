@@ -5,7 +5,7 @@ import org.scalatest.matchers.should._
 import moon.talib._
 import org.joda.time.DateTime
 
-class TalibSpec extends FlatSpec with Matchers with Inside  {
+class TalibSpec extends FlatSpec with Matchers with Inside {
   "TA-LIB" should "work with sma" in {
     sma(Seq(1, 2, 3, 10), 4) shouldBe BigDecimal(4)
     sma(Seq(3, 4, 2, 5, 7), 5) shouldBe BigDecimal(4.2)
@@ -44,7 +44,8 @@ class TalibSpec extends FlatSpec with Matchers with Inside  {
   }
 
   it should "work with resample" in {
-    def minTradeData(ts: DateTime, price: BigDecimal, size: BigDecimal) = TradeData(timestamp=ts, price=price, size=size, side=null, tickDirection=null)
+    def minTradeData(ts: DateTime, price: BigDecimal, size: BigDecimal) = TradeData(timestamp = ts, price = price, size = size, side = null, tickDirection = null)
+
     resample(Seq(
       minTradeData(parseDateTime("2010-01-01T00:00:08.000Z"), 1, 10),
       minTradeData(parseDateTime("2010-01-01T00:00:07.000Z"), 2, 20),
@@ -54,15 +55,15 @@ class TalibSpec extends FlatSpec with Matchers with Inside  {
       minTradeData(parseDateTime("2010-01-01T00:01:59.000Z"), 6, 60),
     )) shouldBe Seq(
       (-1, TradeTick(3, 2, 3, 4, 1, 100)),
-      (0,  TradeTick(BigDecimal("5.545454545454545454545454545454545"), 5, 6, 6, 5, 110)),
+      (0, TradeTick(BigDecimal("5.545454545454545454545454545454545"), 5, 6, 6, 5, 110)),
     )
   }
 
   it should "work with bbands" in {
     bbands(Nil) shouldBe None
     bbands(Seq(1, 2, 3, 4, 5)) shouldBe Some((BigDecimal("5.8284271247461902"), 3, BigDecimal("0.1715728752538098")))
-    bbands(Seq(1, 2, 3, 4, 5), devUp=3, devDown=1) shouldBe Some((BigDecimal("7.2426406871192853"), 3, BigDecimal("1.5857864376269049")))
-    bbands(Seq(1, 2, 3, 4, 5), devUp=3, devDown=1, maType=MA.EMA) shouldBe Some((BigDecimal("7.2426406871192853"), BigDecimal(3), BigDecimal("1.5857864376269049")))
+    bbands(Seq(1, 2, 3, 4, 5), devUp = 3, devDown = 1) shouldBe Some((BigDecimal("7.2426406871192853"), 3, BigDecimal("1.5857864376269049")))
+    bbands(Seq(1, 2, 3, 4, 5), devUp = 3, devDown = 1, maType = MA.EMA) shouldBe Some((BigDecimal("7.2426406871192853"), BigDecimal(3), BigDecimal("1.5857864376269049")))
     bbands(Seq(BigDecimal("9357.498906886614329722746695816357"), BigDecimal("9357.234543433969253565475087979255"))) shouldBe Some((BigDecimal("9357.631088612936867804110891897805"), BigDecimal("9357.366725160291791644110891897805"), BigDecimal("9357.102361707646715484110891897805")))
     // validated with python talib:
     // from talib import BBANDS
@@ -86,13 +87,13 @@ class TalibSpec extends FlatSpec with Matchers with Inside  {
 
   it should "work with macd" in {
     macd(Nil) shouldBe None
-    macd(Seq(1, 2, 3, 4), slow=5, fast=3, signal=1) shouldBe None // need at least 5
-    macd(Seq(1, 2, 3, 4, 5, 6), slow=5, fast=3, signal=2) shouldBe Some((1, 1, 0))
-    macd(Seq(10, 2, 30, 4, 50, 6), slow=5, fast=3, signal=2) shouldBe Some((2.2, 5.5, -3.3))
-    macd(Seq(10, 2, 30, 4, 50, 6, 70, 8, 90), slow=5, fast=3, signal=2) shouldBe Some((BigDecimal("11.34166666666666666666666666666667"), BigDecimal("8.738888888888888888888888888888892"), BigDecimal("2.602777777777777777777777777777778")))
-    macd(Seq(10, 2, 30, 4, 50, 6, 70, 8, 90), slow=5, fast=3, signal=4) shouldBe Some((BigDecimal("11.34166666666666666666666666666667"), BigDecimal("7.874166666666666666666666666666668"), BigDecimal("3.467500000000000000000000000000002")))
-    macd(Seq(10, 2, 30, 4, 50, 6, 70, 8, 90), slow=5, fast=3, signal=5) shouldBe Some((BigDecimal("11.34166666666666666666666666666667"), BigDecimal("6.718333333333333333333333333333334"), BigDecimal("4.623333333333333333333333333333336")))
-    macd(Seq(10, 2, 30, 4, 50, 6, 70, 8, 90), slow=5, fast=3, signal=6) shouldBe None
+    macd(Seq(1, 2, 3, 4), slow = 5, fast = 3, signal = 1) shouldBe None // need at least 5
+    macd(Seq(1, 2, 3, 4, 5, 6), slow = 5, fast = 3, signal = 2) shouldBe Some((1, 1, 0))
+    macd(Seq(10, 2, 30, 4, 50, 6), slow = 5, fast = 3, signal = 2) shouldBe Some((2.2, 5.5, -3.3))
+    macd(Seq(10, 2, 30, 4, 50, 6, 70, 8, 90), slow = 5, fast = 3, signal = 2) shouldBe Some((BigDecimal("11.34166666666666666666666666666667"), BigDecimal("8.738888888888888888888888888888892"), BigDecimal("2.602777777777777777777777777777778")))
+    macd(Seq(10, 2, 30, 4, 50, 6, 70, 8, 90), slow = 5, fast = 3, signal = 4) shouldBe Some((BigDecimal("11.34166666666666666666666666666667"), BigDecimal("7.874166666666666666666666666666668"), BigDecimal("3.467500000000000000000000000000002")))
+    macd(Seq(10, 2, 30, 4, 50, 6, 70, 8, 90), slow = 5, fast = 3, signal = 5) shouldBe Some((BigDecimal("11.34166666666666666666666666666667"), BigDecimal("6.718333333333333333333333333333334"), BigDecimal("4.623333333333333333333333333333336")))
+    macd(Seq(10, 2, 30, 4, 50, 6, 70, 8, 90), slow = 5, fast = 3, signal = 6) shouldBe None
     // validated with python talib:
     // from talib import MACD
     // import numpy as np
@@ -109,11 +110,11 @@ class TalibSpec extends FlatSpec with Matchers with Inside  {
     capFun(.8) shouldBe 0.8
     capFun(.85) shouldBe 0.85
     capFun(1.5) shouldBe 1
-    capFun(1) shouldBe BigDecimal(2)/3
+    capFun(1) shouldBe BigDecimal(2) / 3
     // going down > 0
     capFun(0.6) shouldBe 0.4
-    capFun(0.5) shouldBe BigDecimal(1)/3
-    capFun(0.1) shouldBe BigDecimal(1)/15
+    capFun(0.5) shouldBe BigDecimal(1) / 3
+    capFun(0.1) shouldBe BigDecimal(1) / 15
     // going down < 0
     capFun(-0.3) shouldBe -1
     capFun(-0.6) shouldBe -1
@@ -142,11 +143,11 @@ class TalibSpec extends FlatSpec with Matchers with Inside  {
     capFun(.8) shouldBe 0.8
     capFun(.85) shouldBe 1
     capFun(1.5) shouldBe 1
-    capFun(1) shouldBe BigDecimal(2)/3
+    capFun(1) shouldBe BigDecimal(2) / 3
     // going down > 0
     capFun(0.6) shouldBe 0.4
-    capFun(0.5) shouldBe BigDecimal(1)/3
-    capFun(0.1) shouldBe BigDecimal(1)/15
+    capFun(0.5) shouldBe BigDecimal(1) / 3
+    capFun(0.1) shouldBe BigDecimal(1) / 15
     // going down < 0
     capFun(-0.3) shouldBe -1
     capFun(-0.6) shouldBe -1
@@ -165,9 +166,26 @@ class TalibSpec extends FlatSpec with Matchers with Inside  {
     capFun(0.4) shouldBe 0.8
   }
 
-//  it should "work with capPeakTrough2" in {
-//    val capFun = capPeakTrough()
-//    // going up > 0
-//    for (x <- Seq(-5000, 5000, 10, 7, 25, 14)) yield println(s"$x ${x - 30}  ${capFun(x - 30)}")
-//  }
+  it should "work with polyfit" in {
+    polyfit(Seq(1, 1, 1, 1, 1)) shouldBe(0, 1)
+    polyfit(Seq(1, 2, 3, 4, 5)) shouldBe(1, 1)
+    polyfit(Seq(2, 4, 6, 8, 10)) shouldBe(2, 2)
+    // validated with np:
+    // xs = np.array([2., 4., 0., 6., -2., 4., 0., 2.]); np.polyfit(range(len(xs)), xs, 1)
+    polyfit(Seq(2, 4, 0, 6, -2, 4, 0, 2)) shouldBe(BigDecimal("-0.1904761904761904761904761904761905"), BigDecimal("2.666666666666666666666666666666667"))
+    polyfit(Seq(10, 4, 50, -66, 1.1111, -3.333, 0, 200.3)) shouldBe(BigDecimal("14.51442976190476190476190476190476"), BigDecimal("-26.29074166666666666666666666666666"))
+  }
+
+  it should "work with indecreasing" in {
+    indecreasingSlope(Seq(1, 1.01, 1.02, 1.04, 1.06, 1.1, 1.15, 1.2)) shouldBe None
+    indecreasingSlope(Seq(1, 1.01, 1.02, 1.04, 1.06, 1.1, 1.15, 1.2, 1.35, 1.5)) shouldBe Some(Seq(BigDecimal("0.04939393939393939393939393939393939"), 0.1, 0.15))
+    indecreasingSlope(Seq(100, 1.01, 1.02, 1.04, 1.06, 1.1, 1.15, 1.2, 1.35, 1.5)) shouldBe None  // not increasing!
+    indecreasingSlope(Seq(1, 1.01, 1.02, 1.04, 1.06, 1.1, 1.15, 1.2, 1.35, 1.5, 1.7, 2.0, 2.5)) shouldBe Some(Seq(BigDecimal("0.1449696969696969696969696969696970"), 0.28, 0.4))
+    // few negatives
+    indecreasingSlope(Seq(-1, -1.01, -1.02, -1.04, -1.06, -1.1, -1.15, -1.2, -1.35, -1.5, -1.7, -2.0, -2.5)) shouldBe Some(Seq(BigDecimal("-0.1449696969696969696969696969696970"), -0.28, -0.4))
+    indecreasingSlope(Seq(-1, -1.01, -1.02, -1.04, -1.06, -1.1, -1.15, -1.2, -1.35, -1.5)) shouldBe Some(Seq(BigDecimal("-0.04939393939393939393939393939393939"), -0.1, -0.15))
+    indecreasingSlope(Seq(-100, -1.01, -1.02, -1.04, -1.06, -1.1, -1.15, -1.2, -1.35, -1.5)) shouldBe None  // not decreasing!
+    // combos of positive and negative
+    indecreasingSlope(Seq(1.04, 1.06, -1.1, -1.15, -1.2, -1.35, -1.5, -1.7, -2.0, -2.5)) shouldBe None
+  }
 }

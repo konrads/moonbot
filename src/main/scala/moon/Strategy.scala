@@ -18,6 +18,7 @@ trait Strategy {
 
 object Strategy {
   def apply(name: String, config: Config, parentConfig: Config): Strategy = name.toLowerCase match {
+    case "indecreasing"  => new IndecreasingStrategy(config)
     case "tickdirection" => new TickDirectionStrategy(config)
     case "bullbear"      => new BullBearEmaStrategy(config)
     case "bbands"        => new BBandsStrategy(config)
@@ -211,6 +212,38 @@ class MACDStrategy(val config: Config) extends Strategy {
       sentiment,
       // note: keeping macd's sentiment as a seperate metric to show indicator specific sentiment
       (Seq("data.macd.sentiment" -> BigDecimal(sentiment.id)) ++ macdVal.map("data.macd.macd" -> _).toSeq ++ macdSignal.map("data.macd.signal" -> _).toSeq ++ macdHistogram.map("data.macd.histogram" -> _).toSeq ++ macdCapScore.map("data.macd.cap" -> _).toSeq).toMap,
+      ledger.copy(tradeDatas = tradeDatas2))
+  }
+}
+
+
+class IndecreasingStrategy(val config: Config) extends Strategy {
+  val periods = config.optIntList("periods").getOrElse(List(10, 5, 3))
+  val resamplePeriodMs = config.optInt("resamplePeriodMs").getOrElse(60 * 1000)
+  val minAbsSlope = BigDecimal(config.optDouble("minAbsSlope").getOrElse(3.0)).abs
+  val maxAbsSlope = BigDecimal(config.optDouble("maxAbsSlope").getOrElse(20.0)).abs
+  val maxPeriod = periods.max
+  log.info(s"Strategy ${this.getClass.getSimpleName}: periods: ${periods.mkString(", ")}")
+  override def strategize(ledger: Ledger): StrategyResult = {
+    val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, maxPeriod * resamplePeriodMs, dropLast=false)
+    val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
+    val ffilled = ffill(resampledTicks).takeRight(MIN_EMA_WINDOW)
+    val prices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
+    val (sentiment, lastSlope) = indecreasingSlope(prices, periods) match {
+      case Some(slopes) =>
+        val avgSlope = slopes.sum / slopes.size
+        if (avgSlope > 0 && avgSlope.abs > minAbsSlope && avgSlope.abs < maxAbsSlope)
+          (Bull, Some(avgSlope))
+        else if (avgSlope < 0 && avgSlope.abs > minAbsSlope && avgSlope.abs < maxAbsSlope)
+          (Bear, Some(avgSlope))
+        else
+          (Neutral, Some(avgSlope))
+      case None =>
+        (Neutral, None)
+    }
+    StrategyResult(
+      sentiment,
+      Map("data.indecreasing.sentiment" -> BigDecimal(sentiment.id), "data.indecreasing.lower" -> -minAbsSlope, "data.indecreasing.upper" -> minAbsSlope) ++ lastSlope.map("data.indecreasing.lastSlope" -> _),
       ledger.copy(tradeDatas = tradeDatas2))
   }
 }

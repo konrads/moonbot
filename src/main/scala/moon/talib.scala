@@ -200,4 +200,35 @@ object talib {
       )
     }
   }
+
+  /** Find increasing/decreasing slope of eg. 10, 5, 3 (e/s)ma's */
+  def indecreasingSlope(xs: Seq[BigDecimal], maPeriods: Seq[Int]=Seq(10, 5, 3)): Option[Seq[BigDecimal]] = {
+    if (xs.size < maPeriods.max)
+      None
+    else {
+      val mas = for(p <- maPeriods) yield polyfit(xs.takeRight(p))._1
+      val sortedMas = mas.sorted
+      if (mas.forall(_ > 0) && mas == sortedMas)
+        Some(mas)
+      else if (mas.forall(_ < 0) && mas == sortedMas.reverse)
+        Some(mas)
+      else
+        None
+    }
+  }
+
+  // formula: https://www.varsitytutors.com/hotmath/hotmath_help/topics/line-of-best-fit
+  // consider (but not following): https://github.com/hipjim/scala-linear-regression/blob/master/regression.scala
+  def polyfit(ys: Seq[BigDecimal], xs: Option[Seq[BigDecimal]]=None): (BigDecimal, BigDecimal) = {
+    val xs2 = xs.getOrElse((0 until ys.length).map(BigDecimal.apply))
+    val avgY = ys.sum / ys.size
+    val avgX = xs2.sum / xs2.size
+    val slopeDenominator = xs2.map(x => (x - avgX).pow(2)).sum
+    val slope: BigDecimal = if (slopeDenominator == 0)
+      0
+    else
+      (xs2 zip ys).map { case (x, y) => (x - avgX) * (y - avgY) }.sum / slopeDenominator
+    val yIntercept = avgY - slope * avgX
+    (slope, yIntercept)
+  }
 }

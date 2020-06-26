@@ -60,11 +60,13 @@ package object moon {
   // For optional values:
   // https://stackoverflow.com/questions/52144157/providing-default-value-on-typesafe-config-getters
   implicit class RichConfig(val config: Config) extends AnyVal {
-    def optString(path: String): Option[String]   = if (config.hasPath(path)) Some(config.getString(path)) else None
-    def optBoolean(path: String): Option[Boolean] = if (config.hasPath(path)) Some(config.getBoolean(path)) else None
-    def optInt(path: String): Option[Int]         = if (config.hasPath(path)) Some(config.getInt(path)) else None
-    def optLong(path: String): Option[Long]       = if (config.hasPath(path)) Some(config.getLong(path)) else None
-    def optDouble(path: String): Option[Double]   = if (config.hasPath(path)) Some(config.getDouble(path)) else None
+    import scala.jdk.CollectionConverters._
+    def optString(path: String): Option[String]     = if (config.hasPath(path)) Some(config.getString(path)) else None
+    def optBoolean(path: String): Option[Boolean]   = if (config.hasPath(path)) Some(config.getBoolean(path)) else None
+    def optInt(path: String): Option[Int]           = if (config.hasPath(path)) Some(config.getInt(path)) else None
+    def optLong(path: String): Option[Long]         = if (config.hasPath(path)) Some(config.getLong(path)) else None
+    def optDouble(path: String): Option[Double]     = if (config.hasPath(path)) Some(config.getDouble(path)) else None
+    def optIntList(path: String): Option[List[Int]] = if (config.hasPath(path)) Some(config.getIntList(path).asScala.toList.map(_.intValue())) else None
     // ...etc, will add if needed
   }
 }
