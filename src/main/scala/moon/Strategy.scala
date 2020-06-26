@@ -229,7 +229,7 @@ class IndecreasingStrategy(val config: Config) extends Strategy {
     val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
     val ffilled = ffill(resampledTicks).takeRight(MIN_EMA_WINDOW)
     val prices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
-    val (sentiment, lastSlope) = indecreasingSlope(prices, periods) match {
+    val (sentiment, avgSlope) = indecreasingSlope(prices, periods) match {
       case Some(slopes) =>
         val avgSlope = slopes.sum / slopes.size
         if (avgSlope > 0 && avgSlope.abs > minAbsSlope && avgSlope.abs < maxAbsSlope)
@@ -243,7 +243,7 @@ class IndecreasingStrategy(val config: Config) extends Strategy {
     }
     StrategyResult(
       sentiment,
-      Map("data.indecreasing.sentiment" -> BigDecimal(sentiment.id), "data.indecreasing.lower" -> -minAbsSlope, "data.indecreasing.upper" -> minAbsSlope) ++ lastSlope.map("data.indecreasing.lastSlope" -> _),
+      Map("data.indecreasing.sentiment" -> BigDecimal(sentiment.id), "data.indecreasing.lower" -> -minAbsSlope, "data.indecreasing.upper" -> minAbsSlope) ++ avgSlope.map("data.indecreasing.slope" -> _),
       ledger.copy(tradeDatas = tradeDatas2))
   }
 }

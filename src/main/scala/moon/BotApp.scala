@@ -13,6 +13,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 
 object BotApp extends App {
+  import moon.RichConfig
   val log = Logger("BotApp")
 
   val conf = ConfigFactory.load()
@@ -40,6 +41,7 @@ object BotApp extends App {
   val takeProfitMargin       = conf.getDouble("bot.takeProfitMargin")
   val stoplossMargin         = conf.getDouble("bot.stoplossMargin")
   val postOnlyPriceAdj       = conf.getDouble("bot.postOnlyPriceAdj")
+  val openWithMarket         = conf.optBoolean("bot.openWithMarket").getOrElse(false)
 
   val strategyName = conf.getString("strategy.selection")
 
@@ -72,6 +74,7 @@ object BotApp extends App {
       |• takeProfitMargin:     $takeProfitMargin
       |• stoplossMargin:       $stoplossMargin
       |• postOnlyPriceAdj:     $postOnlyPriceAdj
+      |• openWithMarket:        $openWithMarket
       |""".stripMargin)
 
   implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
@@ -88,7 +91,8 @@ object BotApp extends App {
     openPositionExpiryMs=openPositionExpiryMs,
     reqRetries=reqRetries, markupRetries=markupRetries,
     takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,
-    metrics=Some(metrics))
+    metrics=Some(metrics),
+    openWithMarket=openWithMarket)
 
   // Supervision of my actor, with backoff restarts. On supervision & backoff:
   // https://manuel.bernhardt.io/2019/09/05/tour-of-akka-typed-supervision-and-signals/

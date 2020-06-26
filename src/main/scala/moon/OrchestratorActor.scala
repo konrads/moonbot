@@ -293,7 +293,8 @@ object OrchestratorActor {
             openPositionExpiryMs: Long,
             reqRetries: Int, markupRetries: Int,
             takeProfitMargin: BigDecimal, stoplossMargin: BigDecimal, postOnlyPriceAdj: BigDecimal,
-            metrics: Option[Metrics]=None)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
+            metrics: Option[Metrics]=None,
+            openWithMarket: Boolean=false)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
 
     Behaviors.withTimers[ActorEvent] { timers =>
       Behaviors.setup[ActorEvent] { actorCtx =>
@@ -379,8 +380,11 @@ object OrchestratorActor {
             override def bestPrice(l: Ledger): BigDecimal = l.bidPrice
             override def openOrder(l: Ledger): (String, Future[Order]) = {
               val price = l.bidPrice
-              actorCtx.log.info(s"$desc: opening @ $price")
-              restGateway.placeLimitOrderAsync(tradeQty, price, false, Buy)
+              actorCtx.log.info(s"$desc: opening @ $price, isMarket: $openWithMarket")
+              if (openWithMarket)
+                restGateway.placeMarketOrderAsync(tradeQty, Buy)
+              else
+                restGateway.placeLimitOrderAsync(tradeQty, price, false, Buy)
             }
             override def cancelOrder(clOrdID: String): Future[Orders] = {
               actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")
@@ -427,8 +431,11 @@ object OrchestratorActor {
             override def bestPrice(l: Ledger): BigDecimal = l.askPrice
             override def openOrder(l: Ledger): (String, Future[Order]) = {
               val price = l.askPrice
-              actorCtx.log.info(s"$desc: opening @ $price")
-              restGateway.placeLimitOrderAsync(tradeQty, price, false, Sell)
+              actorCtx.log.info(s"$desc: opening @ $price, isMarket: $openWithMarket")
+              if (openWithMarket)
+                restGateway.placeMarketOrderAsync(tradeQty, Sell)
+              else
+                restGateway.placeLimitOrderAsync(tradeQty, price, false, Sell)
             }
             override def cancelOrder(clOrdID: String): Future[Orders] = {
               actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")

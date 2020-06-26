@@ -875,6 +875,143 @@
       },
       {
         "aliasColors": {},
+        "bars": false,
+        "dashLength": 10,
+        "dashes": false,
+        "datasource": "Local Graphite",
+        "fill": 1,
+        "gridPos": {
+          "h": 5,
+          "w": 24,
+          "x": 0,
+          "y": 48
+        },
+        "id": 16,
+        "legend": {
+          "avg": false,
+          "current": false,
+          "max": false,
+          "min": false,
+          "show": true,
+          "total": false,
+          "values": false
+        },
+        "lines": true,
+        "linewidth": 1,
+        "links": [],
+        "nullPointMode": "connected",
+        "percentage": false,
+        "pointradius": 5,
+        "points": false,
+        "renderer": "flot",
+        "seriesOverrides": [
+          {
+            "alias": "upper",
+            "color": "#dcdcdc",
+            "dashes": true
+          },
+          {
+            "alias": "lower",
+            "color": "#969696",
+            "dashes": true
+          },
+          {
+            "alias": "slope",
+            "color": "#70dbed",
+            "lines": false,
+            "pointradius": 4,
+            "points": true
+          },
+          {
+            "alias": "bull",
+            "color": "__profit_green__",
+            "lines": false,
+            "pointradius": 4,
+            "points": true
+          },
+          {
+            "alias": "bear",
+            "color": "__loss_red__",
+            "lines": false,
+            "pointradius": 4,
+            "points": true
+          }
+        ],
+        "spaceLength": 10,
+        "stack": false,
+        "steppedLine": false,
+        "targets": [
+          {
+            "refCount": 2,
+            "refId": "B",
+            "target": "aliasByMetric(moon.__pair__.data.indecreasing.upper)"
+          },
+          {
+            "refCount": 4,
+            "refId": "C",
+            "target": "aliasByMetric(moon.__pair__.data.indecreasing.lower)"
+          },
+          {
+            "refCount": 1,
+            "refId": "D",
+            "target": "alias(multiplySeries(moon.__pair__.data.indecreasing.slope, divideSeries(removeAboveValue(moon.__pair__.data.indecreasing.sentiment, 0), moon.__pair__.data.indecreasing.sentiment)), 'bear')",
+            "textEditor": true
+          },
+          {
+            "refCount": 1,
+            "refId": "E",
+            "target": "alias(multiplySeries(moon.__pair__.data.indecreasing.slope, divideSeries(removeBelowValue(moon.__pair__.data.indecreasing.sentiment, 0), moon.__pair__.data.indecreasing.sentiment)), 'bull')",
+            "textEditor": true
+          },
+          {
+            "refCount": 1,
+            "refId": "F",
+            "target": "alias(multiplySeries(moon.__pair__.data.indecreasing.slope, divideSeries(removeBelowValue(removeAboveValue(moon.__pair__.data.indecreasing.sentiment, 0), 0), moon.__pair__.data.indecreasing.sentiment)), 'neutral')",
+            "textEditor": true
+          }
+        ],
+        "thresholds": [],
+        "timeFrom": null,
+        "timeShift": null,
+        "title": "In/Decreasing slope",
+        "tooltip": {
+          "shared": true,
+          "sort": 0,
+          "value_type": "individual"
+        },
+        "type": "graph",
+        "xaxis": {
+          "buckets": null,
+          "mode": "time",
+          "name": null,
+          "show": true,
+          "values": []
+        },
+        "yaxes": [
+          {
+            "format": "short",
+            "label": null,
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true
+          },
+          {
+            "format": "short",
+            "label": null,
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true
+          }
+        ],
+        "yaxis": {
+          "align": false,
+          "alignLevel": null
+        }
+      },
+      {
+        "aliasColors": {},
         "bars": true,
         "dashLength": 10,
         "dashes": false,
@@ -884,7 +1021,7 @@
           "h": 5,
           "w": 8,
           "x": 0,
-          "y": 43
+          "y": 48
         },
         "id": 22,
         "legend": {
@@ -976,7 +1113,7 @@
           "h": 5,
           "w": 4,
           "x": 8,
-          "y": 43
+          "y": 48
         },
         "id": 23,
         "legend": {
@@ -1068,7 +1205,7 @@
           "h": 5,
           "w": 4,
           "x": 12,
-          "y": 43
+          "y": 48
         },
         "id": 24,
         "legend": {
@@ -1166,7 +1303,7 @@
           "h": 5,
           "w": 4,
           "x": 16,
-          "y": 43
+          "y": 48
         },
         "id": 25,
         "interval": null,
@@ -1243,7 +1380,7 @@
           "h": 5,
           "w": 4,
           "x": 20,
-          "y": 43
+          "y": 48
         },
         "id": 26,
         "interval": null,
