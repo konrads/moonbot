@@ -34,6 +34,14 @@ sbt run  # Note: clears position and cancels position orders!
 ```
 
 
+Test
+----
+With coverage, aiming for +70%:
+```
+sbt clean coverage test coverageReport
+```
+
+
 Design
 ------
 Bot communicates with `Bitmex` via [WsGateway](src/main/scala/moon/WsGateway.scala) for listening of websocket events (order lifecycle notifications, trade notifications, orderbook notifications, etc)
