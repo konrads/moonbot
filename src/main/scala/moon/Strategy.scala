@@ -43,7 +43,6 @@ object Strategy {
 }
 
 class TickDirectionStrategy(val config: Config) extends Strategy {
-  import moon.RichConfig
   val periodMs = config.optInt("periodMs").getOrElse(4 * 60 * 1000)
   val upper = config.optDouble("upper").getOrElse(0.75)
   val lower = config.optDouble("lower").getOrElse(-0.75)
@@ -68,7 +67,6 @@ class TickDirectionStrategy(val config: Config) extends Strategy {
 }
 
 class BullBearEmaStrategy(val config: Config) extends Strategy {
-  import moon.RichConfig
   val periodMs = config.optInt("periodMs").getOrElse(10 * 60 * 1000)
   val emaSmoothing = config.optDouble("emaSmoothing").getOrElse(2.0)
   val upper = config.optDouble("upper").getOrElse(0.25)
@@ -96,7 +94,6 @@ class BullBearEmaStrategy(val config: Config) extends Strategy {
 }
 
 class BBandsStrategy(val config: Config) extends Strategy {
-  import moon.RichConfig
   val window = config.optInt("window").getOrElse(4)
   val resamplePeriodMs = config.optInt("resamplePeriodMs").getOrElse(60 * 1000)
   val devUp = config.optDouble("devUp").getOrElse(2.0)
@@ -168,7 +165,6 @@ class RSIStrategy(val config: Config) extends Strategy {
           Bear
         else
           Neutral
-        // println(s"##### rsi: r: $res, s: $score, cs: $capScore, se: $sentiment")
         (sentiment, Some(res))
       case _ =>
         (Neutral, None)
