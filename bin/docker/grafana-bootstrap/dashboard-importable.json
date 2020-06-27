@@ -552,7 +552,6 @@
             "target": "alias(multiplySeries(moon.__pair__.data.price, divideSeries(removeBelowValue(moon.__pair__.data.bbands.sentiment, 0), moon.__pair__.data.bbands.sentiment)), 'bull')",
             "textEditor": true
           }
-
         ],
         "thresholds": [],
         "timeFrom": null,
@@ -686,7 +685,6 @@
             "target": "alias(multiplySeries(moon.__pair__.data.rsi.score, divideSeries(removeBelowValue(moon.__pair__.data.rsi.sentiment, 0), moon.__pair__.data.rsi.sentiment)), 'bull')",
             "textEditor": true
           }
-
         ],
         "thresholds": [],
         "timeFrom": null,
@@ -917,10 +915,7 @@
           },
           {
             "alias": "slope",
-            "color": "#70dbed",
-            "lines": false,
-            "pointradius": 4,
-            "points": true
+            "color": "#70dbed"
           },
           {
             "alias": "bull",
@@ -943,6 +938,11 @@
         "targets": [
           {
             "refCount": 2,
+            "refId": "A",
+            "target": "aliasByMetric(moon.__pair__.data.indecreasing.slope)"
+          },
+          {
+            "refCount": 2,
             "refId": "B",
             "target": "aliasByMetric(moon.__pair__.data.indecreasing.upper)"
           },
@@ -961,12 +961,6 @@
             "refCount": 1,
             "refId": "E",
             "target": "alias(multiplySeries(moon.__pair__.data.indecreasing.slope, divideSeries(removeBelowValue(moon.__pair__.data.indecreasing.sentiment, 0), moon.__pair__.data.indecreasing.sentiment)), 'bull')",
-            "textEditor": true
-          },
-          {
-            "refCount": 1,
-            "refId": "F",
-            "target": "alias(multiplySeries(moon.__pair__.data.indecreasing.slope, divideSeries(removeBelowValue(removeAboveValue(moon.__pair__.data.indecreasing.sentiment, 0), 0), moon.__pair__.data.indecreasing.sentiment)), 'neutral')",
             "textEditor": true
           }
         ],

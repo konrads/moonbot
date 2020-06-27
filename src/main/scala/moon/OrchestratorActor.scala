@@ -294,7 +294,8 @@ object OrchestratorActor {
             reqRetries: Int, markupRetries: Int,
             takeProfitMargin: BigDecimal, stoplossMargin: BigDecimal, postOnlyPriceAdj: BigDecimal,
             metrics: Option[Metrics]=None,
-            openWithMarket: Boolean=false)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
+            openWithMarket: Boolean=false,
+            dryRun: Boolean=false)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
 
     Behaviors.withTimers[ActorEvent] { timers =>
       Behaviors.setup[ActorEvent] { actorCtx =>
@@ -354,9 +355,9 @@ object OrchestratorActor {
             val strategyRes = strategy.strategize(ledger2)
             val (sentiment, ledger3) = (strategyRes.sentiment, strategyRes.ledger)
             actorCtx.log.debug(s"idle: Sentiment is $sentiment")
-            if (sentiment == Bull)
+            if (sentiment == Bull && ! dryRun)
               openLong(ledger3)
-            else if (sentiment == Bear)
+            else if (sentiment == Bear && ! dryRun)
               openShort(ledger3)
             else
               idle(ctx.copy(ledger = ledger3))

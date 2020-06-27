@@ -42,6 +42,7 @@ object BotApp extends App {
   val stoplossMargin         = conf.getDouble("bot.stoplossMargin")
   val postOnlyPriceAdj       = conf.getDouble("bot.postOnlyPriceAdj")
   val openWithMarket         = conf.optBoolean("bot.openWithMarket").getOrElse(false)
+  val dryRun                 = conf.optBoolean("bot.dryRun").getOrElse(false)
 
   val strategyName = conf.getString("strategy.selection")
 
@@ -74,7 +75,8 @@ object BotApp extends App {
       |• takeProfitMargin:     $takeProfitMargin
       |• stoplossMargin:       $stoplossMargin
       |• postOnlyPriceAdj:     $postOnlyPriceAdj
-      |• openWithMarket:        $openWithMarket
+      |• openWithMarket:       $openWithMarket
+      |• dryRun:               $dryRun
       |""".stripMargin)
 
   implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
@@ -92,7 +94,8 @@ object BotApp extends App {
     reqRetries=reqRetries, markupRetries=markupRetries,
     takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,
     metrics=Some(metrics),
-    openWithMarket=openWithMarket)
+    openWithMarket=openWithMarket,
+    dryRun=dryRun)
 
   // Supervision of my actor, with backoff restarts. On supervision & backoff:
   // https://manuel.bernhardt.io/2019/09/05/tour-of-akka-typed-supervision-and-signals/
