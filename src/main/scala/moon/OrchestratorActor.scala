@@ -66,7 +66,7 @@ object OrchestratorActor {
                 actorCtx.log.warn(s"${positionOpener.desc}: unexpected cancellation of orderID: ${order.fullOrdID}")
                 positionOpener.onExternalCancel(ledger2, order.clOrdID)
               case _ =>
-                actorCtx.log.debug(s"${positionOpener.desc}: waiting $o in ${ctx.lifecycle}")
+                if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionOpener.desc}: waiting $o in ${ctx.lifecycle}")
                 loop(ctx.copy(ledger = ledger2, clOrdID = order.clOrdID, lifecycle = Waiting))
             }
           case (OpenPositionCtx(ledger, _, IssuingNew), RestEvent(Failure(_: RecoverableError))) =>
@@ -85,7 +85,7 @@ object OrchestratorActor {
                 actorCtx.log.info(s"${positionOpener.desc}: filled orderID: ${order.fullOrdID} @ ${order.price} (even though had change of heart)")
                 positionOpener.onFilled(ledger2, order.price)
               case _ =>
-                actorCtx.log.debug(s"${positionOpener.desc}: unexpected $os in ${ctx.lifecycle}")
+                if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionOpener.desc}: unexpected $os in ${ctx.lifecycle}")
                 loop(ctx.copy(ledger = ledger2, lifecycle = Waiting)) // unexpected, ignore...
             }
           case (OpenPositionCtx(_, clOrdID, IssuingCancel), RestEvent(Failure(_: RecoverableError))) =>
@@ -107,7 +107,7 @@ object OrchestratorActor {
                 actorCtx.log.warn(s"${positionOpener.desc}: unexpected cancellation of orderID: ${order.fullOrdID}")
                 positionOpener.onExternalCancel(ledger2, order.orderID)
               case other => // presumingly amended
-                actorCtx.log.debug(s"${positionOpener.desc}: catchall: $other in lifecycle: ${ctx.lifecycle}, order: $o")
+                if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionOpener.desc}: catchall: $other in lifecycle: ${ctx.lifecycle}, order: $o")
                 loop(ctx.copy(ledger = ledger2, lifecycle = Waiting))
             }
           case (OpenPositionCtx(ledger, clOrdID, IssuingAmend), RestEvent(Failure(_: RecoverableError))) =>
@@ -118,7 +118,7 @@ object OrchestratorActor {
 
           // unexpected, but catered for REST interactions. Might occur when REST looses race to WS
           case (OpenPositionCtx(ledger, _, _), RestEvent(Success(data))) =>
-            actorCtx.log.debug(s"${positionOpener.desc}: unexpected RestEvent, recording: $data")
+            if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionOpener.desc}: unexpected RestEvent, recording: $data")
             loop(ctx.copy(ledger = ledger.record(data)))
           case (_, RestEvent(Success(_))) => Behaviors.same
           case (_, RestEvent(Failure(_: IgnorableError))) => Behaviors.same
@@ -158,12 +158,12 @@ object OrchestratorActor {
                     actorCtx.log.info(s"${positionOpener.desc}: best price moved, will change: ${order.price} -> $bestPrice")
                     loop(ctx.copy(ledger = ledger3, lifecycle = IssuingAmend))
                   } else {
-                    actorCtx.log.debug(s"${positionOpener.desc}: noop @ orderID: ${order.fullOrdID}, lifecycle: $lifecycle, data: $data")
+                    if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionOpener.desc}: noop @ orderID: ${order.fullOrdID}, lifecycle: $lifecycle, data: $data")
                     loop(ctx.copy(ledger = ledger3))
                   }
                 }
               case other => // catch all
-                actorCtx.log.debug(s"${positionOpener.desc}: catchall: $other in lifecycle: $lifecycle, data: $data")
+                if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionOpener.desc}: catchall: $other in lifecycle: $lifecycle, data: $data")
                 loop(ctx.copy(ledger = ledger2))
             }
         }
@@ -216,11 +216,11 @@ object OrchestratorActor {
                   // some other combinations of states - keep going
                   loop(ctx.copy(ledger = ledger2))
                 case _  =>
-                  actorCtx.log.debug(s"${positionCloser.desc}: unexpected RestEvent: $os\nexpected to match takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID")
+                  if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionCloser.desc}: unexpected RestEvent: $os\nexpected to match takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID")
                   loop(ctx.copy(ledger = ledger2))
               }
             case (_, RestEvent(Success(other))) =>
-              actorCtx.log.debug(s"${positionCloser.desc}: unexpected RestEvent, recording: $other")
+              if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionCloser.desc}: unexpected RestEvent, recording: $other")
               loop(ctx.copy(ledger = ctx.ledger.record(other)))
             case (ClosePositionCtx(_, takeProfitClOrdID, stoplossClOrdID, IssuingCancel), RestEvent(Failure(_: RecoverableError))) =>
               positionCloser.cancelOrders(takeProfitClOrdID, stoplossClOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
@@ -268,11 +268,11 @@ object OrchestratorActor {
                   loop(ctx.copy(ledger = ledger2, lifecycle = IssuingCancel))
                 case (Some(tOrd), Some(sOrd)) =>
                   // some other combinations of states - keep going
-                  actorCtx.log.debug(s"${positionCloser.desc}: new state of takeProfitOrder: $tOrd, stoplossOrder: $sOrd, in lifecycle: $lifecycle")
+                  if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionCloser.desc}: new state of takeProfitOrder: $tOrd, stoplossOrder: $sOrd, in lifecycle: $lifecycle")
                   loop(ctx.copy(ledger = ledger2))
                 case other  =>
                   // if not our orders or non Order(s)
-                  actorCtx.log.debug(s"${positionCloser.desc}: catchall: $other in lifecycle: $lifecycle, data: $data")
+                  if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionCloser.desc}: catchall: $other in lifecycle: $lifecycle, data: $data")
                   loop(ctx.copy(ledger = ledger2))
               }
           }
@@ -295,10 +295,14 @@ object OrchestratorActor {
             takeProfitMargin: BigDecimal, stoplossMargin: BigDecimal, postOnlyPriceAdj: BigDecimal,
             metrics: Option[Metrics]=None,
             openWithMarket: Boolean=false,
-            dryRun: Boolean=false)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
+            dryRunScheduler: Option[akka2.DryRunTimerScheduler[ActorEvent]]=None)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
 
-    Behaviors.withTimers[ActorEvent] { timers =>
-      Behaviors.setup[ActorEvent] { actorCtx =>
+    val dryRun = dryRunScheduler.isDefined
+
+    Behaviors.setup[ActorEvent] { actorCtx =>
+      Behaviors.withTimers[ActorEvent] { timers0 =>
+        // NOTE: for dryRun purpose!!!
+        val timers = dryRunScheduler.map(_.withActorRef(actorCtx.self)).getOrElse(timers0)
 
         if (flushSessionOnRestart) {
           actorCtx.log.info("init: Bootstraping via closePosition/orderCancels...")
@@ -318,7 +322,7 @@ object OrchestratorActor {
             metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
             init(ctx.copy(ledger2))
           case WsEvent(data) =>
-            actorCtx.log.debug(s"init: WsEvent: $data")
+            if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"init: WsEvent: $data")
             val ledger2 = ctx.ledger.record(data)
             if (ledger2.isMinimallyFilled) {
               timers.startTimerAtFixedRate(SendMetrics, 1.minute)
@@ -334,10 +338,10 @@ object OrchestratorActor {
             } else
               init(ctx.copy(ledger2))
           case RestEvent(Success(data)) =>
-            actorCtx.log.debug(s"init: RestEvent: $data")
+            if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"init: RestEvent: $data")
             init(ctx.copy(ledger = ctx.ledger.record(data)))
           case RestEvent(Failure(exc)) =>
-            actorCtx.log.debug(s"init: unexpected failure: $exc", exc)
+            if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"init: unexpected failure: $exc", exc)
             Behaviors.same
         }
 
@@ -350,11 +354,11 @@ object OrchestratorActor {
             metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
             idle(ctx.copy(ledger2))
           case WsEvent(wsData) =>
-            actorCtx.log.debug(s"idle: WsEvent: $wsData")
+            if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"idle: WsEvent: $wsData")
             val ledger2 = ctx.ledger.record(wsData)
             val strategyRes = strategy.strategize(ledger2)
             val (sentiment, ledger3) = (strategyRes.sentiment, strategyRes.ledger)
-            actorCtx.log.debug(s"idle: Sentiment is $sentiment")
+            if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"idle: Sentiment is $sentiment")
             if (sentiment == Bull && ! dryRun)
               openLong(ledger3)
             else if (sentiment == Bear && ! dryRun)
@@ -363,10 +367,10 @@ object OrchestratorActor {
               idle(ctx.copy(ledger = ledger3))
 
           case RestEvent(Success(data)) =>
-            actorCtx.log.debug(s"idle: unexpected RestEvent: $data")
+            if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"idle: unexpected RestEvent: $data")
             idle(ctx.copy(ledger = ctx.ledger.record(data)))
           case RestEvent(Failure(exc)) =>
-            actorCtx.log.debug(s"idle: unexpected Rest failure: $exc", exc)
+            if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"idle: unexpected Rest failure: $exc", exc)
             Behaviors.same
         }
 

@@ -174,6 +174,7 @@ class TalibSpec extends FlatSpec with Matchers with Inside {
     // xs = np.array([2., 4., 0., 6., -2., 4., 0., 2.]); np.polyfit(range(len(xs)), xs, 1)
     polyfit(Seq(2, 4, 0, 6, -2, 4, 0, 2)) shouldBe(BigDecimal("-0.1904761904761904761904761904761905"), BigDecimal("2.666666666666666666666666666666667"))
     polyfit(Seq(10, 4, 50, -66, 1.1111, -3.333, 0, 200.3)) shouldBe(BigDecimal("14.51442976190476190476190476190476"), BigDecimal("-26.29074166666666666666666666666666"))
+    polyfit(Seq(1, 11)) shouldBe(10, 1)  // testing min of 2 points
   }
 
   it should "work with indecreasing" in {

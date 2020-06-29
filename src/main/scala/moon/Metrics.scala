@@ -11,7 +11,7 @@ import com.typesafe.scalalogging.Logger
 // inspired by:
 // https://github.com/datasift/dropwizard-scala/blob/master/metrics/src/main/scala/com/datasift/dropwizard/scala/metrics.scala
 // https://gist.github.com/jkpl/1789f1feeb86f8314f32966ecf0940fa
-case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: Boolean=true) {
+case class Metrics(host: String, port: Int=2003, prefix: String, clock: Clock=WallClock, addJvmMetrics: Boolean=true) {
   private val log = Logger[Metrics]
   private val graphite = new Graphite(new InetSocketAddress(host, port))
   private val osBean = ManagementFactory.getPlatformMXBean(classOf[OperatingSystemMXBean])
@@ -30,7 +30,7 @@ case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: 
       gauges
 
     if (gauges2.nonEmpty) {
-      val now = System.currentTimeMillis() / 1000
+      val now = clock.now / 1000
       log.debug(s"Metrics:\n${gauges2.map { case (k, v) => s"- $prefix.$k $v $now" }.mkString("\n")}")
       try {
         graphite.connect()
@@ -38,7 +38,8 @@ case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: 
       } catch {
         case exc: IOException => log.warn(s"Failed to send graphite metrics: ${gauges.mkString(", ")}", exc)
       } finally {
-        try graphite.close()
+        try
+          graphite.close()
         catch {
           case exc: IOException => log.warn(s"Failed to close graphite connection: ${gauges.mkString(", ")}", exc)
         }

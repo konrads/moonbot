@@ -69,4 +69,19 @@ package object moon {
     def optIntList(path: String): Option[List[Int]] = if (config.hasPath(path)) Some(config.getIntList(path).asScala.toList.map(_.intValue())) else None
     // ...etc, will add if needed
   }
+
+
+  trait Clock {
+    def now: Long
+  }
+
+  object WallClock extends Clock {
+    def now = System.currentTimeMillis()
+  }
+
+  class DryRunClock(initTs: Long=0) extends Clock {
+    var ts = initTs
+    def setTime(newTs: Long) { ts = newTs }
+    def now = ts
+  }
 }
