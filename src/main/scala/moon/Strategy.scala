@@ -190,7 +190,7 @@ class MACDStrategy(val config: Config) extends Strategy {
     val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, (slowWindow + signalWindow) * resamplePeriodMs, dropLast=false)
     val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
     val ffilled = ffill(resampledTicks).takeRight(MIN_EMA_WINDOW)
-    val prices = ffilled.map(_._2.close)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
+    val prices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
     val (sentiment, macdVal, macdSignal, macdHistogram, macdCapScore) = macd(prices, slowWindow, fastWindow, signalWindow) match {
       case Some((macd, signal, histogram)) =>
         val capScore = capFun(histogram)
