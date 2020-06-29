@@ -16,9 +16,9 @@ class StrategySpec extends FlatSpec with Matchers with Inside {
 
   "Strategy" should "work :)" in {
     // looking for equivalent of TalibSpec:
-    // bbands(Seq(na, na, na, 1, 2, 3, 4, 5), devUp=3, devDown=1) shouldBe Some((BigDecimal("7.2426406871192853"), 3, BigDecimal("1.5857864376269049")))
+    // bbands(Vector(na, na, na, 1, 2, 3, 4, 5), devUp=3, devDown=1) shouldBe Some((BigDecimal("7.2426406871192853"), 3, BigDecimal("1.5857864376269049")))
     val l = Ledger()
-      .record(OrderBook("t", "a", Seq(OrderBookData("s", parseDateTime("2010-01-01T00:00:00.000Z"), Seq(Seq(1, 2)), Seq(Seq(3, 4))))))
+      .record(OrderBook("t", "a", Vector(OrderBookData("s", parseDateTime("2010-01-01T00:00:00.000Z"), Vector(Vector(1, 2)), Vector(Vector(3, 4))))))
       // ignore first 3
       .record(TradeData(side=null, size=1000, price=1000, tickDirection=null, timestamp=parseDateTime("2010-01-01T00:00:00.000Z")))
       .record(TradeData(side=null, size=1000, price=1000, tickDirection=null, timestamp=parseDateTime("2010-01-01T00:00:00.000Z")))

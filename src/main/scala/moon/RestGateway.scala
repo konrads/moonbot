@@ -36,7 +36,7 @@ trait IRestGateway {
   def placeMarketOrderAsync(qty: BigDecimal, side: OrderSide): (String, Future[Order])
   def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order])
   def amendOrderAsync(orderID: Option[String]=None, origClOrdID: Option[String]=None, price: BigDecimal): Future[Order]
-  def cancelOrderAsync(orderIDs: Seq[String]=Nil, clOrdIDs: Seq[String]=Nil): Future[Orders]
+  def cancelOrderAsync(orderIDs: Seq[String]=Vector.empty, clOrdIDs: Seq[String]=Vector.empty): Future[Orders]
   def cancelAllOrdersAsync(): Future[Orders]
   def closePositionAsync(): Future[String]
 
@@ -47,7 +47,7 @@ trait IRestGateway {
   def placeMarketOrderSync(qty: BigDecimal, side: OrderSide): Try[Order]
   def placeLimitOrderSync(qty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, side: OrderSide): Try[Order]
   def amendOrderSync(orderID: Option[String]=None, clOrdID: Option[String]=None, price: BigDecimal): Try[Order]
-  def cancelOrderSync(orderIDs: Seq[String]=Nil, origClOrdIDs: Seq[String]=Nil): Try[Orders]
+  def cancelOrderSync(orderIDs: Seq[String]=Vector.empty, origClOrdIDs: Seq[String]=Vector.empty): Try[Orders]
   def cancelAllOrdersSync(): Try[Orders]
   def closePositionSync(): Try[String]
 }
@@ -101,7 +101,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   def amendOrderAsync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: BigDecimal): Future[Order] =
     amendOrder(orderID, origClOrdID, price)
 
-  def cancelOrderAsync(orderIDs: Seq[String] = Nil, clOrdIDs: Seq[String] = Nil): Future[Orders] =
+  def cancelOrderAsync(orderIDs: Seq[String] = Vector.empty, clOrdIDs: Seq[String] = Vector.empty): Future[Orders] =
     cancelOrder(orderIDs, clOrdIDs)
 
   def cancelAllOrdersAsync(): Future[Orders] =
@@ -147,7 +147,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       Duration(syncTimeoutMs, MILLISECONDS)
     ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on amendOrderSync orderID: $orderID, origClOrdID: $origClOrdID") }.value.get
 
-  def cancelOrderSync(orderIDs: Seq[String] = Nil, clOrdIDs: Seq[String] = Nil): Try[Orders] =
+  def cancelOrderSync(orderIDs: Seq[String] = Vector.empty, clOrdIDs: Seq[String] = Vector.empty): Try[Orders] =
     Await.ready(
       cancelOrder(orderIDs, clOrdIDs),
       Duration(syncTimeoutMs, MILLISECONDS)
@@ -219,8 +219,8 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
 
   private def cancelOrder(orderIDs: Seq[String], clOrdIDs: Seq[String]): Future[Orders] = {
     assert(orderIDs.nonEmpty || clOrdIDs.nonEmpty)
-    val orderIDsStr = if (orderIDs.nonEmpty) Seq("orderID=" + orderIDs.mkString(",")) else Nil
-    val clOrdIDsStr = if (clOrdIDs.nonEmpty) Seq("clOrdID=" + clOrdIDs.mkString(",")) else Nil
+    val orderIDsStr = if (orderIDs.nonEmpty) Vector("orderID=" + orderIDs.mkString(",")) else Vector.empty
+    val clOrdIDsStr = if (clOrdIDs.nonEmpty) Vector("clOrdID=" + clOrdIDs.mkString(",")) else Vector.empty
     sendReq(
       DELETE,
       "/api/v1/order",

@@ -37,7 +37,7 @@ object Strategy {
       if (dropLast)
         post
       else
-        pre.lastOption.toSeq ++ post
+        pre.lastOption.toVector ++ post
     }
   }
 }
@@ -74,9 +74,9 @@ class BullBearEmaStrategy(val config: Config) extends Strategy {
   log.info(s"Strategy ${this.getClass.getSimpleName}: emaSmoothing: $emaSmoothing, periodMs: $periodMs, upper: $upper, lower: $lower")
   override def strategize(ledger: Ledger): StrategyResult = {
     val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, periodMs)
-    val volumeScore = if (tradeDatas2.isEmpty)
+    val volumeScore: BigDecimal = if (tradeDatas2.isEmpty)
     // only gets here if no trades are done in a recent period
-      BigDecimal(0)
+      0
     else {
       val (bullTrades, bearTrades) = tradeDatas2.partition(_.side == Buy)
       val bullVolume = ema(bullTrades.map(_.size), bullTrades.size, emaSmoothing)
@@ -110,12 +110,12 @@ class BBandsStrategy(val config: Config) extends Strategy {
     val (sentiment, bbandsScore, upper, middle, lower) = bbands(prices, devUp=devUp, devDown=devDown) match {
       case Some((upper, middle, lower)) if prices.size == window =>  // make sure we have a full window, otherwise go neutral
         val currPrice = (ledger.askPrice + ledger.bidPrice) / 2
-        val score = if (currPrice > upper)
+        val score: BigDecimal = if (currPrice > upper)
           currPrice - upper
         else if (currPrice < lower)
           currPrice - lower
         else
-          BigDecimal(0)
+          0
         val capScore = capFun(score)
         if (capScore > minUpper)
           (Bull, BigDecimal(1), Some(upper), Some(middle), Some(lower))
@@ -130,7 +130,7 @@ class BBandsStrategy(val config: Config) extends Strategy {
     }
     StrategyResult(
       sentiment,
-      (Seq("data.bbands.sentiment" -> BigDecimal(sentiment.id)) ++ Seq("data.bbands.score" -> bbandsScore) ++ upper.map("data.bbands.upper" -> _).toSeq ++ middle.map("data.bbands.middle" -> _).toSeq ++ lower.map("data.bbands.lower" -> _).toSeq).toMap,
+      (Vector("data.bbands.sentiment" -> BigDecimal(sentiment.id)) ++ Vector("data.bbands.score" -> bbandsScore) ++ upper.map("data.bbands.upper" -> _).toVector ++ middle.map("data.bbands.middle" -> _).toVector ++ lower.map("data.bbands.lower" -> _).toVector).toMap,
       ledger.copy(tradeDatas = tradeDatas2))
   }
 }
@@ -152,12 +152,12 @@ class RSIStrategy(val config: Config) extends Strategy {
     val prices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
     val (sentiment, scoreVal) = rsi(prices) match {
       case Some(res) if prices.size > window =>  // make sure we have a full window (+1), otherwise go neutral
-        val score = if (res > upper)
+        val score: BigDecimal = if (res > upper)
           res - upper
         else if (res < lower)
           res - lower
         else
-          BigDecimal(0)
+          0
         val capScore = capFun(score)
         val sentiment = if (capScore > minUpper)
           Bull
@@ -171,7 +171,7 @@ class RSIStrategy(val config: Config) extends Strategy {
     }
     StrategyResult(
       sentiment,
-      (Seq("data.rsi.sentiment" -> BigDecimal(sentiment.id)) ++ scoreVal.map("data.rsi.score" -> _).toSeq :+ ("data.rsi.upper" -> BigDecimal(upper)) :+ ("data.rsi.lower" -> BigDecimal(lower))).toMap,
+      (Vector("data.rsi.sentiment" -> BigDecimal(sentiment.id)) ++ scoreVal.map("data.rsi.score" -> _).toVector :+ ("data.rsi.upper" -> BigDecimal(upper)) :+ ("data.rsi.lower" -> BigDecimal(lower))).toMap,
       ledger.copy(tradeDatas = tradeDatas2))
   }
 }
@@ -190,7 +190,7 @@ class MACDStrategy(val config: Config) extends Strategy {
     val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, (slowWindow + signalWindow) * resamplePeriodMs, dropLast=false)
     val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
     val ffilled = ffill(resampledTicks).takeRight(MIN_EMA_WINDOW)
-    val prices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
+    val prices = ffilled.map(_._2.close)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
     val (sentiment, macdVal, macdSignal, macdHistogram, macdCapScore) = macd(prices, slowWindow, fastWindow, signalWindow) match {
       case Some((macd, signal, histogram)) =>
         val capScore = capFun(histogram)
@@ -207,7 +207,7 @@ class MACDStrategy(val config: Config) extends Strategy {
     StrategyResult(
       sentiment,
       // note: keeping macd's sentiment as a seperate metric to show indicator specific sentiment
-      (Seq("data.macd.sentiment" -> BigDecimal(sentiment.id)) ++ macdVal.map("data.macd.macd" -> _).toSeq ++ macdSignal.map("data.macd.signal" -> _).toSeq ++ macdHistogram.map("data.macd.histogram" -> _).toSeq ++ macdCapScore.map("data.macd.cap" -> _).toSeq).toMap,
+      (Vector("data.macd.sentiment" -> BigDecimal(sentiment.id)) ++ macdVal.map("data.macd.macd" -> _).toVector ++ macdSignal.map("data.macd.signal" -> _).toVector ++ macdHistogram.map("data.macd.histogram" -> _).toVector ++ macdCapScore.map("data.macd.cap" -> _).toVector).toMap,
       ledger.copy(tradeDatas = tradeDatas2))
   }
 }
@@ -258,7 +258,7 @@ class WeightedStrategy(val config: Config, val parentConfig: Config) extends Str
     val individualReses = weightedStrategies.map { case (s, w) => (s.strategize(ledger), w) }
     val sentimentScoreAvg = individualReses.map { case (r, w) => r.sentiment.id * w }.sum / weightSum
     val sentiment = if (sentimentScoreAvg > minUpper) Bull else if (sentimentScoreAvg < minLower) Bear else Neutral
-    val ledgerWithMostData = individualReses.toSeq.sortBy(_._1.ledger.tradeDatas.length).last._1.ledger
+    val ledgerWithMostData = individualReses.toVector.sortBy(_._1.ledger.tradeDatas.length).last._1.ledger
     StrategyResult(
       sentiment,
       individualReses.map(_._1.metrics).reduce(_ ++ _) + ("data.weighted.sentiment" -> BigDecimal(sentiment.id)),

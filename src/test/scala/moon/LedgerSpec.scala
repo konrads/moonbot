@@ -15,12 +15,12 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
   val bbandsStrategy = new BBandsStrategy(ConfigFactory.parseString(""))
 
   "Ledger" should "work with WS and REST orders" in {
-    val ws1 = UpsertOrder(Some("insert"), data=Seq(
+    val ws1 = UpsertOrder(Some("insert"), data=Vector(
       OrderData(orderID="o1", price=Some(1), orderQty=Some(1), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-01T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
       OrderData(orderID="o2", price=Some(2), orderQty=Some(2), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-02T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
       OrderData(orderID="o3", price=Some(3), orderQty=Some(3), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-03T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
     ))
-    val ws2 = UpsertOrder(Some("update"), data=Seq(
+    val ws2 = UpsertOrder(Some("update"), data=Vector(
       OrderData(orderID="o2", price=Some(2), orderQty=Some(2), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-02T00:00:00.000Z"), ordStatus=Some(OrderStatus.PostOnlyFailure), text=Some("had execInst of ParticipateDoNotInitiate")),
     ))
     val rest1 = Order(orderID="o1", symbol="XBTUSD", price=Some(1), orderQty=1, side=OrderSide.Buy, ordType=OrderType.Limit, timestamp=parseDateTime("2010-01-01T00:00:00.000Z"), ordStatus=Some(OrderStatus.New))
@@ -100,11 +100,11 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
       ("ws",   wsOrderFilled("o4", 12, 13, 10, OrderType.Limit, "2010-01-04T12:00:00.000Z")),
     )
     l.ledgerOrders.size shouldBe 4
-    l.ledgerOrders.toSeq.map(_.orderID) shouldBe Seq("o4", "o3", "o2", "o1")
-    l.myOrders.toSeq.map(_.orderID) shouldBe Seq("o3", "o2", "o1")
+    l.ledgerOrders.toVector.map(_.orderID) shouldBe Vector("o4", "o3", "o2", "o1")
+    l.myOrders.toVector.map(_.orderID) shouldBe Vector("o3", "o2", "o1")
 
     // add orderbook data
-    val l2 = l.record(OrderBook("blah", "update", Seq(OrderBookData("xbtusd", parseDateTime("2001-01-01T00:00:00.000Z"), asks=Seq(Seq(10, 20), Seq(20, 30)), bids=Seq(Seq(100, 200), Seq(200, 300))))))
+    val l2 = l.record(OrderBook("blah", "update", Vector(OrderBookData("xbtusd", parseDateTime("2001-01-01T00:00:00.000Z"), asks=Vector(Vector(10, 20), Vector(20, 30)), bids=Vector(Vector(100, 200), Vector(200, 300))))))
 
     val l3 = l2.withMetrics(strategy = bbandsStrategy)
     val metrics3 = l2.ledgerMetrics
@@ -121,7 +121,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
       ("ws",   wsOrderNew("o6", OrderSide.Buy, 11, 10, OrderType.Market, "2010-01-06T00:00:00.000Z")),
       ("ws",   wsOrderFilled("o6", 8, 6, 10, OrderType.Market, "2010-01-06T12:00:00.000Z")),
     )
-    l4.ledgerOrders.toSeq.map(_.orderID) shouldBe Seq("o6", "o5", "o4", "o3", "o2", "o1")
+    l4.ledgerOrders.toVector.map(_.orderID) shouldBe Vector("o6", "o5", "o4", "o3", "o2", "o1")
 
     val l5 = l4.withMetrics(strategy = bbandsStrategy)
     val metrics5 = l5.ledgerMetrics
@@ -146,7 +146,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
       LedgerOrder("o3.5", "clo3.5", 12, 23, null, null, null, None, parseDateTime("2010-01-03T12:00:00.000Z"), true),
       LedgerOrder("o2",   "clo2",   12, 23, null, null, null, None, parseDateTime("2010-01-02T00:00:00.000Z"), true),
     )
-    set.toSeq.map(_.orderID) shouldBe Seq("o3.5", "o3", "o2", "o1")
+    set.toVector.map(_.orderID) shouldBe Vector("o3.5", "o3", "o2", "o1")
   }
 
   it should "do basic pandl" in {
@@ -166,12 +166,12 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     val l0 = Ledger(orderBook=OrderBook("b1", "b2", data=Nil))
 
     // long buy & sell, split
-    val l1_1 = addToLedger(l0, 0, 0, Seq(
+    val l1_1 = addToLedger(l0, 0, 0, Vector(
       ("rest", restOrderNew("o1", Buy, 10, 1, Limit, "2010-01-01T00:00:00.000Z")),
       ("ws",   wsOrderAmend("o1", 100 /* ignored */, "2010-01-01T00:00:00.000Z")),
     ))
     val expPandlDelta1 = BigDecimal("0.0500375")  // 1/10.0*1.00025-1/20.0*.99975
-    val l1_2 = addToLedger(l1_1, expPandlDelta1, expPandlDelta1, Seq(
+    val l1_2 = addToLedger(l1_1, expPandlDelta1, expPandlDelta1, Vector(
       ("ws",   wsOrderFilled("o1", 10, 10, 1, Limit, "2010-01-01T00:00:01.000Z")),
       ("rest", restOrderNew("o2", Sell, 20, 1, Limit, "2010-01-01T00:00:01.000Z")),
       ("ws",   wsOrderFilled("o2", 20, 20, 1, Limit, "2010-01-01T00:00:01.000Z")),
@@ -179,7 +179,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
 
     // long buy & sell, no profit (except for rebate)
     val expPandlDelta2 = BigDecimal("0.00005")  // 1/10.0*1.00025-1/10.0*.99975
-    val l2 = addToLedger(l1_2, expPandlDelta1 + expPandlDelta2, expPandlDelta2, Seq(
+    val l2 = addToLedger(l1_2, expPandlDelta1 + expPandlDelta2, expPandlDelta2, Vector(
       ("rest", restOrderNew("o3", Buy, 10, 1, Limit, "2010-01-01T00:00:03.000Z")),
       ("ws",   wsOrderFilled("o3", 10, 10, 1, Limit, "2010-01-01T00:00:03.000Z")),
       ("rest", restOrderNew("o4", Sell, 10, 1, Limit, "2010-01-01T00:00:04.000Z")),
@@ -188,7 +188,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
 
     // short sell & buy, tiny loss due to stop
     val expPandlDelta3 = BigDecimal("-0.00005")  // -1/10.0*1.00075+1/10.0*1.00025
-    val l3 = addToLedger(l2, expPandlDelta1 + expPandlDelta2 + expPandlDelta3, expPandlDelta3, Seq(
+    val l3 = addToLedger(l2, expPandlDelta1 + expPandlDelta2 + expPandlDelta3, expPandlDelta3, Vector(
       ("rest", restOrderNew("o5", Sell, 10, 1, Limit, "2010-01-01T00:00:05.000Z")),
       ("ws",   wsOrderFilled("o5", 10, 10, 1, Limit, "2010-01-01T00:00:05.000Z")),
       ("rest", restOrderNew("o6", Buy, 10, 1, Stop, "2010-01-01T00:00:06.000Z")),
@@ -196,19 +196,19 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     ))
 
     // short sell & buy, parially
-    val l4_1 = addToLedger(l3, expPandlDelta1 + expPandlDelta2 + expPandlDelta3, 0, Seq(
+    val l4_1 = addToLedger(l3, expPandlDelta1 + expPandlDelta2 + expPandlDelta3, 0, Vector(
       ("ws",   wsOrderFilled("o7", 20, 20, 10, Limit, "2010-01-01T00:00:07.000Z")),
       ("ws",   wsOrderFilled("o8", 10, 10, 10, Stop, "2010-01-01T00:00:08.000Z")),
     ))
     val expPandlDelta4 = BigDecimal("0.499375")  // -10/20.0*.99975+10/10.0*.99925
-    val l4_2 = addToLedger(l4_1, expPandlDelta1 + expPandlDelta2 + expPandlDelta3 + expPandlDelta4, expPandlDelta4, Seq(
+    val l4_2 = addToLedger(l4_1, expPandlDelta1 + expPandlDelta2 + expPandlDelta3 + expPandlDelta4, expPandlDelta4, Vector(
       ("rest", restOrderNew("o7", Sell, 20, 10, Limit, "2010-01-01T00:00:07.000Z")),
       ("rest", restOrderNew("o8", Buy, 10, 10, Stop, "2010-01-01T00:00:08.000Z")),
     ))
 
     // long buy & sell
     val expPandlDelta5 = BigDecimal("-0.500625")  // 10/20.0*1.00025-10/10.0*1.00075
-    val l5 = addToLedger(l4_2, expPandlDelta1 + expPandlDelta2 + expPandlDelta3 + expPandlDelta4 + expPandlDelta5, expPandlDelta5, Seq(
+    val l5 = addToLedger(l4_2, expPandlDelta1 + expPandlDelta2 + expPandlDelta3 + expPandlDelta4 + expPandlDelta5, expPandlDelta5, Vector(
       ("rest", restOrderNew("o9", Buy, 20, 10, Limit, "2010-01-01T00:00:09.000Z")),
       ("ws",   wsOrderFilled("o9", 20, 20, 10, Limit, "2010-01-01T00:00:09.000Z")),
       ("rest", restOrderNew("o10", Sell, 10, 10, Stop, "2010-01-01T00:00:10.000Z")),
@@ -216,7 +216,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     ))
 
     // no pandl diff on PostOnlyFailure and cancels
-    val l6 = addToLedger(l5, expPandlDelta1 + expPandlDelta2 + expPandlDelta3 + expPandlDelta4 + expPandlDelta5, 0, Seq(
+    val l6 = addToLedger(l5, expPandlDelta1 + expPandlDelta2 + expPandlDelta3 + expPandlDelta4 + expPandlDelta5, 0, Vector(
       ("rest", restOrderNew("o11", Buy, 20, 10, Limit, "2010-01-01T00:00:11.000Z")),
       ("ws",   wsOrderPostOnlyFailure("o11", Buy, 20, 10, "2010-01-01T00:00:11.000Z")),
       ("rest", restOrderPostOnlyFailure("o12", Buy, 20, 10, "2010-01-01T00:00:12.000Z")),

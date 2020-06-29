@@ -393,7 +393,7 @@ object OrchestratorActor {
             }
             override def cancelOrder(clOrdID: String): Future[Orders] = {
               actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")
-              restGateway.cancelOrderAsync(clOrdIDs = Seq(clOrdID))
+              restGateway.cancelOrderAsync(clOrdIDs = Vector(clOrdID))
             }
             override def amendOrder(clOrdID: String, newPrice: BigDecimal): Future[Order] = {
               actorCtx.log.info(s"$desc: amending clOrdID: $clOrdID, newPrice: $newPrice")
@@ -415,7 +415,7 @@ object OrchestratorActor {
             override def onRejections(l: Ledger, orders: LedgerOrder*): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long closing orderID: ${orders.mkString(", ")}")
             override def onIrrecoverableError(l: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String, exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long closing takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID", exc)
             override def openOrders(l: Ledger): (String, String, Future[Orders]) = {
-              val (o1::o2::Nil, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
+              val (o1 +: Seq(o2), resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Vector(
                 OrderReq.asLimitOrder(Sell, tradeQty, openPrice + takeProfitMargin, true),
                 OrderReq.asTrailingStopOrder(Sell, tradeQty, stoplossMargin, true)))
                 // or for market stop: OrderReq.asStopOrder(Sell, tradeQty, openPrice - stoplossMargin, true)))
@@ -444,7 +444,7 @@ object OrchestratorActor {
             }
             override def cancelOrder(clOrdID: String): Future[Orders] = {
               actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")
-              restGateway.cancelOrderAsync(clOrdIDs = Seq(clOrdID))
+              restGateway.cancelOrderAsync(clOrdIDs = Vector(clOrdID))
             }
             override def amendOrder(clOrdID: String, newPrice: BigDecimal): Future[Order] = {
               actorCtx.log.info(s"$desc: amending clOrdID: $clOrdID, newPrice: $newPrice")
@@ -466,7 +466,7 @@ object OrchestratorActor {
             override def onRejections(l: Ledger, orders: LedgerOrder*): Behavior[ActorEvent] = throw new Exception(s"Unexpected rejection of long closing orders: ${orders.mkString(", ")}")
             override def onIrrecoverableError(l: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String, exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of short closing takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID", exc)
             override def openOrders(l: Ledger): (String, String, Future[Orders]) = {
-              val (o1::o2::Nil, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
+              val (o1 +: Seq(o2), resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Vector(
                 OrderReq.asLimitOrder(Buy, tradeQty, openPrice - takeProfitMargin, true),
                 OrderReq.asTrailingStopOrder(Buy, tradeQty, stoplossMargin, true)))
                 // or for market stop: OrderReq.asStopOrder(Buy, tradeQty, openPrice + stoplossMargin, true)))

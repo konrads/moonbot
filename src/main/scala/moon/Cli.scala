@@ -95,7 +95,7 @@ object Cli extends App {
     case ("order", Some("takeProfitAndStoploss"), _, Some(takeProfitPrice), Some(stoplossPrice), _, Some(qty), _, _, _) =>
       log.info(s"issuing $oSide takeProfitAndStoploss'es: takeProfitPrice: $takeProfitPrice, stoplossPrice: $stoplossPrice, qty: $qty")
       wsGateway.run(consumeOrder)
-      val (clOrdIDs, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
+      val (clOrdIDs, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Vector(
         OrderReq.asLimitOrder(oSide, qty, takeProfitPrice, true),
         OrderReq.asStopOrder(oSide, qty, stoplossPrice, true))))
       log.info(s"REST takeProfitAndStoploss request: ${clOrdIDs.mkString(", ")}")
@@ -106,7 +106,7 @@ object Cli extends App {
     case ("order", Some("takeProfitAndTrailingStoploss"), _, Some(takeProfitPrice), _, Some(pegOffsetValue), Some(qty), _, _, _) =>
       log.info(s"issuing $oSide takeProfitAndTrailingStoploss'es: takeProfitPrice: $takeProfitPrice, pegOffsetValue: $pegOffsetValue, qty: $qty")
       wsGateway.run(consumeOrder)
-      val (clOrdIDs, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Seq(
+      val (clOrdIDs, resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Vector(
         OrderReq.asLimitOrder(oSide, qty, takeProfitPrice, true),
         OrderReq.asTrailingStopOrder(oSide, qty, pegOffsetValue, true))))
       log.info(s"REST $oSide takeProfitAndStoploss request: ${clOrdIDs.mkString(", ")}")
@@ -162,7 +162,7 @@ object Cli extends App {
     case ("cancel", _, _, _, _, _, _, orderIDOpt, cliOrdOpt, _) =>
       log.info(s"canceling: orderid: $orderIDOpt")
       wsGateway.run(consumeOrder)
-      val resF = restGateway.cancelOrderAsync(orderIDOpt.map(_.split(",").toSeq).getOrElse(Nil), cliOrdOpt.map(_.split(",").toSeq).getOrElse(Nil))
+      val resF = restGateway.cancelOrderAsync(orderIDOpt.map(_.split(",").toVector).getOrElse(Vector.empty), cliOrdOpt.map(_.split(",").toVector).getOrElse(Vector.empty))
       log.info(s"REST cancel request: $orderIDOpt")
       resF.onComplete {
         case Success(res) => log.info(s"REST cancel response: $orderIDOpt, $cliOrdOpt, $res")
@@ -248,7 +248,7 @@ object CliUtils {
     import scala.io.Source
 
     val logFiles = logDir.listFiles().filter(_.getName.endsWith(".log"))
-    val trades = logFiles.foldLeft(Seq.empty[Trade]) {
+    val trades = logFiles.foldLeft(Vector.empty[Trade]) {
       case (trades2, f) =>
         val fSource = Source.fromFile(f)
         Cli.log.info(s"...Loading: $f")
@@ -264,7 +264,7 @@ object CliUtils {
     val ticks = trades.flatMap(_.data).groupBy(_.timestamp.getMillis / 60000).map {
       case (ts, orders) =>
         TradeTick(ts=ts, open=orders.head.price, close=orders.last.price, high=orders.map(_.price).max, low=orders.map(_.price).min, volume=orders.map(_.size).sum)
-    }.toSeq.sorted
+    }.toVector.sorted
 
     // output CSV
     val writer = new FileWriter(outputCsv)

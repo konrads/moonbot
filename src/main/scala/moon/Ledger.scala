@@ -18,7 +18,7 @@ case class LedgerOrder(orderID: String, clOrdID: String=null, price: BigDecimal,
 
 case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, lastOrderTimestamp: DateTime=new DateTime(0), lastTradeData: TradeData=null, runningPandl: BigDecimal=0)
 
-case class Ledger(orderBook: OrderBook=null, tradeDatas: Seq[TradeData]=Nil,
+case class Ledger(orderBook: OrderBook=null, tradeDatas: Seq[TradeData]=Vector.empty,
                   ledgerOrders: SortedSet[LedgerOrder]=SortedSet.empty[LedgerOrder], ledgerOrdersByID: Map[String, LedgerOrder]=Map.empty, ledgerOrdersByClOrdID: Map[String, LedgerOrder]=Map.empty,
                   ledgerMetrics: LedgerMetrics=LedgerMetrics()) {
   // rest
@@ -145,7 +145,7 @@ case class Ledger(orderBook: OrderBook=null, tradeDatas: Seq[TradeData]=Nil,
     if (currOrders3.isEmpty)
       l.copy(ledgerMetrics=l.ledgerMetrics.copy(metrics=metricsVals, lastTradeData=currTradeDatas.lastOption.orNull))
     else {
-      // import Ledger.log; log.debug(s"Ledger.withMetrics: lastOrderTimestamp: ${ledgerMetrics.lastOrderTimestamp}\nledgerOrders:${ledgerOrders.toSeq.map(o => s"\n- $o").mkString}\ncurrOrders3:${currOrders3.toSeq.map(o => s"\n- $o").mkString}")
+      // import Ledger.log; log.debug(s"Ledger.withMetrics: lastOrderTimestamp: ${ledgerMetrics.lastOrderTimestamp}\nledgerOrders:${ledgerOrders.toVector.map(o => s"\n- $o").mkString}\ncurrOrders3:${currOrders3.toVector.map(o => s"\n- $o").mkString}")
       val pandlDelta = currOrders3.map {
         case LedgerOrder(_, _, price, qty, _, Buy, Limit, _, _, true)  =>  qty / price * (1 + makerRebate)
         case LedgerOrder(_, _, price, qty, _, Buy, _, _, _, true)      =>  qty / price * (1 - takerFee)

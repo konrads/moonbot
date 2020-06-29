@@ -146,7 +146,7 @@ object talib {
 
   def resample(trades: Seq[TradeData], periodMs: Long = MS_IN_MINUTE): Seq[(Long, TradeTick)] =
     if (trades.isEmpty)
-      Nil
+      Vector.empty
     else {
       val lastMillis = trades.map(_.timestamp.getMillis).view.max
       trades.groupMap(o => (o.timestamp.getMillis - lastMillis) / periodMs)(o => (o.timestamp, o.price, o.size)).view.mapValues {
@@ -160,14 +160,14 @@ object talib {
           val close = prices.last
           val weightedPrice = tsPriceAndQty2.map { case (ts, price, qty) => price * qty }.sum / volume
           TradeTick(weightedPrice=weightedPrice, high=high, low=low, open=open, close=close, volume=volume)
-      }.toSeq.sortBy(_._1)
+      }.toVector.sortBy(_._1)
     }
 
   def ffill(minAndVals: Seq[(Long, TradeTick)]): Seq[(Long, TradeTick)] =
     if (minAndVals.isEmpty)
-      Nil
+      Vector.empty
     else {
-      val (res, _) = minAndVals.tail.foldLeft((Seq(minAndVals.head), minAndVals.head)) {
+      val (res, _) = minAndVals.tail.foldLeft((Vector(minAndVals.head), minAndVals.head)) {
         case ((soFar, (prevTs, prevV)), (ts, v)) =>
           val soFar2 = soFar ++ (prevTs+1 to ts-1).map((_, prevV.copy(volume = 0))) :+ (ts, v)
           (soFar2, (ts, v))
@@ -202,7 +202,7 @@ object talib {
   }
 
   /** Find increasing/decreasing slope of eg. 10, 5, 3 (e/s)ma's */
-  def indecreasingSlope(xs: Seq[BigDecimal], maPeriods: Seq[Int]=Seq(10, 5, 3)): Option[Seq[BigDecimal]] = {
+  def indecreasingSlope(xs: Seq[BigDecimal], maPeriods: Seq[Int]=Vector(10, 5, 3)): Option[Seq[BigDecimal]] = {
     if (xs.size < maPeriods.max)
       None
     else {
@@ -220,7 +220,7 @@ object talib {
   // formula: https://www.varsitytutors.com/hotmath/hotmath_help/topics/line-of-best-fit
   // consider (but not following): https://github.com/hipjim/scala-linear-regression/blob/master/regression.scala
   def polyfit(ys: Seq[BigDecimal], xs: Option[Seq[BigDecimal]]=None): (BigDecimal, BigDecimal) = {
-    val xs2 = xs.getOrElse((0 until ys.length).map(BigDecimal.apply))
+    val xs2 = xs.getOrElse(ys.indices.map(BigDecimal.apply))
     val avgY = ys.sum / ys.size
     val avgX = xs2.sum / xs2.size
     val slopeDenominator = xs2.map(x => (x - avgX).pow(2)).sum

@@ -57,7 +57,7 @@ object ModelsSpec {
 class ModelsSpec extends FlatSpec with Matchers with Inside {
   import ModelsSpec._
   "Models" should "work parse" in {
-    val restMessages = Seq(
+    val restMessages = Vector(
       // New
       restOrderNew(orderID="o1", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="2010-01-01T00:00:00.000Z"),
       restOrderNew(orderID="o2", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="2010-01-02T00:00:00.000Z"),
@@ -70,7 +70,7 @@ class ModelsSpec extends FlatSpec with Matchers with Inside {
       // Cancel
       restOrderCancelled(orderID="o31", timestamp="2010-01-31T00:00:00.000Z"),
     )
-    val wsMessages = Seq(
+    val wsMessages = Vector(
       // New
       wsOrderNew(orderID="o1", side=OrderSide.Buy,  price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="2010-01-01T00:00:00.000Z"),
       wsOrderNew(orderID="o2", side=OrderSide.Sell, price=11.22, orderQty=11, ordType=OrderType.Limit,  timestamp="2010-01-02T00:00:00.000Z"),

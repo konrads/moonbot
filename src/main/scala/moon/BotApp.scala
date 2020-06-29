@@ -56,7 +56,7 @@ object BotApp extends App {
       |                       ██   DRY    ██
       |                      ██    RUN!    ██
       |                     ██              ██
-      |                    ████████████████████
+      |                      ████████████████
       |
       |""".stripMargin
     else ""
