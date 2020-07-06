@@ -5,7 +5,7 @@ import org.scalatest.matchers.should.Matchers
 
 
 object ModelsSpec {
-  def wsOrderNew(orderID: String, side: OrderSide.Value, price: Double, orderQty: Double, ordType: OrderType.Value, timestamp: String) = ordType match {
+  def wsOrderNew(orderID: String, side: OrderSide.Value, price: BigDecimal, orderQty: BigDecimal, ordType: OrderType.Value, timestamp: String) = ordType match {
     case OrderType.Limit =>
       s"""{"table":"order","action":"insert","data":[{"orderID":"$orderID","clOrdID":"","clOrdLinkID":"","account":299045,"symbol":"XBTUSD","side":"$side","simpleOrderQty":null,"orderQty":$orderQty,"price":$price,"displayQty":null,"stopPx":null,"pegOffsetValue":null,"pegPriceType":"","currency":"USD","settlCurrency":"XBt","ordType":"Limit","timeInForce":"GoodTillCancel","execInst":"ParticipateDoNotInitiate","contingencyType":"","exDestination":"XBME","ordStatus":"New","triggered":"","workingIndicator":false,"ordRejReason":"","simpleLeavesQty":null,"leavesQty":$orderQty,"simpleCumQty":null,"cumQty":0,"avgPx":null,"multiLegReportingType":"SingleSecurity","text":"Submission from testnet.bitmex.com","transactTime":"$timestamp","timestamp":"$timestamp"}]}""".stripMargin
     case OrderType.Market =>
@@ -16,10 +16,10 @@ object ModelsSpec {
       throw new Exception(s"wsOrderNew: don't need to deal with $other")
   }
 
-  def wsOrderPostOnlyFailure(orderID: String, side: OrderSide.Value, price: Double, orderQty: Double, timestamp: String) =
+  def wsOrderPostOnlyFailure(orderID: String, side: OrderSide.Value, price: BigDecimal, orderQty: BigDecimal, timestamp: String) =
     s"""{"table":"order","action":"insert","data":[{"orderID":"$orderID","clOrdID":"","clOrdLinkID":"","account":299045,"symbol":"XBTUSD","side":"$side","simpleOrderQty":null,"orderQty":$orderQty,"price":$price,"displayQty":null,"stopPx":null,"pegOffsetValue":null,"pegPriceType":"","currency":"USD","settlCurrency":"XBt","ordType":"Limit","timeInForce":"GoodTillCancel","execInst":"ParticipateDoNotInitiate","contingencyType":"","exDestination":"XBME","ordStatus":"Canceled","triggered":"","workingIndicator":false,"ordRejReason":"","simpleLeavesQty":null,"leavesQty":0,"simpleCumQty":null,"cumQty":0,"avgPx":null,"multiLegReportingType":"SingleSecurity","text":"Canceled: Order had execInst of ParticipateDoNotInitiate Submission from testnet.bitmex.com","transactTime":"$timestamp","timestamp":"$timestamp"}]}"""
 
-  def wsOrderFilled(orderID: String, price: Double, avgPx: Double /* actual price */ , cumQty: Double /* actual qty */ , ordType: OrderType.Value, timestamp: String) = ordType match {
+  def wsOrderFilled(orderID: String, price: BigDecimal, avgPx: BigDecimal /* actual price */ , cumQty: BigDecimal /* actual qty */ , ordType: OrderType.Value, timestamp: String) = ordType match {
     case OrderType.Limit =>
       s"""{"table":"order","action":"update","data":[{"orderID":"$orderID","ordStatus":"Filled","workingIndicator":false,"leavesQty":0,"cumQty":$cumQty,"avgPx":$avgPx,"timestamp":"$timestamp","clOrdID":"","account":299045,"symbol":"XBTUSD"}]}"""
     case OrderType.Market =>
@@ -33,10 +33,10 @@ object ModelsSpec {
   def wsOrderCancelled(orderID: String, timestamp: String) =
     s"""{"table":"order","action":"update","data":[{"orderID":"$orderID","ordStatus":"Canceled","workingIndicator":false,"leavesQty":0,"text":"Canceled: Cancel from testnet.bitmex.com Submission from testnet.bitmex.com","timestamp":"$timestamp","clOrdID":"","account":299045,"symbol":"XBTUSD"}]}"""
 
-  def wsOrderAmend(orderID: String, price: Double, timestamp: String) =
+  def wsOrderAmend(orderID: String, price: BigDecimal, timestamp: String) =
     s"""{"table":"order","action":"update","data":[{"orderID":"$orderID","price":$price,"text":"Amended price: Amend from testnet.bitmex.com Submission from testnet.bitmex.com","transactTime":"$timestamp","timestamp":"$timestamp","clOrdID":"","account":299045,"symbol":"XBTUSD"}]}"""
 
-  def restOrderNew(orderID: String, side: OrderSide.Value, price: Double, orderQty: Double, ordType: OrderType.Value, timestamp: String, ordStatus: OrderStatus.Value=OrderStatus.New) = ordType match {
+  def restOrderNew(orderID: String, side: OrderSide.Value, price: BigDecimal = null, orderQty: BigDecimal, ordType: OrderType.Value, timestamp: String, ordStatus: OrderStatus.Value=OrderStatus.New) = ordType match {
     case OrderType.Limit =>
       s"""{"orderID":"$orderID","clOrdID":"${orderID}__balls","clOrdLinkID":"","account":299045,"symbol":"XBTUSD","side":"$side","simpleOrderQty":null,"orderQty":$orderQty,"price":$price,"displayQty":null,"stopPx":null,"pegOffsetValue":null,"pegPriceType":"","currency":"USD","settlCurrency":"XBt","ordType":"Limit","timeInForce":"GoodTillCancel","execInst":"ParticipateDoNotInitiate","contingencyType":"","exDestination":"XBME","ordStatus":"$ordStatus","triggered":"","workingIndicator":true,"ordRejReason":"","simpleLeavesQty":null,"leavesQty":30,"simpleCumQty":null,"cumQty":0,"avgPx":null,"multiLegReportingType":"SingleSecurity","text":"Submitted via API.","transactTime":"$timestamp","timestamp":"$timestamp"}"""
     case OrderType.Market =>
@@ -47,7 +47,7 @@ object ModelsSpec {
       throw new Exception(s"restOrderNew: don't need to deal with $other")
   }
 
-  def restOrderPostOnlyFailure(orderID: String, side: OrderSide.Value, orderQty: Double, price: Double, timestamp: String) =
+  def restOrderPostOnlyFailure(orderID: String, side: OrderSide.Value, orderQty: BigDecimal, price: BigDecimal, timestamp: String) =
     s"""{"orderID":"$orderID","clOrdID":"${orderID}__balls","clOrdLinkID":"","account":299045,"symbol":"XBTUSD","side":"$side","simpleOrderQty":null,"orderQty":$orderQty,"price":$price,"displayQty":null,"stopPx":null,"pegOffsetValue":null,"pegPriceType":"","currency":"USD","settlCurrency":"XBt","ordType":"Limit","timeInForce":"GoodTillCancel","execInst":"ParticipateDoNotInitiate","contingencyType":"","exDestination":"XBME","ordStatus":"Canceled","triggered":"","workingIndicator":false,"ordRejReason":"","simpleLeavesQty":null,"leavesQty":0,"simpleCumQty":null,"cumQty":0,"avgPx":null,"multiLegReportingType":"SingleSecurity","text":"Canceled: Order had execInst of ParticipateDoNotInitiate Submitted via API.","transactTime":"$timestamp","timestamp":"$timestamp"}"""
 
   def restOrderCancelled(orderID: String, timestamp: String) =

@@ -43,20 +43,20 @@ object BotApp extends App {
   val postOnlyPriceAdj       = conf.getDouble("bot.postOnlyPriceAdj")
   val openWithMarket         = conf.optBoolean("bot.openWithMarket").getOrElse(false)
   val dryRunDataDir          = conf.optString("bot.dryRunDataDir")
-  val dryRun                 = dryRunDataDir.isDefined || conf.optBoolean("bot.dryRun").getOrElse(false)
 
   val strategyName = conf.getString("strategy.selection")
 
+  val dryRun = dryRunDataDir.isDefined
   val dryRunWarning =
     if (dryRun)
     """
-      |                            ██
-      |                          ██  ██
-      |                        ██      ██
-      |                       ██  DRY   ██
-      |                      ██   RUN!   ██
-      |                     ██            ██
-      |                      ██████████████
+      |                             ██
+      |                           ██  ██
+      |                         ██      ██
+      |                       ██   DRY    ██
+      |                      ██    RUN!    ██
+      |                     ██              ██
+      |                      ████████████████
       |
       |""".stripMargin
     else ""
@@ -90,7 +90,6 @@ object BotApp extends App {
       |• stoplossMargin:       $stoplossMargin
       |• postOnlyPriceAdj:     $postOnlyPriceAdj
       |• openWithMarket:       $openWithMarket
-      |• dryRun:               $dryRun
       |• dryRunDataDir:        $dryRunDataDir
       |""".stripMargin)
 
@@ -113,7 +112,6 @@ object BotApp extends App {
     takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,
     metrics=Some(metrics),
     openWithMarket=openWithMarket,
-    dryRun=dryRun,
     dryRunScheduler=if (dryRun) Some(dryRunScheduler) else None)
 
   // Supervision of my actor, with backoff restarts. On supervision & backoff:
@@ -125,11 +123,9 @@ object BotApp extends App {
     Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
     "orchestrator-actor")
 
-  if (dryRunDataDir.isDefined) {
+  if (dryRun) {
     // feed WS events from the files
     var prevFilename = ""
-    var cache: OrderBookSummary = null
-    var i: Long = 0
     for {
       filename <- new File(dryRunDataDir.get).list().sortBy { fname =>
         fname.split("\\.") match {
@@ -145,49 +141,28 @@ object BotApp extends App {
       }
       WsModel.asModel(line) match {
         case JsSuccess(msg, _) =>
-          val (msg2, now) = msg match {
-            case x:OrderBook   =>
-              val summary = x.summary
-              if (! summary.isEquivalent(cache)) {
-                cache = summary
-                (Some(summary), Some(summary.timestamp.getMillis))
-              } else
-                (None, Some(summary.timestamp.getMillis))
-            case x:Info        => (Some(x), Some(x.timestamp.getMillis))
-            case x:Instrument  => (Some(x), x.data.headOption.map(_.timestamp.getMillis))
-            case x:Funding     => (Some(x), x.data.headOption.map(_.timestamp.getMillis))
-            case x:UpsertOrder => (Some(x), x.data.headOption.map(_.timestamp.getMillis))
-            case x:Trade       => (Some(x), x.data.headOption.map(_.timestamp.getMillis))
-            case _             => (None, None)
+          val now = msg match {
+            case x:Info        => Some(x.timestamp.getMillis)
+            case x:OrderBook   => x.data.headOption.map(_.timestamp.getMillis)
+            case x:Instrument  => x.data.headOption.map(_.timestamp.getMillis)
+            case x:Funding     => x.data.headOption.map(_.timestamp.getMillis)
+            case x:UpsertOrder => x.data.headOption.map(_.timestamp.getMillis)
+            case x:Trade       => x.data.headOption.map(_.timestamp.getMillis)
+            case _             => None
           }
           now.foreach(dryRunClock.setTime)
           now.foreach(dryRunScheduler.setTime)
-          msg2.foreach(m => orchestratorActor ! WsEvent(m))
-          // i += 1; if (i % 100 == 0) Thread.sleep(1)  // give grafana bit of breathing space
+          orchestratorActor ! WsEvent(msg)
         case e: JsError =>
           log.error("WS consume error!", e)
       }
     }
   } else {
     // feed the WS events from actual server
-    class CachedConsumer {
-      var cache: OrderBookSummary = null
-      val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
-        case JsSuccess(value:OrderBook, _) =>
-          val summary = value.summary
-          if (! summary.isEquivalent(cache)) {
-            cache = summary
-            orchestratorActor ! WsEvent(summary)
-          }
-        case JsSuccess(value, _) => orchestratorActor ! WsEvent(value)
-        case e:JsError           => log.error("WS consume error!", e)
-      }
+    val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
+      case JsSuccess(value, _) => orchestratorActor ! WsEvent(value)
+      case e:JsError           => log.error("WS consume error!", e)
     }
-//    val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
-//      case JsSuccess(value:OrderBook, _) => orchestratorActor ! WsEvent(value.summary)
-//      case JsSuccess(value, _) => orchestratorActor ! WsEvent(value)
-//      case e:JsError           => log.error("WS consume error!", e)
-//    }
-    wsGateway.run(new CachedConsumer().wsMessageConsumer)
+    wsGateway.run(wsMessageConsumer)
   }
 }

@@ -32,12 +32,12 @@ object Cli extends App {
   // playground for RestGateway, WsGateway, etc
   class CliConf extends ScallopConf(args) {
     val ordertype       = opt[String](default = Some("limit"))
-    val price           = opt[Double]()
-    val takeprofitprice = opt[Double]()
-    val stoplossprice   = opt[Double]()
-    val pegoffsetvalue  = opt[Double](default = Some(10.0))
+    val price           = opt[BigDecimal]()
+    val takeprofitprice = opt[BigDecimal]()
+    val stoplossprice   = opt[BigDecimal]()
+    val pegoffsetvalue  = opt[BigDecimal](default = Some(BigDecimal(10)))
     val reduceOnly      = opt[Boolean](default = Some(false))
-    val qty             = opt[Double]()
+    val qty             = opt[BigDecimal]()
     val side            = opt[String](default = Some("buy"))
     val orderid         = opt[String]()
     val clordid         = opt[String]()
@@ -239,7 +239,7 @@ object Cli extends App {
 }
 
 object CliUtils {
-  case class TradeTick(ts: Long, open: Double, close: Double, high: Double, low: Double, volume: Double) extends Ordered[TradeTick] {
+  case class TradeTick(ts: Long, open: BigDecimal, close: BigDecimal, high: BigDecimal, low: BigDecimal, volume: BigDecimal) extends Ordered[TradeTick] {
     import scala.math.Ordered.orderingToOrdered
     override def compare(that: TradeTick): Int = ((this.ts, this.close) compare (that.ts, that.close))
   }

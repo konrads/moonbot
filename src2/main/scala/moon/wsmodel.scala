@@ -16,31 +16,25 @@ object Info { implicit val aReads: Reads[Info] = Json.reads[Info] }
 case class SuccessConfirmation(success: Boolean, subscribe: Option[String]) extends WsModel
 object SuccessConfirmation { implicit val aReads: Reads[SuccessConfirmation] = Json.reads[SuccessConfirmation] }
 
-case class OrderBookData(symbol: String, timestamp: DateTime, asks: Seq[Seq[Double]], bids: Seq[Seq[Double]]) extends WsModel
+case class OrderBookData(symbol: String, timestamp: DateTime, asks: Seq[Seq[BigDecimal]], bids: Seq[Seq[BigDecimal]]) extends WsModel
 object OrderBookData { implicit val aReads: Reads[OrderBookData] = Json.reads[OrderBookData] }
 
-case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel {
-  def summary = OrderBookSummary(table = table, timestamp = data.head.timestamp, ask = data.head.asks.head.head, bid = data.head.bids.head.head)
-}
+case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel
 object OrderBook { implicit val aReads: Reads[OrderBook] = Json.reads[OrderBook] }
 
-case class OrderBookSummary(table: String, timestamp: DateTime, ask: Double, bid: Double) extends WsModel {
-  def isEquivalent(that: OrderBookSummary): Boolean = that != null && that.ask == ask && that.bid == bid
-}
-
-case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Option[Double], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: DateTime, leavesQty: Option[Double]=None, cumQty: Option[Double]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends WsModel
+case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, avgPx: Option[BigDecimal]=None, orderQty: Option[BigDecimal], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: DateTime, leavesQty: Option[BigDecimal]=None, cumQty: Option[BigDecimal]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends WsModel
 object OrderData { implicit val aReads: Reads[OrderData] = Json.reads[OrderData] }
 
 case class Instrument(data: Seq[InstrumentData]) extends WsModel
 object Instrument { implicit val aReads: Reads[Instrument] = Json.reads[Instrument] }
 
-case class InstrumentData(symbol: String, lastPrice: Option[Double], lastChangePcnt: Option[Double], markPrice: Option[Double], prevPrice24h: Option[Double], timestamp: DateTime) extends WsModel
+case class InstrumentData(symbol: String, lastPrice: Option[BigDecimal], lastChangePcnt: Option[BigDecimal], markPrice: Option[BigDecimal], prevPrice24h: Option[BigDecimal], timestamp: DateTime) extends WsModel
 object InstrumentData { implicit val aReads: Reads[InstrumentData] = Json.reads[InstrumentData] }
 
 case class Funding(data: Seq[FundingData]) extends WsModel
 object Funding { implicit val aReads: Reads[Funding] = Json.reads[Funding] }
 
-case class FundingData(symbol: String, fundingInterval: String, fundingRate: Double, fundingRateDaily: Option[Double], timestamp: DateTime) extends WsModel
+case class FundingData(symbol: String, fundingInterval: String, fundingRate: BigDecimal, fundingRateDaily: Option[BigDecimal], timestamp: DateTime) extends WsModel
 object FundingData { implicit val aReads: Reads[FundingData] = Json.reads[FundingData] }
 
 case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel {
@@ -49,7 +43,7 @@ case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsM
 }
 object UpsertOrder { implicit val aReads: Reads[UpsertOrder] = Json.reads[UpsertOrder] }
 
-case class TradeData(side: OrderSide.Value, size: Double, price: Double, tickDirection: TickDirection.Value, timestamp: DateTime) extends WsModel
+case class TradeData(side: OrderSide.Value, size: BigDecimal, price: BigDecimal, tickDirection: TickDirection.Value, timestamp: DateTime) extends WsModel
 object TradeData { implicit val aReads: Reads[TradeData] = Json.reads[TradeData] }
 
 case class Trade(data: Seq[TradeData]) extends WsModel

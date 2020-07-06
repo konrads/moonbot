@@ -1,4 +1,5 @@
 .idea
+state.properties
 .DS_Store
 Deleteme*
 *.private.conf

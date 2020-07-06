@@ -1,13 +1,11 @@
 package moon
 
-import org.joda.time.DateTime
-
-import scala.collection.{Seq, SortedSet}
+import scala.collection.Seq
 
 object talib {
   object MA extends Enumeration {
     type MA = Value
-    val SMA, EMA = Value
+    val SMA, EMA, EMA_2 = Value
   }
 
   val MS_IN_MINUTE = 1000 * 60
@@ -20,13 +18,13 @@ object talib {
    * lower = MA - dev_down * delta
    * upper = MA + dev_up * delta
    */
-  def bbands(xs: Seq[Double], devUp: Double=2, devDown: Double=2, maType: MA.Value=MA.SMA): Option[(Double, Double, Double)] =
+  def bbands(xs: Seq[BigDecimal], devUp: BigDecimal=2, devDown: BigDecimal=2, maType: MA.Value=MA.SMA): Option[(BigDecimal, BigDecimal, BigDecimal)] =
     if (xs.isEmpty)
       None
     else {
       val ma_ = ma(xs, xs.size, maType)
-      val variance = xs.map(a => math.pow(a - ma_, 2)).sum / xs.size
-      val stdev = math.sqrt(variance)  // FIXME: loosing accuracy by converting to a Double...?
+      val variance = xs.map(a => (a - ma_).pow(2)).sum / xs.size
+      val stdev = math.sqrt(variance.doubleValue)  // FIXME: loosing accuracy by converting to a Double...?
 
       val lower = ma_ - devDown * stdev
       val middle = ma_
@@ -38,18 +36,18 @@ object talib {
    * For further strategies:
    * https://www.investopedia.com/terms/r/rsi.asp
    */
-  def rsi(xs: Seq[Double], maType: MA.Value=MA.SMA): Option[Double] = {
+  def rsi(xs: Seq[BigDecimal], maType: MA.Value=MA.SMA): Option[BigDecimal] = {
     if (xs.size <= 1)
       None
     else {
-      val xsShifted = (0.0 +: xs).take(xs.size)
+      val xsShifted = (BigDecimal(0) +: xs).take(xs.size)
       val deltas = (xs zip xsShifted).drop(1).map { case (x, y) => x - y }
-      val wins = deltas.map(x => if (x > 0) x else 0.0)
-      val losses = deltas.map(x => if (x < 0) -x else 0.0)
+      val wins = deltas.map(x => if (x > 0) x else BigDecimal(0))
+      val losses = deltas.map(x => if (x < 0) -x else BigDecimal(0))
       val winsMa = ma(wins, wins.size, maType)
       val lossesMa = ma(losses, losses.size, maType)
-      val rsi = if (lossesMa == 0.0)
-        100.0
+      val rsi = if (lossesMa == BigDecimal(0))
+        BigDecimal(100)
       else
         100 - (100 / (1 + winsMa / lossesMa))
       Some(rsi)
@@ -57,7 +55,7 @@ object talib {
   }
 
   // https://stackoverflow.com/questions/34427530/macd-function-returning-incorrect-values/34453997#34453997
-  def macd(xs: Seq[Double], slow: Int=26, fast: Int=12, signal: Int=9, maType: MA.Value=MA.EMA): Option[(Double /* macd */, Double /* signal */, Double /* histogram */)] = {  // note - ignoring signal (default = 9)
+  def macd(xs: Seq[BigDecimal], slow: Int=26, fast: Int=12, signal: Int=9, maType: MA.Value=MA.EMA): Option[(BigDecimal /* macd */, BigDecimal /* signal */, BigDecimal /* histogram */)] = {  // note - ignoring signal (default = 9)
     if (xs.size < (slow + signal) - 1)
       None
     else {
@@ -88,21 +86,21 @@ object talib {
    *
    *  Where upper and lower are some static boundaries.
    */
-  def capProportionalExtremes(): Double => Double = {
-    var high: Double = 0
-    var low: Double = 0
-    def cap(x: Double): Double =
+  def capProportionalExtremes(): BigDecimal => BigDecimal = {
+    var high: BigDecimal = 0
+    var low: BigDecimal = 0
+    def cap(x: BigDecimal): BigDecimal =
       if (x > 0 && x > high) {
         low = 0
         high = x
-        1.0
+        BigDecimal(1)
       } else if (x > 0) {
         low = 0
         x / high
       } else if (x < 0 && x < low) {
         high = 0
         low = x
-        -1.0
+        BigDecimal(-1)
       } else if (x < 0) {
         high = 0
         -x / low
@@ -114,29 +112,29 @@ object talib {
     cap
   }
 
-  def capPeakTrough(): Double => Double = {
-    var high: Double = 0
-    var low: Double = 0
-    var prev: Double = 0
-    def cap(x: Double): Double = {
+  def capPeakTrough(): BigDecimal => BigDecimal = {
+    var high: BigDecimal = 0
+    var low: BigDecimal = 0
+    var prev: BigDecimal = 0
+    def cap(x: BigDecimal): BigDecimal = {
       val res = if (x > 0 && x > prev) {
         low = 0
         high = x
-        1.0
+        BigDecimal(1)
       } else if (x > 0) {
         low = 0
         x / high
       } else if (x < 0 && x < prev) {
         high = 0
         low = x
-        -1.0
+        BigDecimal(-1)
       } else if (x < 0) {
         high = 0
         -x / low
       } else {  // between minUpper and minLower
         low = 0
         high = 0
-        0.0
+        BigDecimal(0)
       }
       prev = x
       res
@@ -144,7 +142,7 @@ object talib {
     cap
   }
 
-  case class TradeTick(weightedPrice: Double, open: Double, close: Double, high: Double, low: Double, volume: Double)
+  case class TradeTick(weightedPrice: BigDecimal, open: BigDecimal, close: BigDecimal, high: BigDecimal, low: BigDecimal, volume: BigDecimal)
 
   def resample(trades: Seq[TradeData], periodMs: Long = MS_IN_MINUTE): Seq[(Long, TradeTick)] =
     if (trades.isEmpty)
@@ -177,12 +175,12 @@ object talib {
       res
     }
 
-  def ma(xs: Seq[Double], period: Int, maType: MA.Value): Double = maType match {
+  def ma(xs: Seq[BigDecimal], period: Int, maType: MA.Value): BigDecimal = maType match {
     case MA.SMA => sma(xs, period)
     case MA.EMA => ema(xs, period)
   }
 
-  def sma(xs: Seq[Double], period: Int): Double =
+  def sma(xs: Seq[BigDecimal], period: Int): BigDecimal =
     if (xs.isEmpty)
       0
     else
@@ -191,7 +189,7 @@ object talib {
   // https://www.investopedia.com/ask/answers/122314/what-exponential-moving-average-ema-formula-and-how-ema-calculated.asp
   // https://www.investopedia.com/articles/trading/10/simple-exponential-moving-averages-compare.asp
   // https://www.youtube.com/watch?v=ezcwBDsDviE
-  def ema(xs: Seq[Double], period: Int, emaSmoothing: Double=2): Double = {
+  def ema(xs: Seq[BigDecimal], period: Int, emaSmoothing: BigDecimal=2): BigDecimal = {
     if (xs.isEmpty)
       0
     else {
@@ -204,7 +202,7 @@ object talib {
   }
 
   /** Find increasing/decreasing slope of eg. 10, 5, 3 (e/s)ma's */
-  def indecreasingSlope(xs: Seq[Double], maPeriods: Seq[Int]=Vector(10, 5, 3)): Option[Seq[Double]] = {
+  def indecreasingSlope(xs: Seq[BigDecimal], maPeriods: Seq[Int]=Vector(10, 5, 3)): Option[Seq[BigDecimal]] = {
     if (xs.size < maPeriods.max)
       None
     else {
@@ -221,92 +219,16 @@ object talib {
 
   // formula: https://www.varsitytutors.com/hotmath/hotmath_help/topics/line-of-best-fit
   // consider (but not following): https://github.com/hipjim/scala-linear-regression/blob/master/regression.scala
-  def polyfit(ys: Seq[Double], xs: Option[Seq[Double]]=None): (Double, Double) = {
-    val xs2 = xs.getOrElse(ys.indices.map(_.toDouble))
+  def polyfit(ys: Seq[BigDecimal], xs: Option[Seq[BigDecimal]]=None): (BigDecimal, BigDecimal) = {
+    val xs2 = xs.getOrElse(ys.indices.map(BigDecimal.apply))
     val avgY = ys.sum / ys.size
     val avgX = xs2.sum / xs2.size
-    val slopeDenominator = xs2.map(x => math.pow(x - avgX, 2)).sum
-    val slope: Double = if (slopeDenominator == 0)
+    val slopeDenominator = xs2.map(x => (x - avgX).pow(2)).sum
+    val slope: BigDecimal = if (slopeDenominator == 0)
       0
     else
       (xs2 zip ys).map { case (x, y) => (x - avgX) * (y - avgY) }.sum / slopeDenominator
     val yIntercept = avgY - slope * avgX
     (slope, yIntercept)
-  }
-
-  /**
-   * Bucketed ticks of price (high, low, open, close), volume
-   */
-  case class TickMatrix(
-     periodTimeMs: Long,
-     lastPeriod: Long = -1,
-     high: Vector[Double] = Vector.empty,
-     low: Vector[Double] = Vector.empty,
-     open: Vector[Double] = Vector.empty,
-     close: Vector[Double] = Vector.empty,
-     weightedPrice: Vector[Double] = Vector.empty,
-     volume: Vector[Double] = Vector.empty,
-     period: Vector[Long] = Vector.empty,
-     currentBucket: SortedSet[(Long, Double, Double)] = SortedSet.empty
-    ) {
-
-    // following scala collections 'view' paradigm
-    lazy val latestView: TickMatrix =
-      currentBucket match {
-        case s if s.isEmpty => this
-        case _ =>
-          val prices = currentBucket.toSeq.map(_._2)
-          val volumes = currentBucket.toSeq.map(_._3)
-          val currPeriod = currentBucket.toSeq.head._1 / periodTimeMs
-          copy(
-            high = high :+ prices.max,
-            low = low :+ prices.min,
-            open = open :+ prices.head,
-            close = close :+ prices.last,
-            weightedPrice = weightedPrice :+ currentBucket.map { case (ts, p, v) => p * v }.sum / currentBucket.map { case (ts, p, v) => v }.sum,
-            volume = volume :+ volumes.sum,
-            period = period :+ currPeriod,
-            currentBucket = SortedSet.empty,
-            lastPeriod = currPeriod + 1
-          )
-      }
-
-    private def ffill(toPeriod: Long): TickMatrix =
-      period.lastOption match {
-        case None => this
-        case Some(lastPeriod) =>
-          val fillCnt = (toPeriod - 1 - lastPeriod).toInt
-          if (fillCnt <= 0)
-            this
-          else
-            copy(
-              high          = high ++ Vector.fill(fillCnt)(high.last),
-              low           = low ++ Vector.fill(fillCnt)(low.last),
-              open          = open ++ Vector.fill(fillCnt)(open.last),
-              close         = close ++ Vector.fill(fillCnt)(close.last),
-              weightedPrice = weightedPrice ++ Vector.fill(fillCnt)(weightedPrice.last),
-              volume        = volume ++ Vector.fill(fillCnt)(0),
-              period        = period ++ (lastPeriod+1 to toPeriod),
-              lastPeriod    = toPeriod
-            )
-      }
-
-    def add(millis: Long, price: Double, vol: Double): TickMatrix = {
-      val currPeriod = millis / periodTimeMs
-      if (lastPeriod < 0)
-        copy(currentBucket = SortedSet((millis, price, vol)), lastPeriod = currPeriod)
-      else if (currPeriod == lastPeriod)
-        // keep adding to current bucket
-        copy(currentBucket = currentBucket + ((millis, price, vol)))
-      else if (currPeriod == lastPeriod + 1)
-        // wrap up bucket, add to new bucket
-        latestView.copy(currentBucket = SortedSet((millis, price, vol)))
-      else if (currPeriod > lastPeriod + 1)
-        // wrap up bucket, ffill, add to new bucket
-        latestView.ffill(currPeriod).copy(currentBucket = SortedSet((millis, price, vol)))
-      else
-        // bucket out of order, noop
-        this
-    }
   }
 }

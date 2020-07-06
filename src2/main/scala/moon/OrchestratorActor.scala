@@ -16,16 +16,16 @@ import scala.util.{Failure, Success}
 object OrchestratorActor {
   trait PositionOpener {
     val desc: String
-    def onFilled(l: Ledger, openPrice: Double): Behavior[ActorEvent]             // desired outcome - order filled
+    def onFilled(l: Ledger, openPrice: BigDecimal): Behavior[ActorEvent]             // desired outcome - order filled
     def onChangeOfHeart(l: Ledger): Behavior[ActorEvent]                             // once we decide to stop opening (via shouldKeepGoing())
     def onExternalCancel(l: Ledger, clOrdID: String): Behavior[ActorEvent]           // unexpected cancel (not from bot)
     def onRejection(l: Ledger, order: LedgerOrder): Behavior[ActorEvent]             // unexpected rejection
     def onIrrecoverableError(l: Ledger, clOrdID: String, exc: Throwable): Behavior[ActorEvent]  // coding error???
-    def bestPrice(l: Ledger): Double
+    def bestPrice(l: Ledger): BigDecimal
     def shouldKeepGoing(l: Ledger): (Boolean, Ledger)
     def openOrder(l: Ledger): (String, Future[Order])                                // how to open order
     def cancelOrder(clOrdID: String): Future[Orders]                                 // how to cancel order
-    def amendOrder(clOrdID: String, newPrice: Double): Future[Order]             // how to open order
+    def amendOrder(clOrdID: String, newPrice: BigDecimal): Future[Order]             // how to open order
   }
 
   trait PositionCloser {
@@ -289,21 +289,22 @@ object OrchestratorActor {
   def apply(strategy: Strategy,
             flushSessionOnRestart: Boolean=true,
             restGateway: IRestGateway,
-            tradeQty: Int, minTradeVol: Double,
+            tradeQty: Int, minTradeVol: BigDecimal,
             openPositionExpiryMs: Long,
             reqRetries: Int, markupRetries: Int,
-            takeProfitMargin: Double, stoplossMargin: Double, postOnlyPriceAdj: Double,
+            takeProfitMargin: BigDecimal, stoplossMargin: BigDecimal, postOnlyPriceAdj: BigDecimal,
             metrics: Option[Metrics]=None,
             openWithMarket: Boolean=false,
-            dryRun: Boolean=false,
             dryRunScheduler: Option[akka2.DryRunTimerScheduler[ActorEvent]]=None)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
+
+    val dryRun = dryRunScheduler.isDefined
 
     Behaviors.setup[ActorEvent] { actorCtx =>
       Behaviors.withTimers[ActorEvent] { timers0 =>
         // NOTE: for dryRun purpose!!!
         val timers = dryRunScheduler.map(_.withActorRef(actorCtx.self)).getOrElse(timers0)
 
-        if (flushSessionOnRestart && ! dryRun) {
+        if (flushSessionOnRestart) {
           actorCtx.log.info("init: Bootstraping via closePosition/orderCancels...")
           // not consuming the response as it clashes with my model :(. Just assumes to have worked
           for {
@@ -376,12 +377,12 @@ object OrchestratorActor {
         def openLong(ledger: Ledger): Behavior[ActorEvent] =
           openPosition(actorCtx, ledger, new PositionOpener {
             override val desc = "Long Open"
-            override def onFilled(l: Ledger, openPrice: Double): Behavior[ActorEvent] = closeLong(l, openPrice)
+            override def onFilled(l: Ledger, openPrice: BigDecimal): Behavior[ActorEvent] = closeLong(l, openPrice)
             override def onChangeOfHeart(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
             override def onExternalCancel(l: Ledger, clOrdID: String): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long opening clOrdID: $clOrdID")
             override def onRejection(l: Ledger, order: LedgerOrder): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long opening order: $order")
             override def onIrrecoverableError(l: Ledger, clOrdID: String, exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long opening orderID: $clOrdID", exc)
-            override def bestPrice(l: Ledger): Double = l.bidPrice
+            override def bestPrice(l: Ledger): BigDecimal = l.bidPrice
             override def openOrder(l: Ledger): (String, Future[Order]) = {
               val price = l.bidPrice
               actorCtx.log.info(s"$desc: opening @ $price, isMarket: $openWithMarket")
@@ -394,18 +395,18 @@ object OrchestratorActor {
               actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")
               restGateway.cancelOrderAsync(clOrdIDs = Vector(clOrdID))
             }
-            override def amendOrder(clOrdID: String, newPrice: Double): Future[Order] = {
+            override def amendOrder(clOrdID: String, newPrice: BigDecimal): Future[Order] = {
               actorCtx.log.info(s"$desc: amending clOrdID: $clOrdID, newPrice: $newPrice")
               restGateway.amendOrderAsync(orderID=None, origClOrdID=Some(clOrdID), price=newPrice)
             }
             override def shouldKeepGoing(l: Ledger): (Boolean, Ledger) = {
               val strategyRes = strategy.strategize(l)
               val (sentiment, l2) = (strategyRes.sentiment, strategyRes.ledger)
-              (sentiment == Bull, l2)
+              (sentiment != Bear, l2)
             }
           }, metrics, strategy)
 
-        def closeLong(ledger: Ledger, openPrice: Double): Behavior[ActorEvent] =
+        def closeLong(ledger: Ledger, openPrice: BigDecimal): Behavior[ActorEvent] =
           closePosition(actorCtx, ledger, new PositionCloser {
             override val desc = "Long Close"
             override def onProfit(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
@@ -414,13 +415,11 @@ object OrchestratorActor {
             override def onRejections(l: Ledger, orders: LedgerOrder*): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long closing orderID: ${orders.mkString(", ")}")
             override def onIrrecoverableError(l: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String, exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of long closing takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID", exc)
             override def openOrders(l: Ledger): (String, String, Future[Orders]) = {
-              val takeProfitLimit = openPrice + takeProfitMargin
               val (o1 +: Seq(o2), resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Vector(
-                OrderReq.asLimitOrder(Sell, tradeQty, takeProfitLimit, true),
+                OrderReq.asLimitOrder(Sell, tradeQty, openPrice + takeProfitMargin, true),
                 OrderReq.asTrailingStopOrder(Sell, tradeQty, stoplossMargin, true)))
                 // or for market stop: OrderReq.asStopOrder(Sell, tradeQty, openPrice - stoplossMargin, true)))
               )
-              actorCtx.log.info(s"$desc: closing with takeProfit: $o1 @ $takeProfitLimit, trailing stoploss: $o2 @ $stoplossMargin")
               (o1, o2, resF)
             }
             override def cancelOrders(clOrdIDs: String*): Future[Orders] = restGateway.cancelOrderAsync(clOrdIDs=clOrdIDs)
@@ -429,12 +428,12 @@ object OrchestratorActor {
         def openShort(ledger: Ledger): Behavior[ActorEvent] =
           openPosition(actorCtx, ledger, new PositionOpener {
             override val desc = "Short Open"
-            override def onFilled(l: Ledger, openPrice: Double): Behavior[ActorEvent] = closeShort(l, openPrice)
+            override def onFilled(l: Ledger, openPrice: BigDecimal): Behavior[ActorEvent] = closeShort(l, openPrice)
             override def onChangeOfHeart(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
             override def onExternalCancel(l: Ledger, clOrdID: String): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of short opening clOrdID: $clOrdID")
             override def onRejection(l: Ledger, order: LedgerOrder): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of short opening orders: $order")
             override def onIrrecoverableError(l: Ledger, clOrdID: String, exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of short opening orderID: $clOrdID", exc)
-            override def bestPrice(l: Ledger): Double = l.askPrice
+            override def bestPrice(l: Ledger): BigDecimal = l.askPrice
             override def openOrder(l: Ledger): (String, Future[Order]) = {
               val price = l.askPrice
               actorCtx.log.info(s"$desc: opening @ $price, isMarket: $openWithMarket")
@@ -447,18 +446,18 @@ object OrchestratorActor {
               actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")
               restGateway.cancelOrderAsync(clOrdIDs = Vector(clOrdID))
             }
-            override def amendOrder(clOrdID: String, newPrice: Double): Future[Order] = {
+            override def amendOrder(clOrdID: String, newPrice: BigDecimal): Future[Order] = {
               actorCtx.log.info(s"$desc: amending clOrdID: $clOrdID, newPrice: $newPrice")
               restGateway.amendOrderAsync(orderID=None, origClOrdID=Some(clOrdID), price=newPrice)
             }
             override def shouldKeepGoing(l: Ledger): (Boolean, Ledger) = {
               val strategyRes = strategy.strategize(l)
               val (sentiment, l2) = (strategyRes.sentiment, strategyRes.ledger)
-              (sentiment == Bear, l2)
+              (sentiment != Bull, l2)
             }
           }, metrics, strategy)
 
-        def closeShort(ledger: Ledger, openPrice: Double): Behavior[ActorEvent] =
+        def closeShort(ledger: Ledger, openPrice: BigDecimal): Behavior[ActorEvent] =
           closePosition(actorCtx, ledger, new PositionCloser {
             override val desc = "Short Close"
             override def onProfit(l: Ledger): Behavior[ActorEvent] = idle(IdleCtx(l))
@@ -467,13 +466,11 @@ object OrchestratorActor {
             override def onRejections(l: Ledger, orders: LedgerOrder*): Behavior[ActorEvent] = throw new Exception(s"Unexpected rejection of long closing orders: ${orders.mkString(", ")}")
             override def onIrrecoverableError(l: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String, exc: Throwable): Behavior[ActorEvent] = throw new Exception(s"Unexpected cancellation of short closing takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID", exc)
             override def openOrders(l: Ledger): (String, String, Future[Orders]) = {
-              val takeProfitLimit = openPrice - takeProfitMargin
-              val (Seq(o1, o2), resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Vector(
-                OrderReq.asLimitOrder(Buy, tradeQty, takeProfitLimit, true),
+              val (o1 +: Seq(o2), resF) = restGateway.placeBulkOrdersAsync(OrderReqs(Vector(
+                OrderReq.asLimitOrder(Buy, tradeQty, openPrice - takeProfitMargin, true),
                 OrderReq.asTrailingStopOrder(Buy, tradeQty, stoplossMargin, true)))
                 // or for market stop: OrderReq.asStopOrder(Buy, tradeQty, openPrice + stoplossMargin, true)))
               )
-              actorCtx.log.info(s"$desc: closing with takeProfit: $o1 @ $takeProfitLimit, trailing stoploss: $o2 @ $stoplossMargin")
               (o1, o2, resF)
             }
             override def cancelOrders(clOrdIDs: String*): Future[Orders] = restGateway.cancelOrderAsync(clOrdIDs=clOrdIDs)

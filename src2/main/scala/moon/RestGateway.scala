@@ -31,22 +31,22 @@ case class CancelOrderIssued(orderID: String) extends HttpReply
 trait IRestGateway {
   // async
   def placeBulkOrdersAsync(orderReqs: OrderReqs): (Seq[String], Future[Orders])
-  def placeStopOrderAsync(qty: Double, price: Double, isClose: Boolean, side: OrderSide): (String, Future[Order])
-  def placeTrailingStopOrderAsync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide): (String, Future[Order])
-  def placeMarketOrderAsync(qty: Double, side: OrderSide): (String, Future[Order])
-  def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order])
-  def amendOrderAsync(orderID: Option[String]=None, origClOrdID: Option[String]=None, price: Double): Future[Order]
+  def placeStopOrderAsync(qty: BigDecimal, price: BigDecimal, isClose: Boolean, side: OrderSide): (String, Future[Order])
+  def placeTrailingStopOrderAsync(qty: BigDecimal, pegOffsetValue: BigDecimal, isClose: Boolean, side: OrderSide): (String, Future[Order])
+  def placeMarketOrderAsync(qty: BigDecimal, side: OrderSide): (String, Future[Order])
+  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order])
+  def amendOrderAsync(orderID: Option[String]=None, origClOrdID: Option[String]=None, price: BigDecimal): Future[Order]
   def cancelOrderAsync(orderIDs: Seq[String]=Vector.empty, clOrdIDs: Seq[String]=Vector.empty): Future[Orders]
   def cancelAllOrdersAsync(): Future[Orders]
   def closePositionAsync(): Future[String]
 
   // sync
   def placeBulkOrdersSync(orderReqs: OrderReqs): Try[Orders]
-  def placeStopOrderSync(qty: Double, price: Double, isClose: Boolean, side: OrderSide): Try[Order]
-  def placeTrailingStopOrderSync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide): Try[Order]
-  def placeMarketOrderSync(qty: Double, side: OrderSide): Try[Order]
-  def placeLimitOrderSync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide): Try[Order]
-  def amendOrderSync(orderID: Option[String]=None, clOrdID: Option[String]=None, price: Double): Try[Order]
+  def placeStopOrderSync(qty: BigDecimal, price: BigDecimal, isClose: Boolean, side: OrderSide): Try[Order]
+  def placeTrailingStopOrderSync(qty: BigDecimal, pegOffsetValue: BigDecimal, isClose: Boolean, side: OrderSide): Try[Order]
+  def placeMarketOrderSync(qty: BigDecimal, side: OrderSide): Try[Order]
+  def placeLimitOrderSync(qty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, side: OrderSide): Try[Order]
+  def amendOrderSync(orderID: Option[String]=None, clOrdID: Option[String]=None, price: BigDecimal): Try[Order]
   def cancelOrderSync(orderIDs: Seq[String]=Vector.empty, origClOrdIDs: Seq[String]=Vector.empty): Try[Orders]
   def cancelAllOrdersSync(): Try[Orders]
   def closePositionSync(): Try[String]
@@ -74,31 +74,31 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
     (clOrdIDs, resF)
   }
 
-  def placeStopOrderAsync(qty: Double, price: Double, isClose: Boolean, side: OrderSide): (String, Future[Order]) = {
+  def placeStopOrderAsync(qty: BigDecimal, price: BigDecimal, isClose: Boolean, side: OrderSide): (String, Future[Order]) = {
     val clOrdID = java.util.UUID.randomUUID().toString
     val resF = placeStopOrder(qty, side, price, isClose, clOrdID = Some(clOrdID))
     (clOrdID, resF)
   }
 
-  def placeTrailingStopOrderAsync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide): (String, Future[Order]) = {
+  def placeTrailingStopOrderAsync(qty: BigDecimal, pegOffsetValue: BigDecimal, isClose: Boolean, side: OrderSide): (String, Future[Order]) = {
     val clOrdID = java.util.UUID.randomUUID().toString
     val resF = placeTrailingStopOrder(qty, side, pegOffsetValue, isClose, clOrdID = Some(clOrdID))
     (clOrdID, resF)
   }
 
-  def placeMarketOrderAsync(qty: Double, side: OrderSide): (String, Future[Order]) = {
+  def placeMarketOrderAsync(qty: BigDecimal, side: OrderSide): (String, Future[Order]) = {
     val clOrdID = java.util.UUID.randomUUID().toString
     val resF = placeMarketOrder(qty, side, Some(clOrdID))
     (clOrdID, resF)
   }
 
-  def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order]) = {
+  def placeLimitOrderAsync(qty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order]) = {
     val clOrdID = java.util.UUID.randomUUID().toString
     val resF = placeLimitOrder(qty, price, isReduceOnly, side, Some(clOrdID))
     (clOrdID, resF)
   }
 
-  def amendOrderAsync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: Double): Future[Order] =
+  def amendOrderAsync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: BigDecimal): Future[Order] =
     amendOrder(orderID, origClOrdID, price)
 
   def cancelOrderAsync(orderIDs: Seq[String] = Vector.empty, clOrdIDs: Seq[String] = Vector.empty): Future[Orders] =
@@ -117,31 +117,31 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
-  def placeStopOrderSync(qty: Double, price: Double, isClose: Boolean, side: OrderSide): Try[Order] =
+  def placeStopOrderSync(qty: BigDecimal, price: BigDecimal, isClose: Boolean, side: OrderSide): Try[Order] =
     Await.ready(
       placeStopOrder(qty, side, price, isClose),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
-  def placeTrailingStopOrderSync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide): Try[Order] =
+  def placeTrailingStopOrderSync(qty: BigDecimal, pegOffsetValue: BigDecimal, isClose: Boolean, side: OrderSide): Try[Order] =
     Await.ready(
       placeTrailingStopOrder(qty, side, pegOffsetValue, isClose),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
-  def placeMarketOrderSync(qty: Double, side: OrderSide): Try[Order] =
+  def placeMarketOrderSync(qty: BigDecimal, side: OrderSide): Try[Order] =
     Await.ready(
       placeMarketOrder(qty, side),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
-  def placeLimitOrderSync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide): Try[Order] =
+  def placeLimitOrderSync(qty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, side: OrderSide): Try[Order] =
     Await.ready(
       placeLimitOrder(qty, price, isReduceOnly, side),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
-  def amendOrderSync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: Double): Try[Order] =
+  def amendOrderSync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: BigDecimal): Try[Order] =
     Await.ready(
       amendOrder(orderID, origClOrdID, price),
       Duration(syncTimeoutMs, MILLISECONDS)
@@ -166,38 +166,38 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
     ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on closePosition") }.value.get
 
   // LastPrice trigger as described in: https://www.reddit.com/r/BitMEX/comments/8pi7j7/bitmex_api_how_to_switch_sl_trigger_to_last_price/
-  private def placeStopOrder(qty: Double, side: OrderSide, price: Double, isClose: Boolean, execInst: String = "LastPrice", clOrdID: Option[String] = None): Future[Order] = {
+  private def placeStopOrder(qty: BigDecimal, side: OrderSide, price: BigDecimal, isClose: Boolean, execInst: String = "LastPrice", clOrdID: Option[String] = None): Future[Order] = {
     val closeStr = if (isClose) ",Close" else ""
     sendReq(
       POST,
       "/api/v1/order",
-      s"symbol=$symbol&ordType=Stop&timeInForce=GoodTillCancel&execInst=$execInst$closeStr&stopPx=${round(price)}&orderQty=${round(qty)}&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
+      s"symbol=$symbol&ordType=Stop&timeInForce=GoodTillCancel&execInst=$execInst$closeStr&stopPx=$price&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
   }
 
-  private def placeTrailingStopOrder(qty: Double, side: OrderSide, pegOffsetValue: Double, isClose: Boolean, execInst: String = "LastPrice", clOrdID: Option[String] = None): Future[Order] = {
+  private def placeTrailingStopOrder(qty: BigDecimal, side: OrderSide, pegOffsetValue: BigDecimal, isClose: Boolean, execInst: String = "LastPrice", clOrdID: Option[String] = None): Future[Order] = {
     val pegOffsetValue2 = if (side == OrderSide.Buy) pegOffsetValue.abs else -pegOffsetValue.abs
     val closeStr = if (isClose) ",Close" else ""
     sendReq(
       POST,
       "/api/v1/order",
-      s"symbol=$symbol&ordType=Stop&timeInForce=GoodTillCancel&pegPriceType=TrailingStopPeg&pegOffsetValue=$pegOffsetValue2&execInst=$execInst$closeStr&orderQty=${round(qty)}&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
+      s"symbol=$symbol&ordType=Stop&timeInForce=GoodTillCancel&pegPriceType=TrailingStopPeg&pegOffsetValue=$pegOffsetValue2&execInst=$execInst$closeStr&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
   }
 
-  private def placeMarketOrder(qty: Double, side: OrderSide, clOrdID: Option[String] = None): Future[Order] =
+  private def placeMarketOrder(qty: BigDecimal, side: OrderSide, clOrdID: Option[String] = None): Future[Order] =
     sendReq(
       POST,
       "/api/v1/order",
-      s"symbol=$symbol&ordType=Market&timeInForce=GoodTillCancel&orderQty=${round(qty)}&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
+      s"symbol=$symbol&ordType=Market&timeInForce=GoodTillCancel&orderQty=$qty&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
 
-  private def placeLimitOrder(qty: Double, price: Double, reduceOnly: Boolean, side: OrderSide, clOrdID: Option[String] = None): Future[Order] = {
+  private def placeLimitOrder(qty: BigDecimal, price: BigDecimal, reduceOnly: Boolean, side: OrderSide, clOrdID: Option[String] = None): Future[Order] = {
     val reduceOnlyStr = if (reduceOnly) ",ReduceOnly" else ""
     sendReq(
       POST,
       "/api/v1/order",
-      s"symbol=$symbol&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate$reduceOnlyStr&orderQty=${round(qty)}&side=$side&price=${round(price)}" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
+      s"symbol=$symbol&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate$reduceOnlyStr&orderQty=$qty&side=$side&price=$price" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
     ).map(_.asInstanceOf[Order])
   }
 
@@ -210,11 +210,11 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       contentType = ContentTypes.`application/json`,
     ).map(_.asInstanceOf[Orders])
 
-  private def amendOrder(orderID: Option[String], orgClOrdID: Option[String], price: Double): Future[Order] =
+  private def amendOrder(orderID: Option[String], orgClOrdID: Option[String], price: BigDecimal): Future[Order] =
     sendReq(
       PUT,
       "/api/v1/order",
-      s"price=${round(price)}" + orderID.map("&orderID=" + _).getOrElse("") + orgClOrdID.map("&origClOrdID=" + _).getOrElse("")
+      s"price=$price" + orderID.map("&orderID=" + _).getOrElse("") + orgClOrdID.map("&origClOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
 
   private def cancelOrder(orderIDs: Seq[String], clOrdIDs: Seq[String]): Future[Orders] = {

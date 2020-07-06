@@ -18,8 +18,6 @@ case class Metrics(host: String, port: Int=2003, prefix: String, clock: Clock=Wa
   private val thisDir = new File(".")
   private val runtime = Runtime.getRuntime
 
-  graphite.connect()
-
   def gauge(gauges: Map[String, Any]): Unit = {
     val gauges2 = if (addJvmMetrics) {
       gauges +
@@ -34,18 +32,18 @@ case class Metrics(host: String, port: Int=2003, prefix: String, clock: Clock=Wa
     if (gauges2.nonEmpty) {
       val now = clock.now / 1000
       log.debug(s"Metrics:\n${gauges2.map { case (k, v) => s"- $prefix.$k $v $now" }.mkString("\n")}")
-//      try {
-//        graphite.connect()
+      try {
+        graphite.connect()
         for { (k, v) <- gauges2 } graphite.send(s"$prefix.$k", v.toString, now)
-//      } catch {
-//        case exc: IOException => log.warn(s"Failed to send graphite metrics: ${gauges.mkString(", ")}", exc)
-//      } finally {
-//        try
-//          graphite.close()
-//        catch {
-//          case exc: IOException => log.warn(s"Failed to close graphite connection: ${gauges.mkString(", ")}", exc)
-//        }
-//      }
+      } catch {
+        case exc: IOException => log.warn(s"Failed to send graphite metrics: ${gauges.mkString(", ")}", exc)
+      } finally {
+        try
+          graphite.close()
+        catch {
+          case exc: IOException => log.warn(s"Failed to close graphite connection: ${gauges.mkString(", ")}", exc)
+        }
+      }
     }
   }
 }

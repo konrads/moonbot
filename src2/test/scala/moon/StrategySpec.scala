@@ -16,7 +16,7 @@ class StrategySpec extends FlatSpec with Matchers with Inside {
 
   "Strategy" should "work :)" in {
     // looking for equivalent of TalibSpec:
-    // bbands(Vector(na, na, na, 1, 2, 3, 4, 5), devUp=3, devDown=1) shouldBe Some((Double("7.2426406871192853"), 3, Double("1.5857864376269049")))
+    // bbands(Vector(na, na, na, 1, 2, 3, 4, 5), devUp=3, devDown=1) shouldBe Some((BigDecimal("7.2426406871192853"), 3, BigDecimal("1.5857864376269049")))
     val l = Ledger()
       .record(OrderBook("t", "a", Vector(OrderBookData("s", parseDateTime("2010-01-01T00:00:00.000Z"), Vector(Vector(1, 2)), Vector(Vector(3, 4))))))
       // ignore first 3
@@ -33,11 +33,11 @@ class StrategySpec extends FlatSpec with Matchers with Inside {
     res.ledger.tradeDatas.size shouldBe 6
     res.sentiment shouldBe Neutral
     res.metrics shouldBe Map(
-      "data.bbands.sentiment" -> 0.0,
-      "data.bbands.score"     -> -0.8535533905932737494008443621048495,
-      "data.bbands.upper"     -> 7.24264068711928530,
-      "data.bbands.middle"    -> 3.0,  // (1+2+3+4+5)/4
-      "data.bbands.lower"     -> 1.58578643762690490,
+      "data.bbands.sentiment" -> BigDecimal(0),
+      "data.bbands.score"     -> BigDecimal("-0.8535533905932737494008443621048495"),
+      "data.bbands.upper"     -> BigDecimal("7.24264068711928530"),
+      "data.bbands.middle"    -> BigDecimal(3),  // (1+2+3+4+5)/4
+      "data.bbands.lower"     -> BigDecimal("1.58578643762690490"),
     )
 
     // round 2 - with big gap, multiple trades rolled into 1 minute
@@ -49,11 +49,11 @@ class StrategySpec extends FlatSpec with Matchers with Inside {
     res2.ledger.tradeDatas.size shouldBe 6
     res2.sentiment shouldBe Bear
     res2.metrics shouldBe Map(
-      "data.bbands.sentiment" -> -1.0,
-      "data.bbands.score"     -> -1.0,
-      "data.bbands.upper"     -> 10.14758001544890040,
-      "data.bbands.middle"    -> 5.5,  // (4+5+5+5+(7+8+4*9)/6)/5
-      "data.bbands.lower"     -> 3.95080666151703320,
+      "data.bbands.sentiment" -> BigDecimal(-1),
+      "data.bbands.score"     -> BigDecimal(-1),
+      "data.bbands.upper"     -> BigDecimal("10.14758001544890040"),
+      "data.bbands.middle"    -> BigDecimal(5.5),  // (4+5+5+5+(7+8+4*9)/6)/5
+      "data.bbands.lower"     -> BigDecimal("3.95080666151703320"),
     )
 
     // round 3 - with enormous gap, ie. this trade is last known
@@ -63,11 +63,11 @@ class StrategySpec extends FlatSpec with Matchers with Inside {
     res3.ledger.tradeDatas.size shouldBe 2
     res3.sentiment shouldBe Bear
     res3.metrics shouldBe Map(
-      "data.bbands.sentiment" -> -1.0,
-      "data.bbands.score"     -> -1.0,
-      "data.bbands.upper"     -> 10.399999999999999,
-      "data.bbands.middle"    -> 9.2,  // (9+9+9+9+10)/5
-      "data.bbands.lower"     -> 8.799999999999999,
+      "data.bbands.sentiment" -> BigDecimal(-1),
+      "data.bbands.score"     -> BigDecimal(-1),
+      "data.bbands.upper"     -> BigDecimal(10.4),
+      "data.bbands.middle"    -> BigDecimal(9.2),  // (9+9+9+9+10)/5
+      "data.bbands.lower"     -> BigDecimal(8.8),
     )
   }
 }

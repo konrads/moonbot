@@ -84,21 +84,4 @@ package object moon {
     def setTime(newTs: Long) { ts = newTs }
     def now = ts
   }
-
-  def timeit(f: => Unit, runs: Int=100): Double = {
-    val start = System.currentTimeMillis
-    for (i <- 0 to runs) f
-    val end = System.currentTimeMillis
-    (end - start).toDouble / runs
-  }
-
-  def round(x: Double): Double =
-    BigDecimal(x).setScale(10, BigDecimal.RoundingMode.HALF_UP).toDouble
-
-  //  case class PersistentState(pand: Double, restarts: Int) {
-//    def persist(filename: String="state.properties"): Unit
-//  }
-//  object PersistentState {
-//    def load(filename: String="state.properties"): PersistentState
-//  }
 }

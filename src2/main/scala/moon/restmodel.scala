@@ -11,7 +11,7 @@ import moon.jodaDateReads
 
 sealed trait RestModel
 
-case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[Double]=None, stopPx: Option[Double]=None, orderQty: Double, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends RestModel
+case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None, orderQty: BigDecimal, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends RestModel
 object Order { implicit val aReads: Reads[Order] = Json.reads[Order] }
 
 case class Orders(orders: Seq[Order]) extends RestModel {
@@ -27,28 +27,28 @@ case class Error(error: ErrorDetail) extends RestModel
 object Error { implicit val aReads: Reads[Error] = Json.reads[Error] }
 
 
-case class OrderReq(orderQty: Double, side: OrderSide, ordType: OrderType.Value, symbol: Option[String]=None,
-                    execInst: Option[String]=None, price: Option[Double]=None, stopPx: Option[Double]=None,
-                    pegOffsetValue: Option[Double]=None, pegPriceType: Option[String]=None,
+case class OrderReq(orderQty: BigDecimal, side: OrderSide, ordType: OrderType.Value, symbol: Option[String]=None,
+                    execInst: Option[String]=None, price: Option[BigDecimal]=None, stopPx: Option[BigDecimal]=None,
+                    pegOffsetValue: Option[BigDecimal]=None, pegPriceType: Option[String]=None,
                     clOrdID: Option[String]=None, timeInForce: String="GoodTillCancel")
 object OrderReq {
   implicit val aWrites: Writes[OrderReq] = Json.writes[OrderReq]
 
-  def asStopOrder(side: OrderSide, orderQty: Double, price: Double, isClose:Boolean, clOrdID: Option[String]=None) = {
+  def asStopOrder(side: OrderSide, orderQty: BigDecimal, price: BigDecimal, isClose:Boolean, clOrdID: Option[String]=None) = {
     val closeStr = if (isClose) ",Close" else ""
     OrderReq(ordType=OrderType.Stop, side=side, orderQty=orderQty, execInst=Some("LastPrice" + closeStr), stopPx=Some(price), clOrdID=clOrdID)
   }
 
-  def asTrailingStopOrder(side: OrderSide, orderQty: Double, pegOffsetValue: Double, isClose:Boolean, clOrdID: Option[String]=None) = {
+  def asTrailingStopOrder(side: OrderSide, orderQty: BigDecimal, pegOffsetValue: BigDecimal, isClose:Boolean, clOrdID: Option[String]=None) = {
     val pegOffsetValue2 = if (side == OrderSide.Buy) pegOffsetValue.abs else -pegOffsetValue.abs
     val closeStr = if (isClose) ",Close" else ""
     OrderReq(ordType=OrderType.Stop, side=side, orderQty=orderQty, execInst=Some("LastPrice" + closeStr), pegPriceType=Some("TrailingStopPeg"), pegOffsetValue=Some(pegOffsetValue2), clOrdID=clOrdID)
   }
 
-  def asMarketOrder(side: OrderSide, orderQty: Double, clOrdID: Option[String]=None) =
+  def asMarketOrder(side: OrderSide, orderQty: BigDecimal, clOrdID: Option[String]=None) =
     OrderReq(ordType=OrderType.Market, side=side, orderQty=orderQty, clOrdID=clOrdID)
 
-  def asLimitOrder(side: OrderSide, orderQty: Double, price: Double, isReduceOnly: Boolean, clOrdID: Option[String]=None) = {
+  def asLimitOrder(side: OrderSide, orderQty: BigDecimal, price: BigDecimal, isReduceOnly: Boolean, clOrdID: Option[String]=None) = {
     val isReduceOnlyStr = if (isReduceOnly) ",ReduceOnly" else ""
     OrderReq(ordType=OrderType.Limit, side=side, orderQty=orderQty, execInst=Some("ParticipateDoNotInitiate" + isReduceOnlyStr), price=Some(price), clOrdID=clOrdID)
   }
