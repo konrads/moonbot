@@ -8,9 +8,8 @@ import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
 import play.api.libs.json._
 
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.io.Source
+import scala.concurrent.duration._
 
 
 object BotApp extends App {
@@ -43,20 +42,21 @@ object BotApp extends App {
   val postOnlyPriceAdj       = conf.getDouble("bot.postOnlyPriceAdj")
   val openWithMarket         = conf.optBoolean("bot.openWithMarket").getOrElse(false)
   val dryRunDataDir          = conf.optString("bot.dryRunDataDir")
-  val dryRun                 = dryRunDataDir.isDefined || conf.optBoolean("bot.dryRun").getOrElse(false)
+  val dryRun                 = conf.optBoolean("bot.dryRun").getOrElse(false)
 
   val strategyName = conf.getString("strategy.selection")
 
   val dryRunWarning =
-    if (dryRun)
-    """
+    if (dryRun || dryRunDataDir.isDefined)
+    s"""
       |                            ██
       |                          ██  ██
       |                        ██      ██
       |                       ██  DRY   ██
-      |                      ██   RUN!   ██
-      |                     ██            ██
-      |                      ██████████████
+      |                      ██   ${if (dryRunDataDir.isDefined) "DATA" else "LIVE"}   ██
+      |                     ██    RUN!    ██
+      |                    ██              ██
+      |                     ████████████████
       |
       |""".stripMargin
     else ""
@@ -94,13 +94,16 @@ object BotApp extends App {
       |• dryRunDataDir:        $dryRunDataDir
       |""".stripMargin)
 
-  val dryRunClock = new DryRunClock
-  val dryRunScheduler = new akka2.DryRunTimerScheduler[ActorEvent]
-
   implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
-  val restGateway: IRestGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
+  val (clock, scheduler, restGateway) = if (dryRunDataDir.isDefined) {
+    val dryRunClock = new DryRunClock
+    val dryRunScheduler = new akka2.DryRunTimerScheduler[ActorEvent]
+    (dryRunClock, Some(dryRunScheduler), new ExchangeSim(dryRunDataDir.get, dryRunClock, dryRunScheduler))
+  } else
+    (WallClock, None, new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs))
+
   val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
-  val metrics = Metrics(graphiteHost, graphitePort, namespace, clock=if (dryRun) dryRunClock else WallClock)
+  val metrics = Metrics(graphiteHost, graphitePort, namespace, clock=clock)
   val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig, parentConfig = conf.getObject(s"strategy").toConfig)
 
   val orchestrator = OrchestratorActor(
@@ -114,62 +117,22 @@ object BotApp extends App {
     metrics=Some(metrics),
     openWithMarket=openWithMarket,
     dryRun=dryRun,
-    dryRunScheduler=if (dryRun) Some(dryRunScheduler) else None)
+    dryRunScheduler=scheduler)
 
-  // Supervision of my actor, with backoff restarts. On supervision & backoff:
-  // https://manuel.bernhardt.io/2019/09/05/tour-of-akka-typed-supervision-and-signals/
-  // presuming ActorRef being reusable between restarts:
-  // https://stackoverflow.com/questions/35332897/is-an-actorref-updated-when-the-associated-actor-is-restarted-by-the-supervisor
-  // https://doc.akka.io/docs/akka/current/typed/fault-tolerance.html
-  val orchestratorActor = ActorSystem(
-    Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
-    "orchestrator-actor")
+  if (dryRunDataDir.isDefined)
+    // feed and consume events from simulator
+    restGateway.asInstanceOf[ExchangeSim].run(orchestrator)
+  else {
+    // Supervision of my actor, with backoff restarts. On supervision & backoff:
+    // https://manuel.bernhardt.io/2019/09/05/tour-of-akka-typed-supervision-and-signals/
+    // presuming ActorRef being reusable between restarts:
+    // https://stackoverflow.com/questions/35332897/is-an-actorref-updated-when-the-associated-actor-is-restarted-by-the-supervisor
+    // https://doc.akka.io/docs/akka/current/typed/fault-tolerance.html
+    val orchestratorActor = ActorSystem(
+      Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
+      "orchestrator-actor")
 
-  if (dryRunDataDir.isDefined) {
-    // feed WS events from the files
-    var prevFilename = ""
-    var cache: OrderBookSummary = null
-    var i: Long = 0
-    for {
-      filename <- new File(dryRunDataDir.get).list().sortBy { fname =>
-        fname.split("\\.") match {
-          case Array(s1, s2, s3, s4) => s"$s1.$s2.${"%03d".format(s3.toInt)}.$s4"
-          case _ => fname
-        }
-      }
-      line <- Source.fromFile(s"${dryRunDataDir.get}/$filename").getLines
-    } {
-      if (prevFilename != filename) {
-        log.info(s"Processing file ${dryRunDataDir.get}/$filename")
-        prevFilename = filename
-      }
-      WsModel.asModel(line) match {
-        case JsSuccess(msg, _) =>
-          val (msg2, now) = msg match {
-            case x:OrderBook   =>
-              val summary = x.summary
-              if (! summary.isEquivalent(cache)) {
-                cache = summary
-                (Some(summary), Some(summary.timestamp.getMillis))
-              } else
-                (None, Some(summary.timestamp.getMillis))
-            case x:Info        => (Some(x), Some(x.timestamp.getMillis))
-            case x:Instrument  => (Some(x), x.data.headOption.map(_.timestamp.getMillis))
-            case x:Funding     => (Some(x), x.data.headOption.map(_.timestamp.getMillis))
-            case x:UpsertOrder => (Some(x), x.data.headOption.map(_.timestamp.getMillis))
-            case x:Trade       => (Some(x), x.data.headOption.map(_.timestamp.getMillis))
-            case _             => (None, None)
-          }
-          now.foreach(dryRunClock.setTime)
-          now.foreach(dryRunScheduler.setTime)
-          msg2.foreach(m => orchestratorActor ! WsEvent(m))
-          // i += 1; if (i % 100 == 0) Thread.sleep(1)  // give grafana bit of breathing space
-        case e: JsError =>
-          log.error("WS consume error!", e)
-      }
-    }
-  } else {
-    // feed the WS events from actual server
+    // feed the WS events from actual exchange
     class CachedConsumer {
       var cache: OrderBookSummary = null
       val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {

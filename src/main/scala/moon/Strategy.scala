@@ -35,7 +35,7 @@ object Strategy {
     case "bbands"        => new BBandsStrategy(config)
     case "rsi"           => new RSIStrategy(config)
     case "macd"          => new MACDStrategy(config)
-    case "permabear"     => new PermaBearStrategy(config)
+    case "alternating"   => new AlternatingStrategy(config)  // test strategy
     case "weighted"      => new WeightedStrategy(config, parentConfig)
   }
 
@@ -54,13 +54,17 @@ object Strategy {
   }
 }
 
-// Noop for testing
-class PermaBearStrategy(val config: Config) extends Strategy {
+// Test strategy
+class AlternatingStrategy(val config: Config) extends Strategy {
+  val n = config.optInt("n").getOrElse(10)
+  val sentiments = LazyList.continually(List.fill(n)(Bull) ++ List.fill(n)(Neutral) ++ List.fill(n)(Bear) ++ List.fill(n)(Neutral)).flatten.iterator
   log.info(s"Strategy ${this.getClass.getSimpleName}")
-  override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
-    StrategyResult(Bull, Map("data.permabear.sentiment" -> -1.0), ledger.copy(tradeDatas = ledger.tradeDatas.takeRight(500)))
+  override def strategize(ledger: Ledger): StrategyResult = {
+    val s = sentiments.next
+    StrategyResult(s, Map("data.alternating.sentiment" -> s.id), ledger.copy(tradeDatas = ledger.tradeDatas.takeRight(500)))
   }
 }
+
 
 class TickDirectionStrategy(val config: Config) extends Strategy {
   val periodMs = config.optInt("periodMs").getOrElse(4 * 60 * 1000)

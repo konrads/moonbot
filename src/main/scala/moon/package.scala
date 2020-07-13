@@ -1,5 +1,7 @@
 
-import com.typesafe.config.Config
+import java.io.{File, PrintWriter}
+
+import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import javax.xml.bind.DatatypeConverter
@@ -95,10 +97,23 @@ package object moon {
   def round(x: Double): Double =
     BigDecimal(x).setScale(10, BigDecimal.RoundingMode.HALF_UP).toDouble
 
-  //  case class PersistentState(pand: Double, restarts: Int) {
-//    def persist(filename: String="state.properties"): Unit
-//  }
-//  object PersistentState {
-//    def load(filename: String="state.properties"): PersistentState
-//  }
+  case class PersistentState(pandl: Double, restarts: Int) {
+    import scala.jdk.CollectionConverters._
+    def persist(filename: String="state.properties"): Unit =
+      new PrintWriter(filename) {
+        val contents = ConfigFactory.parseMap(Map("pandl" -> pandl, "restarts" -> restarts).asJava).root.render(ConfigRenderOptions.concise())
+        write(contents)
+        close
+      }
+  }
+  object PersistentState {
+    def load(filename: String="state.properties"): PersistentState = {
+      val f = new File(filename)
+      if (f.exists) {
+        val conf = ConfigFactory.parseFile(f)
+        PersistentState(pandl = conf.getDouble("pandl"), restarts = conf.getInt("restarts"))
+      } else
+        PersistentState(pandl = 0, restarts = 0)
+    }
+  }
 }

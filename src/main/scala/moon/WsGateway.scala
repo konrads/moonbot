@@ -68,10 +68,17 @@ class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
       Source(List(authMessage, subscribeOrderMessage))
     }
 
-    val flow = Flow.fromSinkAndSourceMat(incoming, outgoing.concatMat(Source.maybe[Message])(Keep.right))(Keep.right)
+    // determining when server closed connection:
+    // https://stackoverflow.com/questions/37727410/how-to-listen-websocket-server-close-events-using-akka-http-websocket-client
+    val flow = Flow.fromSinkAndSourceMat(incoming, outgoing.concatMat(Source.maybe[Message])(Keep.right))(Keep.both)
 
-    val (upgradeResponse, promise) = Http().singleWebSocketRequest(WebSocketRequest(wsUrl), flow)
-    endOfLivePromise = promise
+    val (upgradeResponse, (sinkClose, sourceClose)) = Http().singleWebSocketRequest(WebSocketRequest(wsUrl), flow)
+    endOfLivePromise = sourceClose
+
+    sinkClose.onComplete {
+      case Success(_) => throw ServerConnectionError("Server Connection closed gracefully", null)
+      case Failure(e) => throw ServerConnectionError(s"Server Connection closed with an error", e)
+    }
 
     val connected = upgradeResponse.flatMap { upgrade =>
       if (upgrade.response.status == StatusCodes.SwitchingProtocols)
@@ -80,10 +87,10 @@ class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
         throw new RuntimeException(s"Connection failed: ${upgrade.response.status}")
     }
 
-    log.info(s"Sleeping for $minSleepInMs ms...")
+    // log.info(s"Sleeping for $minSleepInMs ms...")
     // in a real application you would not side effect here
     connected.onComplete(status => log.info(s"WebSocket connection completed, status: $status"))
-    Thread.sleep(minSleepInMs.getOrElse(3000))  // in case of an error, capture messages prior to closing
+    // Thread.sleep(minSleepInMs.getOrElse(3000))  // in case of an error, capture messages prior to closing
   }
 
   def buildOpJson(op: String, args: Any*): String = {
@@ -96,3 +103,6 @@ class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
 
   def close(): Unit = endOfLivePromise.success(None)
 }
+
+
+case class ServerConnectionError(msg: String, cause: Throwable) extends Exception(msg, cause)

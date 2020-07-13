@@ -13,12 +13,10 @@ import com.typesafe.scalalogging.Logger
 // https://gist.github.com/jkpl/1789f1feeb86f8314f32966ecf0940fa
 case class Metrics(host: String, port: Int=2003, prefix: String, clock: Clock=WallClock, addJvmMetrics: Boolean=true) {
   private val log = Logger[Metrics]
-  private val graphite = new Graphite(new InetSocketAddress(host, port))
   private val osBean = ManagementFactory.getPlatformMXBean(classOf[OperatingSystemMXBean])
   private val thisDir = new File(".")
   private val runtime = Runtime.getRuntime
-
-  graphite.connect()
+  private var graphite: Graphite = null
 
   def gauge(gauges: Map[String, Any]): Unit = {
     val gauges2 = if (addJvmMetrics) {
@@ -33,19 +31,28 @@ case class Metrics(host: String, port: Int=2003, prefix: String, clock: Clock=Wa
 
     if (gauges2.nonEmpty) {
       val now = clock.now / 1000
-      log.debug(s"Metrics:\n${gauges2.map { case (k, v) => s"- $prefix.$k $v $now" }.mkString("\n")}")
-//      try {
-//        graphite.connect()
-        for { (k, v) <- gauges2 } graphite.send(s"$prefix.$k", v.toString, now)
-//      } catch {
-//        case exc: IOException => log.warn(s"Failed to send graphite metrics: ${gauges.mkString(", ")}", exc)
-//      } finally {
-//        try
-//          graphite.close()
-//        catch {
-//          case exc: IOException => log.warn(s"Failed to close graphite connection: ${gauges.mkString(", ")}", exc)
-//        }
-//      }
+      // allow for connectivity issues
+      if (graphite == null)
+        graphite = try {
+          val g = new Graphite(new InetSocketAddress(host, port))
+          g.connect()
+          g
+        } catch {
+          case _: IOException => null
+        }
+
+      if (graphite == null)
+        log.warn(s"*UNSENT* metrics:\n${gauges2.map { case (k, v) => s"- $prefix.$k $v $now" }.mkString("\n")}")
+      else {
+        try {
+          for { (k, v) <- gauges2 } graphite.send(s"$prefix.$k", v.toString, now)
+          log.debug(s"Metrics:\n${gauges2.map { case (k, v) => s"- $prefix.$k $v $now" }.mkString("\n")}")
+        }
+        catch {
+          case _:IOException =>
+            log.warn(s"**UNSENT** metrics:\n${gauges2.map { case (k, v) => s"- $prefix.$k $v $now" }.mkString("\n")}")
+        }
+      }
     }
   }
 }

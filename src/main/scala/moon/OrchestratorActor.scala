@@ -3,6 +3,7 @@ package moon
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.ActorContext
 import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.scaladsl.Behaviors.ReceiveMessageImpl
 import moon.OrderSide._
 import moon.OrderStatus._
 import moon.Sentiment._
@@ -16,7 +17,7 @@ import scala.util.{Failure, Success}
 object OrchestratorActor {
   trait PositionOpener {
     val desc: String
-    def onFilled(l: Ledger, openPrice: Double): Behavior[ActorEvent]             // desired outcome - order filled
+    def onFilled(l: Ledger, openPrice: Double): Behavior[ActorEvent]                 // desired outcome - order filled
     def onChangeOfHeart(l: Ledger): Behavior[ActorEvent]                             // once we decide to stop opening (via shouldKeepGoing())
     def onExternalCancel(l: Ledger, clOrdID: String): Behavior[ActorEvent]           // unexpected cancel (not from bot)
     def onRejection(l: Ledger, order: LedgerOrder): Behavior[ActorEvent]             // unexpected rejection
@@ -25,7 +26,7 @@ object OrchestratorActor {
     def shouldKeepGoing(l: Ledger): (Boolean, Ledger)
     def openOrder(l: Ledger): (String, Future[Order])                                // how to open order
     def cancelOrder(clOrdID: String): Future[Orders]                                 // how to cancel order
-    def amendOrder(clOrdID: String, newPrice: Double): Future[Order]             // how to open order
+    def amendOrder(clOrdID: String, newPrice: Double): Future[Order]                 // how to open order
   }
 
   trait PositionCloser {
@@ -154,8 +155,8 @@ object OrchestratorActor {
                   // need to update best price?
                   val bestPrice = positionOpener.bestPrice(ledger3)
                   if (order.price != bestPrice) {
-                    positionOpener.amendOrder(clOrdID, bestPrice) onComplete (res => actorCtx.self ! RestEvent(res))
                     actorCtx.log.info(s"${positionOpener.desc}: best price moved, will change: ${order.price} -> $bestPrice")
+                    positionOpener.amendOrder(clOrdID, bestPrice) onComplete (res => actorCtx.self ! RestEvent(res))
                     loop(ctx.copy(ledger = ledger3, lifecycle = IssuingAmend))
                   } else {
                     if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionOpener.desc}: noop @ orderID: ${order.fullOrdID}, lifecycle: $lifecycle, data: $data")
@@ -172,7 +173,7 @@ object OrchestratorActor {
       // initial request
       val (clOrdID, resF) = positionOpener.openOrder(initLedger)
       resF onComplete (res => actorCtx.self ! RestEvent(res))
-      actorCtx.log.info(s"${positionOpener.desc}: Initial opening clOrdID: $clOrdID")
+      // actorCtx.log.info(s"${positionOpener.desc}: Initial opening clOrdID: $clOrdID")
       loop(OpenPositionCtx(ledger = initLedger, clOrdID = clOrdID, lifecycle = IssuingNew))
     }
 
@@ -268,7 +269,7 @@ object OrchestratorActor {
                   loop(ctx.copy(ledger = ledger2, lifecycle = IssuingCancel))
                 case (Some(tOrd), Some(sOrd)) =>
                   // some other combinations of states - keep going
-                  if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionCloser.desc}: new state of takeProfitOrder: $tOrd, stoplossOrder: $sOrd, in lifecycle: $lifecycle")
+                  if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionCloser.desc}: new state of takeProfitOrder: $tOrd, stoplossOrder: $sOrd, in lifecycle: $lifecycle, data: $data")
                   loop(ctx.copy(ledger = ledger2))
                 case other  =>
                   // if not our orders or non Order(s)
@@ -281,7 +282,7 @@ object OrchestratorActor {
         // initial request
         val (takeProfitClOrdID, stoplossClOrdID, resF) = positionCloser.openOrders(initLedger)
         resF onComplete (res => actorCtx.self ! RestEvent(res))
-        actorCtx.log.info(s"${positionCloser.desc}: issued initial orders: takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID")
+        // actorCtx.log.info(s"${positionCloser.desc}: issued initial orders: takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID")
         loop(ClosePositionCtx(ledger = initLedger, takeProfitClOrdID = takeProfitClOrdID, stoplossClOrdID = stoplossClOrdID, lifecycle = IssuingNew))
       }
 
@@ -384,14 +385,15 @@ object OrchestratorActor {
             override def bestPrice(l: Ledger): Double = l.bidPrice
             override def openOrder(l: Ledger): (String, Future[Order]) = {
               val price = l.bidPrice
-              actorCtx.log.info(s"$desc: opening @ $price, isMarket: $openWithMarket")
-              if (openWithMarket)
+              val (clOrdID, resF) = if (openWithMarket)
                 restGateway.placeMarketOrderAsync(tradeQty, Buy)
               else
                 restGateway.placeLimitOrderAsync(tradeQty, price, false, Buy)
+              actorCtx.log.info(s"$desc: opening $clOrdID @ $price, isMarket: $openWithMarket")
+              (clOrdID, resF)
             }
             override def cancelOrder(clOrdID: String): Future[Orders] = {
-              actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")
+              // actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")
               restGateway.cancelOrderAsync(clOrdIDs = Vector(clOrdID))
             }
             override def amendOrder(clOrdID: String, newPrice: Double): Future[Order] = {
@@ -437,14 +439,15 @@ object OrchestratorActor {
             override def bestPrice(l: Ledger): Double = l.askPrice
             override def openOrder(l: Ledger): (String, Future[Order]) = {
               val price = l.askPrice
-              actorCtx.log.info(s"$desc: opening @ $price, isMarket: $openWithMarket")
-              if (openWithMarket)
+              val (clOrdID, resF) = if (openWithMarket)
                 restGateway.placeMarketOrderAsync(tradeQty, Sell)
               else
                 restGateway.placeLimitOrderAsync(tradeQty, price, false, Sell)
+              actorCtx.log.info(s"$desc: opening $clOrdID @ $price, isMarket: $openWithMarket")
+              (clOrdID, resF)
             }
             override def cancelOrder(clOrdID: String): Future[Orders] = {
-              actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")
+              // actorCtx.log.info(s"$desc: cancelling clOrdID: $clOrdID")
               restGateway.cancelOrderAsync(clOrdIDs = Vector(clOrdID))
             }
             override def amendOrder(clOrdID: String, newPrice: Double): Future[Order] = {
