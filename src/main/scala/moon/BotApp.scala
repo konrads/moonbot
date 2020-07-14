@@ -7,6 +7,7 @@ import akka.actor.typed.{ActorSystem, SupervisorStrategy}
 import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
 import play.api.libs.json._
+import moon.RunType._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -41,25 +42,45 @@ object BotApp extends App {
   val stoplossMargin         = conf.getDouble("bot.stoplossMargin")
   val postOnlyPriceAdj       = conf.getDouble("bot.postOnlyPriceAdj")
   val openWithMarket         = conf.optBoolean("bot.openWithMarket").getOrElse(false)
-  val dryRunDataDir          = conf.optString("bot.dryRunDataDir")
-  val dryRun                 = conf.optBoolean("bot.dryRun").getOrElse(false)
+  val backtestDataDir        = conf.optString("bot.backtestDataDir")
+  val runType                = conf.optString("bot.runType").map(_.toLowerCase) match {
+    case Some("live")     => Live
+    case Some("dry")      => Dry
+    case Some("backtest") => Backtest
+    case Some(other)      => throw new Exception(s"Invalid bot.runType: $other")
+    case None             => Live
+  }
+  assert(runType != RunType.Backtest || backtestDataDir.isDefined)
 
   val strategyName = conf.getString("strategy.selection")
 
-  val dryRunWarning =
-    if (dryRun || dryRunDataDir.isDefined)
-    s"""
-      |                            ██
-      |                          ██  ██
-      |                        ██      ██
-      |                       ██  DRY   ██
-      |                      ██   ${if (dryRunDataDir.isDefined) "DATA" else "LIVE"}   ██
-      |                     ██    RUN!    ██
-      |                    ██              ██
-      |                     ████████████████
-      |
-      |""".stripMargin
-    else ""
+  val notLiveWarning = runType match {
+    case Live => ""
+    case Dry =>
+      s"""
+         |                            ██
+         |                          ██  ██
+         |                        ██      ██
+         |                       ██  DRY   ██
+         |                      ██          ██
+         |                     ██    RUN!    ██
+         |                    ██              ██
+         |                     ████████████████
+         |
+         |""".stripMargin
+    case Backtest =>
+      s"""
+         |                            ██
+         |                          ██  ██
+         |                        ██      ██
+         |                       ██  BACK  ██
+         |                      ██   TEST   ██
+         |                     ██    RUN!    ██
+         |                    ██              ██
+         |                     ████████████████
+         |
+         |""".stripMargin
+  }
   log.info(
     s"""
       |
@@ -73,7 +94,7 @@ object BotApp extends App {
       |░      ░   ░ ░ ░ ▒  ░ ░ ░ ▒     ░   ░ ░     ░    ░ ░ ░ ░ ▒    ░
       |       ░       ░ ░      ░ ░           ░     ░          ░ ░
       |                                                 ░
-      |$dryRunWarning
+      |$notLiveWarning
       |Initialized with params...
       |• bitmexUrl:            $bitmexUrl
       |• bitmexWsUrl:          $bitmexWsUrl
@@ -90,44 +111,42 @@ object BotApp extends App {
       |• stoplossMargin:       $stoplossMargin
       |• postOnlyPriceAdj:     $postOnlyPriceAdj
       |• openWithMarket:       $openWithMarket
-      |• dryRun:               $dryRun
-      |• dryRunDataDir:        $dryRunDataDir
+      |• runType:              $runType
+      |• backtestDataDir:      $backtestDataDir
       |""".stripMargin)
 
-  implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
-  val (clock, scheduler, restGateway) = if (dryRunDataDir.isDefined) {
-    val dryRunClock = new DryRunClock
-    val dryRunScheduler = new akka2.DryRunTimerScheduler[ActorEvent]
-    (dryRunClock, Some(dryRunScheduler), new ExchangeSim(dryRunDataDir.get, dryRunClock, dryRunScheduler))
-  } else
-    (WallClock, None, new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs))
-
-  val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
-  val metrics = Metrics(graphiteHost, graphitePort, namespace, clock=clock)
+  val metrics = Metrics(graphiteHost, graphitePort, namespace)
   val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig, parentConfig = conf.getObject(s"strategy").toConfig)
 
-  val orchestrator = OrchestratorActor(
-    strategy=strategy,
-    flushSessionOnRestart=flushSessionOnRestart,
-    restGateway=restGateway,
-    tradeQty=tradeQty, minTradeVol=minTradeVol,
-    openPositionExpiryMs=openPositionExpiryMs,
-    reqRetries=reqRetries, markupRetries=markupRetries,
-    takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,
-    metrics=Some(metrics),
-    openWithMarket=openWithMarket,
-    dryRun=dryRun,
-    dryRunScheduler=scheduler)
+  if (runType == Backtest) {
+    val simParent = ExchangeSim.setup(
+      dataDir=backtestDataDir.get,
+      strategy=strategy,
+      flushSessionOnRestart=flushSessionOnRestart,
+      tradeQty=tradeQty, minTradeVol=minTradeVol,
+      openPositionExpiryMs=openPositionExpiryMs,
+      reqRetries=reqRetries, markupRetries=markupRetries,
+      takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,
+      metrics=Some(metrics),
+      openWithMarket=openWithMarket,
+      runType=runType)
+    ActorSystem(simParent, "sim-parent-actor")
+  } else {
+    implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
+    val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
+    val restGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs)
+    val orchestrator = OrchestratorActor(
+      strategy=strategy,
+      flushSessionOnRestart=flushSessionOnRestart,
+      restGateway=restGateway,
+      tradeQty=tradeQty, minTradeVol=minTradeVol,
+      openPositionExpiryMs=openPositionExpiryMs,
+      reqRetries=reqRetries, markupRetries=markupRetries,
+      takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,
+      metrics=Some(metrics),
+      openWithMarket=openWithMarket,
+      runType=runType)
 
-  if (dryRunDataDir.isDefined)
-    // feed and consume events from simulator
-    restGateway.asInstanceOf[ExchangeSim].run(orchestrator)
-  else {
-    // Supervision of my actor, with backoff restarts. On supervision & backoff:
-    // https://manuel.bernhardt.io/2019/09/05/tour-of-akka-typed-supervision-and-signals/
-    // presuming ActorRef being reusable between restarts:
-    // https://stackoverflow.com/questions/35332897/is-an-actorref-updated-when-the-associated-actor-is-restarted-by-the-supervisor
-    // https://doc.akka.io/docs/akka/current/typed/fault-tolerance.html
     val orchestratorActor = ActorSystem(
       Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
       "orchestrator-actor")
@@ -146,11 +165,11 @@ object BotApp extends App {
         case e:JsError           => log.error("WS consume error!", e)
       }
     }
-//    val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
-//      case JsSuccess(value:OrderBook, _) => orchestratorActor ! WsEvent(value.summary)
-//      case JsSuccess(value, _) => orchestratorActor ! WsEvent(value)
-//      case e:JsError           => log.error("WS consume error!", e)
-//    }
+    //    val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
+    //      case JsSuccess(value:OrderBook, _) => orchestratorActor ! WsEvent(value.summary)
+    //      case JsSuccess(value, _) => orchestratorActor ! WsEvent(value)
+    //      case e:JsError           => log.error("WS consume error!", e)
+    //    }
     wsGateway.run(new CachedConsumer().wsMessageConsumer)
   }
 }

@@ -43,6 +43,11 @@ package object moon {
     implicit val aFormat = Json.formatEnum(this)
   }
 
+  object RunType extends Enumeration {
+    type RunType = Value
+    val Live, Dry, Backtest = Value
+  }
+
   // adding "value" as per:
   // https://stackoverflow.com/questions/42275983/scala-how-to-define-an-enum-with-extra-attributes
   object Sentiment extends Enumeration {
@@ -70,21 +75,6 @@ package object moon {
     def optDouble(path: String): Option[Double]     = if (config.hasPath(path)) Some(config.getDouble(path)) else None
     def optIntList(path: String): Option[List[Int]] = if (config.hasPath(path)) Some(config.getIntList(path).asScala.toList.map(_.intValue())) else None
     // ...etc, will add if needed
-  }
-
-
-  trait Clock {
-    def now: Long
-  }
-
-  object WallClock extends Clock {
-    def now = System.currentTimeMillis()
-  }
-
-  class DryRunClock(initTs: Long=0) extends Clock {
-    var ts = initTs
-    def setTime(newTs: Long) { ts = newTs }
-    def now = ts
   }
 
   def timeit(f: => Unit, runs: Int=100): Double = {

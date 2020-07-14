@@ -11,14 +11,14 @@ import com.typesafe.scalalogging.Logger
 // inspired by:
 // https://github.com/datasift/dropwizard-scala/blob/master/metrics/src/main/scala/com/datasift/dropwizard/scala/metrics.scala
 // https://gist.github.com/jkpl/1789f1feeb86f8314f32966ecf0940fa
-case class Metrics(host: String, port: Int=2003, prefix: String, clock: Clock=WallClock, addJvmMetrics: Boolean=true) {
+case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: Boolean=true) {
   private val log = Logger[Metrics]
   private val osBean = ManagementFactory.getPlatformMXBean(classOf[OperatingSystemMXBean])
   private val thisDir = new File(".")
   private val runtime = Runtime.getRuntime
   private var graphite: Graphite = null
 
-  def gauge(gauges: Map[String, Any]): Unit = {
+  def gauge(gauges: Map[String, Any], nowMs: Option[Long]): Unit = {
     val gauges2 = if (addJvmMetrics) {
       gauges +
         ("memory.used.jvm"    -> (runtime.totalMemory() - runtime.freeMemory())) +
@@ -30,7 +30,7 @@ case class Metrics(host: String, port: Int=2003, prefix: String, clock: Clock=Wa
       gauges
 
     if (gauges2.nonEmpty) {
-      val now = clock.now / 1000
+      val now = nowMs.getOrElse(System.currentTimeMillis) / 1000
       // allow for connectivity issues
       if (graphite == null)
         graphite = try {
