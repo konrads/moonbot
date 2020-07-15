@@ -87,6 +87,11 @@ package object moon {
   def round(x: Double): Double =
     BigDecimal(x).setScale(10, BigDecimal.RoundingMode.HALF_UP).toDouble
 
+
+//  var uuidCnt = 0;  def uuid: String = synchronized { uuidCnt += 1; "%05d".format(uuidCnt) }
+  def uuid: String =
+    java.util.UUID.randomUUID().toString
+
   case class PersistentState(pandl: Double, restarts: Int) {
     import scala.jdk.CollectionConverters._
     def persist(filename: String="state.properties"): Unit =

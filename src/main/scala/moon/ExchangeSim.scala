@@ -243,7 +243,7 @@ object ExchangeSim {
     UpsertOrder(Some("update"), os.map(o => OrderData(orderID=o.orderID, clOrdID=o.clOrdID, orderQty=Some(o.orderQty), price=o.price, side=Some(o.side), ordStatus=o.ordStatus, ordType=Some(o.ordType), timestamp=o.timestamp)))
 
   def createOrder(orderReq: OrderReq, timestamp: DateTime, bid: Double, ask: Double): Order = {
-    val orderID = java.util.UUID.randomUUID().toString
+    val orderID = uuid
     val price = if (orderReq.side == Buy && orderReq.ordType == Market)
       bid
     else if (orderReq.side == Sell && orderReq.ordType == Market)
@@ -273,7 +273,7 @@ class ExchangeSimRestGateway(simRef: ActorRef[SimEvent])(implicit val akkaSchedu
   override def placeBulkOrdersAsync(orderReqs: OrderReqs): (Seq[String], Future[Orders]) = {
     val orderReqs2 = orderReqs.copy(orderReqs.orders.map {
       case o if o.clOrdID.isDefined => o
-      case o => o.copy(clOrdID = Some(java.util.UUID.randomUUID().toString))
+      case o => o.copy(clOrdID = Some(uuid))
     })
     val clOrdIDs = orderReqs2.orders.map(o => o.clOrdID.get)
     val resF: Future[Orders] = simRef ? (ref => BulkOrders(orderReqs2, ref))
@@ -281,13 +281,13 @@ class ExchangeSimRestGateway(simRef: ActorRef[SimEvent])(implicit val akkaSchedu
   }
 
   override def placeMarketOrderAsync(qty: Double, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = java.util.UUID.randomUUID().toString
+    val clOrdID = uuid
     val resF: Future[Order] = simRef ? (ref => SingleOrder(OrderReq(qty, side, OrderType.Market, clOrdID=Some(clOrdID)), ref))
     (clOrdID, resF)
   }
 
   override def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = java.util.UUID.randomUUID().toString
+    val clOrdID = uuid
     val resF: Future[Order] = simRef ? (ref => SingleOrder(OrderReq(qty, side, OrderType.Limit, price=Some(price), clOrdID=Some(clOrdID)), ref))
     (clOrdID, resF)
   }

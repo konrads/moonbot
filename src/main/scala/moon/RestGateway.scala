@@ -67,7 +67,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   def placeBulkOrdersAsync(orderReqs: OrderReqs): (Seq[String], Future[Orders]) = {
     val orderReqs2 = orderReqs.copy(orderReqs.orders.map {
       case o if o.clOrdID.isDefined => o
-      case o => o.copy(clOrdID = Some(java.util.UUID.randomUUID().toString))
+      case o => o.copy(clOrdID = Some(uuid))
     })
     val clOrdIDs = orderReqs2.orders.map(o => o.clOrdID.get)
     val resF = placeBulkOrders(orderReqs2)
@@ -75,25 +75,25 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   }
 
   def placeStopOrderAsync(qty: Double, price: Double, isClose: Boolean, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = java.util.UUID.randomUUID().toString
+    val clOrdID = uuid
     val resF = placeStopOrder(qty, side, price, isClose, clOrdID = Some(clOrdID))
     (clOrdID, resF)
   }
 
   def placeTrailingStopOrderAsync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = java.util.UUID.randomUUID().toString
+    val clOrdID = uuid
     val resF = placeTrailingStopOrder(qty, side, pegOffsetValue, isClose, clOrdID = Some(clOrdID))
     (clOrdID, resF)
   }
 
   def placeMarketOrderAsync(qty: Double, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = java.util.UUID.randomUUID().toString
+    val clOrdID = uuid
     val resF = placeMarketOrder(qty, side, Some(clOrdID))
     (clOrdID, resF)
   }
 
   def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = java.util.UUID.randomUUID().toString
+    val clOrdID = uuid
     val resF = placeLimitOrder(qty, price, isReduceOnly, side, Some(clOrdID))
     (clOrdID, resF)
   }
