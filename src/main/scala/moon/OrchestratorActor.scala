@@ -386,7 +386,7 @@ object OrchestratorActor {
           Behaviors.receiveMessage { event =>
             val (ctx2, effect) = behaviorDsl(ctx, event, actorCtx.log)
             val (exchangeCtx2, newEvents) = effect.map { e =>
-              paperExchangeEffectHandler(exchangeCtx, e, metrics)
+              paperExchangeEffectHandler(exchangeCtx, e, metrics, actorCtx.log, publishMetrics=false)
             }.getOrElse((exchangeCtx, Nil))
 
             newEvents.foreach(e => actorCtx.self ! e)
@@ -401,7 +401,7 @@ object OrchestratorActor {
 
   case class ExchangeCtx(orders: Seq[Order]=Vector.empty, bid: Double=0, ask: Double=0, timestampMs: Long=0, lastMetricsMs: Long=0, lastCtx: Ctx=null)
 
-  def paperExchangeEffectHandler(exchangeCtx: ExchangeCtx, effect: SideEffect, metrics: Option[Metrics]): (ExchangeCtx, Seq[ActorEvent]) = ???
+  def paperExchangeEffectHandler(exchangeCtx: ExchangeCtx, effect: SideEffect, metrics: Option[Metrics], log: org.slf4j.Logger, publishMetrics: Boolean): (ExchangeCtx, Seq[ActorEvent]) = ???
 }
 
 case class IrrecoverableError(msg: String, cause: Throwable) extends Exception(msg, cause)

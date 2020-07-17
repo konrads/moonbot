@@ -67,7 +67,7 @@ class ExchangeSim(
         case Nil => (ctx, exchangeCtx)
         case head :: tail =>
           val (ctx2, effectOpt) = dslLoopFun(ctx, head, log)
-          val (exchangeCtx2, newEvents) = effectOpt.map(e => paperExchangeEffectHandler(exchangeCtx, e, metrics)).getOrElse((exchangeCtx, Nil))
+          val (exchangeCtx2, newEvents) = effectOpt.map(e => paperExchangeEffectHandler(exchangeCtx, e, metrics, log, publishMetrics=true)).getOrElse((exchangeCtx, Nil))
           val eventBacklog2 = tail ++ newEvents
           simLoop(ctx2, exchangeCtx2, eventBacklog2)
       }
