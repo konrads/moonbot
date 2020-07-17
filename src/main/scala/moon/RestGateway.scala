@@ -30,11 +30,11 @@ case class CancelOrderIssued(orderID: String) extends HttpReply
 /** Trait, for testing purposes */
 trait IRestGateway {
   // async
-  def placeBulkOrdersAsync(orderReqs: OrderReqs): (Seq[String], Future[Orders])
-  def placeStopOrderAsync(qty: Double, price: Double, isClose: Boolean, side: OrderSide): (String, Future[Order])
-  def placeTrailingStopOrderAsync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide): (String, Future[Order])
-  def placeMarketOrderAsync(qty: Double, side: OrderSide): (String, Future[Order])
-  def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order])
+  def placeBulkOrdersAsync(orderReqs: OrderReqs): Future[Orders]
+  def placeStopOrderAsync(qty: Double, price: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order]
+  def placeTrailingStopOrderAsync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order]
+  def placeMarketOrderAsync(qty: Double, side: OrderSide, clOrdID: Option[String]): Future[Order]
+  def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order]
   def amendOrderAsync(orderID: Option[String]=None, origClOrdID: Option[String]=None, price: Double): Future[Order]
   def cancelOrderAsync(orderIDs: Seq[String]=Vector.empty, clOrdIDs: Seq[String]=Vector.empty): Future[Orders]
   def cancelAllOrdersAsync(): Future[Orders]
@@ -42,10 +42,10 @@ trait IRestGateway {
 
   // sync
   def placeBulkOrdersSync(orderReqs: OrderReqs): Try[Orders]
-  def placeStopOrderSync(qty: Double, price: Double, isClose: Boolean, side: OrderSide): Try[Order]
-  def placeTrailingStopOrderSync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide): Try[Order]
-  def placeMarketOrderSync(qty: Double, side: OrderSide): Try[Order]
-  def placeLimitOrderSync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide): Try[Order]
+  def placeStopOrderSync(qty: Double, price: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Try[Order]
+  def placeTrailingStopOrderSync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Try[Order]
+  def placeMarketOrderSync(qty: Double, side: OrderSide, clOrdID: Option[String]): Try[Order]
+  def placeLimitOrderSync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String]): Try[Order]
   def amendOrderSync(orderID: Option[String]=None, clOrdID: Option[String]=None, price: Double): Try[Order]
   def cancelOrderSync(orderIDs: Seq[String]=Vector.empty, origClOrdIDs: Seq[String]=Vector.empty): Try[Orders]
   def cancelAllOrdersSync(): Try[Orders]
@@ -64,51 +64,15 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   private val log = Logger[RestGateway]
   implicit val executionContext = system.dispatcher
 
-  def placeBulkOrdersAsync(orderReqs: OrderReqs): (Seq[String], Future[Orders]) = {
-    val orderReqs2 = orderReqs.copy(orderReqs.orders.map {
-      case o if o.clOrdID.isDefined => o
-      case o => o.copy(clOrdID = Some(uuid))
-    })
-    val clOrdIDs = orderReqs2.orders.map(o => o.clOrdID.get)
-    val resF = placeBulkOrders(orderReqs2)
-    (clOrdIDs, resF)
-  }
-
-  def placeStopOrderAsync(qty: Double, price: Double, isClose: Boolean, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = uuid
-    val resF = placeStopOrder(qty, side, price, isClose, clOrdID = Some(clOrdID))
-    (clOrdID, resF)
-  }
-
-  def placeTrailingStopOrderAsync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = uuid
-    val resF = placeTrailingStopOrder(qty, side, pegOffsetValue, isClose, clOrdID = Some(clOrdID))
-    (clOrdID, resF)
-  }
-
-  def placeMarketOrderAsync(qty: Double, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = uuid
-    val resF = placeMarketOrder(qty, side, Some(clOrdID))
-    (clOrdID, resF)
-  }
-
-  def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide): (String, Future[Order]) = {
-    val clOrdID = uuid
-    val resF = placeLimitOrder(qty, price, isReduceOnly, side, Some(clOrdID))
-    (clOrdID, resF)
-  }
-
-  def amendOrderAsync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: Double): Future[Order] =
-    amendOrder(orderID, origClOrdID, price)
-
-  def cancelOrderAsync(orderIDs: Seq[String] = Vector.empty, clOrdIDs: Seq[String] = Vector.empty): Future[Orders] =
-    cancelOrder(orderIDs, clOrdIDs)
-
-  def cancelAllOrdersAsync(): Future[Orders] =
-    cancelAllOrders()
-
-  def closePositionAsync(): Future[String] =
-    closePosition()
+  def placeBulkOrdersAsync(orderReqs: OrderReqs): Future[Orders] = placeBulkOrders(orderReqs)
+  def placeStopOrderAsync(qty: Double, price: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order] = placeStopOrder(qty, side, price, isClose, clOrdID=clOrdID)
+  def placeTrailingStopOrderAsync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order] = placeTrailingStopOrder(qty, side, pegOffsetValue, isClose, clOrdID=clOrdID)
+  def placeMarketOrderAsync(qty: Double, side: OrderSide, clOrdID: Option[String]): Future[Order] = placeMarketOrder(qty, side, clOrdID=clOrdID)
+  def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order] = placeLimitOrder(qty, price, isReduceOnly, side, clOrdID=clOrdID)
+  def amendOrderAsync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: Double): Future[Order] = amendOrder(orderID, origClOrdID, price)
+  def cancelOrderAsync(orderIDs: Seq[String] = Vector.empty, clOrdIDs: Seq[String] = Vector.empty): Future[Orders] = cancelOrder(orderIDs, clOrdIDs)
+  def cancelAllOrdersAsync(): Future[Orders] = cancelAllOrders()
+  def closePositionAsync(): Future[String] = closePosition()
 
   // sync
   def placeBulkOrdersSync(orderReqs: OrderReqs): Try[Orders] =
@@ -117,27 +81,27 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
-  def placeStopOrderSync(qty: Double, price: Double, isClose: Boolean, side: OrderSide): Try[Order] =
+  def placeStopOrderSync(qty: Double, price: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Try[Order] =
     Await.ready(
-      placeStopOrder(qty, side, price, isClose),
+      placeStopOrder(qty, side, price, isClose, clOrdID=clOrdID),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
-  def placeTrailingStopOrderSync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide): Try[Order] =
+  def placeTrailingStopOrderSync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Try[Order] =
     Await.ready(
-      placeTrailingStopOrder(qty, side, pegOffsetValue, isClose),
+      placeTrailingStopOrder(qty, side, pegOffsetValue, isClose, clOrdID=clOrdID),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
-  def placeMarketOrderSync(qty: Double, side: OrderSide): Try[Order] =
+  def placeMarketOrderSync(qty: Double, side: OrderSide, clOrdID: Option[String]): Try[Order] =
     Await.ready(
-      placeMarketOrder(qty, side),
+      placeMarketOrder(qty, side, clOrdID),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
-  def placeLimitOrderSync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide): Try[Order] =
+  def placeLimitOrderSync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String]): Try[Order] =
     Await.ready(
-      placeLimitOrder(qty, price, isReduceOnly, side),
+      placeLimitOrder(qty, price, isReduceOnly, side, clOrdID=clOrdID),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 

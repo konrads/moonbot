@@ -20,7 +20,17 @@ case class CancelOrder(orderID: Seq[String], clOrdID: Seq[String], replyTo: Acto
 // Context
 object TradeLifecycle extends Enumeration {
   type PositionLifecycle = Value
-  val Waiting, IssuingNew, IssuingCancel, IssuingAmend = Value
+  val Waiting = Value                   // issued new order, awaiting confirmation of fill/postOnlyFailure(if in open)/(cancel if in close)
+  val IssuingNew = Value                // awaiting order creation confirmation
+  val IssuingOpenAmend = Value          // awaiting amend confirmation
+  val IssuingOpenCancel = Value         // awaiting cancellation confirmation
+  val IssuingTakeProfitCancel = Value   // awaiting takProfit cancel confirmation
+  val IssuingStoplossCancel = Value     // awaiting stoploss cancel confirmation
+}
+
+object Dir extends Enumeration {
+  type Dir = Value
+  val Long, Short = Value
 }
 
 sealed trait ActorCtx

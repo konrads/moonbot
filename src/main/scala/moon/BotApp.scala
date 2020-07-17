@@ -119,18 +119,15 @@ object BotApp extends App {
   val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig, parentConfig = conf.getObject(s"strategy").toConfig)
 
   if (runType == Backtest) {
-    val simParent = ExchangeSim.setup(
+    val sim = new ExchangeSim(
       dataDir=backtestDataDir.get,
       strategy=strategy,
-      flushSessionOnRestart=flushSessionOnRestart,
-      tradeQty=tradeQty, minTradeVol=minTradeVol,
-      openPositionExpiryMs=openPositionExpiryMs,
-      reqRetries=reqRetries, markupRetries=markupRetries,
-      takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin, postOnlyPriceAdj=postOnlyPriceAdj,
+      tradeQty=tradeQty,
+      takeProfitMargin=takeProfitMargin, stoplossMargin=stoplossMargin,
       metrics=Some(metrics),
-      openWithMarket=openWithMarket,
-      runType=runType)
-    ActorSystem(simParent, "sim-parent-actor")
+      openWithMarket=openWithMarket)
+    val finalCtx = sim.run()
+    log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl}")
   } else {
     implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
     val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)

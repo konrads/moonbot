@@ -20,7 +20,7 @@ assemblyMergeStrategy in assembly := {
 }
 
 libraryDependencies ++= {
-  val akkaVsn = "2.6.5"
+  val akkaVsn = "2.6.7"
   val akkaHttpVsn = "10.1.11"
   val scalaTestVsn = "3.1.1"
   Seq(

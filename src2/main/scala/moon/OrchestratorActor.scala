@@ -48,7 +48,7 @@ object OrchestratorActor {
           case (_, SendMetrics) =>
             val ledger2 = ctx.ledger.withMetrics(strategy = strategy)
             metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
-            loop(ctx.copy(ledger2))
+            loop(ctx.copy(ledger = ledger2))
           case (OpenPositionCtx(ledger, _, IssuingNew), RestEvent(Success(o: Order))) if o.clOrdID.isDefined =>
             val ledger2 = ledger.record(o)
             val order = ledger2.ledgerOrdersByClOrdID(o.clOrdID.get)
@@ -61,20 +61,20 @@ object OrchestratorActor {
                 val (clOrdID, resF) = positionOpener.openOrder(ctx.ledger)
                 resF onComplete (res => actorCtx.self ! RestEvent(res))
                 actorCtx.log.info(s"${positionOpener.desc}: re-issued order: clOrdID: $clOrdID")
-                loop(ctx.copy(ledger = ledger2, clOrdID = clOrdID))
+                loop(ctx.copy(clOrdID = clOrdID, ledger = ledger2))
               case Canceled =>
                 actorCtx.log.warn(s"${positionOpener.desc}: unexpected cancellation of orderID: ${order.fullOrdID}")
                 positionOpener.onExternalCancel(ledger2, order.clOrdID)
               case _ =>
                 if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionOpener.desc}: waiting $o in ${ctx.lifecycle}")
-                loop(ctx.copy(ledger = ledger2, clOrdID = order.clOrdID, lifecycle = Waiting))
+                loop(ctx.copy(lifecycle = Waiting, clOrdID = order.clOrdID, ledger = ledger2))
             }
           case (OpenPositionCtx(ledger, _, IssuingNew), RestEvent(Failure(_: RecoverableError))) =>
             val (clOrdID, resF) = positionOpener.openOrder(ledger)
             resF onComplete (res => actorCtx.self ! RestEvent(res)) // FIXME: can I re-issue, no guarantees original hasn't gone through...
             actorCtx.log.info(s"${positionOpener.desc}: re-issued order: clOrdID: $clOrdID")
             loop(ctx.copy(clOrdID = clOrdID))
-          case (OpenPositionCtx(ledger, clOrdID, IssuingCancel), RestEvent(Success(os: Orders))) if os.containsClOrdIDs(clOrdID) =>
+          case (OpenPositionCtx(ledger, clOrdID, IssuingOpenCancel), RestEvent(Success(os: Orders))) if os.containsClOrdIDs(clOrdID) =>
             val ledger2 = ledger.record(os)
             val order = ledger2.ledgerOrdersByClOrdID(ctx.clOrdID)
             order.ordStatus match {
@@ -86,12 +86,12 @@ object OrchestratorActor {
                 positionOpener.onFilled(ledger2, order.price)
               case _ =>
                 if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionOpener.desc}: unexpected $os in ${ctx.lifecycle}")
-                loop(ctx.copy(ledger = ledger2, lifecycle = Waiting)) // unexpected, ignore...
+                loop(ctx.copy(lifecycle = Waiting, ledger = ledger2)) // unexpected, ignore...
             }
-          case (OpenPositionCtx(_, clOrdID, IssuingCancel), RestEvent(Failure(_: RecoverableError))) =>
+          case (OpenPositionCtx(_, clOrdID, IssuingOpenCancel), RestEvent(Failure(_: RecoverableError))) =>
             positionOpener.cancelOrder(clOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
             Behaviors.same
-          case (OpenPositionCtx(ledger, clOrdID, IssuingAmend), RestEvent(Success(o: Order))) if o.clOrdID.contains(clOrdID) =>
+          case (OpenPositionCtx(ledger, clOrdID, IssuingOpenAmend), RestEvent(Success(o: Order))) if o.clOrdID.contains(clOrdID) =>
             val ledger2 = ledger.record(o)
             val order = ledger2.ledgerOrdersByClOrdID(clOrdID)
             order.ordStatus match {
@@ -102,15 +102,15 @@ object OrchestratorActor {
                 val (clOrdID2, resF) = positionOpener.openOrder(ctx.ledger)
                 resF onComplete (res => actorCtx.self ! RestEvent(res))
                 actorCtx.log.warn(s"${positionOpener.desc}: PostOnlyFailure (upon amend) for orderID: ${order.fullOrdID}, re-issuing...")
-                loop(ctx.copy(ledger = ledger2, clOrdID = clOrdID2, lifecycle = IssuingNew))
+                loop(ctx.copy(lifecycle = IssuingNew, clOrdID = clOrdID2, ledger = ledger2))
               case Canceled =>
                 actorCtx.log.warn(s"${positionOpener.desc}: unexpected cancellation of orderID: ${order.fullOrdID}")
                 positionOpener.onExternalCancel(ledger2, order.orderID)
               case other => // presumingly amended
                 if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionOpener.desc}: catchall: $other in lifecycle: ${ctx.lifecycle}, order: $o")
-                loop(ctx.copy(ledger = ledger2, lifecycle = Waiting))
+                loop(ctx.copy(lifecycle = Waiting, ledger = ledger2))
             }
-          case (OpenPositionCtx(ledger, clOrdID, IssuingAmend), RestEvent(Failure(_: RecoverableError))) =>
+          case (OpenPositionCtx(ledger, clOrdID, IssuingOpenAmend), RestEvent(Failure(_: RecoverableError))) =>
             val bestPrice = positionOpener.bestPrice(ledger)
             positionOpener.amendOrder(clOrdID, bestPrice) onComplete (res => actorCtx.self ! RestEvent(res))
             actorCtx.log.info(s"${positionOpener.desc}: re-issued amend to order: clOrdID: $clOrdID @ $bestPrice")
@@ -134,7 +134,7 @@ object OrchestratorActor {
               case (Some(order), _, true) if order.ordStatus == Filled =>
                 actorCtx.log.info(s"${positionOpener.desc}: filled orderID: ${order.fullOrdID} @ ${order.price}")
                 positionOpener.onFilled(ledger2, order.price)
-              case (Some(order), IssuingCancel, true) if order.ordStatus == Canceled =>
+              case (Some(order), IssuingOpenCancel, true) if order.ordStatus == Canceled =>
                 actorCtx.log.info(s"${positionOpener.desc}: canceled2 due to change of heart, orderID: ${order.orderID}")
                 positionOpener.onChangeOfHeart(ledger2)
               case (Some(order), _, true) if order.ordStatus == Canceled =>
@@ -149,14 +149,14 @@ object OrchestratorActor {
                 if (! shouldKeepGoing) {
                   actorCtx.log.info(s"${positionOpener.desc}: having a change of heart, cancelling ${order.fullOrdID}...")
                   positionOpener.cancelOrder(clOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
-                  loop(ctx.copy(ledger = ledger3, lifecycle = IssuingCancel))
+                  loop(ctx.copy(lifecycle = IssuingOpenCancel, ledger = ledger3))
                 } else {
                   // need to update best price?
                   val bestPrice = positionOpener.bestPrice(ledger3)
                   if (order.price != bestPrice) {
                     positionOpener.amendOrder(clOrdID, bestPrice) onComplete (res => actorCtx.self ! RestEvent(res))
                     actorCtx.log.info(s"${positionOpener.desc}: best price moved, will change: ${order.price} -> $bestPrice")
-                    loop(ctx.copy(ledger = ledger3, lifecycle = IssuingAmend))
+                    loop(ctx.copy(lifecycle = IssuingOpenAmend, ledger = ledger3))
                   } else {
                     if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionOpener.desc}: noop @ orderID: ${order.fullOrdID}, lifecycle: $lifecycle, data: $data")
                     loop(ctx.copy(ledger = ledger3))
@@ -183,7 +183,7 @@ object OrchestratorActor {
             case (_, SendMetrics) =>
               val ledger2 = ctx.ledger.withMetrics(strategy = strategy)
               metrics.foreach(_.gauge(ledger2.ledgerMetrics.metrics))
-              loop(ctx.copy(ledger2))
+              loop(ctx.copy(ledger = ledger2))
             case (ClosePositionCtx(ledger, takeProfitClOrdID, stoplossClOrdID, lifecycle), RestEvent(Success(os: Orders))) =>
               val ledger2 = ledger.record(os)
               val takeProfitOrder = ledger2.ledgerOrdersByClOrdID.get(takeProfitClOrdID)
@@ -204,14 +204,14 @@ object OrchestratorActor {
                 case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == PostOnlyFailure || sOrd.ordStatus == PostOnlyFailure =>
                   // FIXME: not dealing with PostOnlyFailure, in presumption that margins will always be large enough. Otherwise, will need IssueAmend cycle
                   throw new Exception(s"PostOnlyFailure on closing position... need to deal?\ntakeProfitOrder: $takeProfitOrder\nstoplossOrder = $stoplossOrder")
-                case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == Filled && lifecycle != IssuingCancel =>
+                case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == Filled && lifecycle != IssuingOpenCancel =>
                   positionCloser.cancelOrders(sOrd.clOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
                   actorCtx.log.info(s"${positionCloser.desc}: filled takeProfit: ${tOrd.fullOrdID} straight away, issuing cancel on stoploss: ${sOrd.fullOrdID}")
-                  loop(ctx.copy(ledger = ledger2, lifecycle = IssuingCancel))
-                case (Some(tOrd), Some(sOrd)) if sOrd.ordStatus == Filled && lifecycle != IssuingCancel =>
+                  loop(ctx.copy(lifecycle = IssuingOpenCancel, ledger = ledger2))
+                case (Some(tOrd), Some(sOrd)) if sOrd.ordStatus == Filled && lifecycle != IssuingOpenCancel =>
                   positionCloser.cancelOrders(tOrd.clOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
                   actorCtx.log.info(s"${positionCloser.desc}: filled stoploss: ${sOrd.fullOrdID} straight away, issuing cancel on takeProfit: ${tOrd.fullOrdID}")
-                  loop(ctx.copy(ledger = ledger2, lifecycle = IssuingCancel))
+                  loop(ctx.copy(lifecycle = IssuingOpenCancel, ledger = ledger2))
                 case (Some(_), Some(_)) =>
                   // some other combinations of states - keep going
                   loop(ctx.copy(ledger = ledger2))
@@ -222,7 +222,7 @@ object OrchestratorActor {
             case (_, RestEvent(Success(other))) =>
               if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionCloser.desc}: unexpected RestEvent, recording: $other")
               loop(ctx.copy(ledger = ctx.ledger.record(other)))
-            case (ClosePositionCtx(_, takeProfitClOrdID, stoplossClOrdID, IssuingCancel), RestEvent(Failure(_: RecoverableError))) =>
+            case (ClosePositionCtx(_, takeProfitClOrdID, stoplossClOrdID, IssuingOpenCancel), RestEvent(Failure(_: RecoverableError))) =>
               positionCloser.cancelOrders(takeProfitClOrdID, stoplossClOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
               actorCtx.log.warn(s"${positionCloser.desc}: re-issuing cancel on takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID")
               Behaviors.same
@@ -230,7 +230,7 @@ object OrchestratorActor {
               val (takeProfitClOrdID, stoplossClOrdID, resF) = positionCloser.openOrders(ledger)
               resF onComplete (res => actorCtx.self ! RestEvent(res))
               actorCtx.log.info(s"${positionCloser.desc}: re-issued orders: takeProfitClOrdID: $takeProfitClOrdID, stoplossClOrdID: $stoplossClOrdID, due to err: $exc")
-              loop(ctx.copy(ledger, takeProfitClOrdID, stoplossClOrdID))
+              loop(ctx.copy(takeProfitClOrdID = takeProfitClOrdID, stoplossClOrdID = stoplossClOrdID, ledger = ledger))
 
             case (_, RestEvent(Failure(_: IgnorableError))) => Behaviors.same
             case (ClosePositionCtx(ledger, takeProfitClOrdID, stoplossClOrdID, lifecycle), RestEvent(Failure(exc))) => Behaviors.same
@@ -258,14 +258,14 @@ object OrchestratorActor {
                 case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == PostOnlyFailure || sOrd.ordStatus == PostOnlyFailure =>
                   // FIXME: not dealing with PostOnlyFailure, in presumption that margins will always be large enough. Otherwise, will need IssueAmend cycle
                   throw new Exception(s"PostOnlyFailure on closing position... need to deal?\ntakeProfitOrder: $takeProfitOrder\nstoplossOrder = $stoplossOrder")
-                case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == Filled && lifecycle != IssuingCancel =>
+                case (Some(tOrd), Some(sOrd)) if tOrd.ordStatus == Filled && lifecycle != IssuingOpenCancel =>
                   positionCloser.cancelOrders(sOrd.clOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
                   actorCtx.log.info(s"${positionCloser.desc}: filled takeProfit: ${tOrd.fullOrdID}, issuing cancel on stoploss: ${sOrd.fullOrdID}")
-                  loop(ctx.copy(ledger = ledger2, lifecycle = IssuingCancel))
-                case (Some(tOrd), Some(sOrd)) if sOrd.ordStatus == Filled && lifecycle != IssuingCancel =>
+                  loop(ctx.copy(lifecycle = IssuingOpenCancel, ledger = ledger2))
+                case (Some(tOrd), Some(sOrd)) if sOrd.ordStatus == Filled && lifecycle != IssuingOpenCancel =>
                   positionCloser.cancelOrders(tOrd.clOrdID) onComplete (res => actorCtx.self ! RestEvent(res))
                   actorCtx.log.info(s"${positionCloser.desc}: filled stoploss: ${sOrd.fullOrdID}, issuing cancel on takeProfit: ${tOrd.fullOrdID}")
-                  loop(ctx.copy(ledger = ledger2, lifecycle = IssuingCancel))
+                  loop(ctx.copy(lifecycle = IssuingOpenCancel, ledger = ledger2))
                 case (Some(tOrd), Some(sOrd)) =>
                   // some other combinations of states - keep going
                   if (actorCtx.log.isDebugEnabled) actorCtx.log.debug(s"${positionCloser.desc}: new state of takeProfitOrder: $tOrd, stoplossOrder: $sOrd, in lifecycle: $lifecycle")
