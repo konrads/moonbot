@@ -20,6 +20,7 @@ case class IdleCtx(ledger: Ledger) extends Ctx { def withLedger(l: Ledger): Idle
 case class OpenPositionCtx(dir: Dir.Value, lifecycle: TradeLifecycle.Value = IssuingNew, clOrdID: String = null, ledger: Ledger) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
 case class ClosePositionCtx(dir: Dir.Value, lifecycle: TradeLifecycle.Value = IssuingNew, openPrice: Double, takeProfitClOrdID: String, stoplossClOrdID: String, ledger: Ledger) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
 
+// External side effect, ie. communication with grafana/RestGateway
 sealed trait SideEffect
 case class PublishMetrics(gauges: Map[String, Any], now: Option[Long]) extends SideEffect
 case class CancelOrder(clOrdID: String) extends SideEffect
