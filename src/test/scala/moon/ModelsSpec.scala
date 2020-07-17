@@ -1,7 +1,7 @@
 package moon
 
-import org.scalatest.{FlatSpec, Inside}
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.{FlatSpec, Inside}
 
 
 object ModelsSpec {

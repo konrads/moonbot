@@ -2,10 +2,10 @@ package moon
 
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.Logger
-import moon.talib._
+import moon.OrderSide._
 import moon.Sentiment._
 import moon.TickDirection._
-import moon.OrderSide._
+import moon.talib._
 
 
 case class StrategyResult(sentiment: Sentiment.Value, metrics: Map[String, Double], ledger: Ledger)

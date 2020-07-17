@@ -2,14 +2,14 @@ package moon
 
 import java.io.{File, FileWriter}
 
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.rogach.scallop._
-import play.api.libs.json.{JsError, JsResult, JsSuccess}
-import org.slf4j.LoggerFactory
 import moon.Sentiment._
+import org.rogach.scallop._
+import org.slf4j.LoggerFactory
+import play.api.libs.json.{JsError, JsResult, JsSuccess}
 
 import scala.util.{Failure, Success}
 

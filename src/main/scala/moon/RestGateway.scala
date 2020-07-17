@@ -9,8 +9,8 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.util.ByteString
 import com.typesafe.scalalogging.Logger
-import play.api.libs.json.{JsError, JsSuccess, Json}
 import moon.OrderSide.OrderSide
+import play.api.libs.json.{JsError, JsSuccess, Json}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}

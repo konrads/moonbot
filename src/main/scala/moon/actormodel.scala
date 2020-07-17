@@ -1,6 +1,6 @@
 package moon
 
-import akka.actor.typed.ActorRef
+import moon.TradeLifecycle.IssuingNew
 
 import scala.util.Try
 
@@ -10,31 +10,19 @@ case class WsEvent(data: WsModel) extends ActorEvent
 case class RestEvent(res: Try[RestModel]) extends ActorEvent
 case class SendMetrics(nowMs: Option[Long]) extends ActorEvent
 
-sealed trait SimEvent
-case class EventProcessed() extends SimEvent
-case class BulkOrders(orderReqs: OrderReqs, replyTo: ActorRef[Orders]) extends SimEvent
-case class SingleOrder(orderReq: OrderReq, replyTo: ActorRef[Order]) extends SimEvent
-case class AmendOrder(orderID: Option[String], origClOrdID: Option[String], price: Double, replyTo: ActorRef[Order]) extends SimEvent
-case class CancelOrder(orderID: Seq[String], clOrdID: Seq[String], replyTo: ActorRef[Orders]) extends SimEvent
-
 // Context
-object TradeLifecycle extends Enumeration {
-  type PositionLifecycle = Value
-  val Waiting = Value                   // issued new order, awaiting confirmation of fill/postOnlyFailure(if in open)/(cancel if in close)
-  val IssuingNew = Value                // awaiting order creation confirmation
-  val IssuingOpenAmend = Value          // awaiting amend confirmation
-  val IssuingOpenCancel = Value         // awaiting cancellation confirmation
-  val IssuingTakeProfitCancel = Value   // awaiting takProfit cancel confirmation
-  val IssuingStoplossCancel = Value     // awaiting stoploss cancel confirmation
+sealed trait Ctx {
+  val ledger: Ledger
+  def withLedger(l: Ledger): Ctx
 }
+case class InitCtx(ledger: Ledger) extends Ctx { def withLedger(l: Ledger): InitCtx = copy(ledger = l) }
+case class IdleCtx(ledger: Ledger) extends Ctx { def withLedger(l: Ledger): IdleCtx = copy(ledger = l) }
+case class OpenPositionCtx(dir: Dir.Value, lifecycle: TradeLifecycle.Value = IssuingNew, clOrdID: String = null, ledger: Ledger) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
+case class ClosePositionCtx(dir: Dir.Value, lifecycle: TradeLifecycle.Value = IssuingNew, openPrice: Double, takeProfitClOrdID: String, stoplossClOrdID: String, ledger: Ledger) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
 
-object Dir extends Enumeration {
-  type Dir = Value
-  val Long, Short = Value
-}
-
-sealed trait ActorCtx
-case class InitCtx(ledger: Ledger) extends ActorCtx
-case class IdleCtx(ledger: Ledger) extends ActorCtx
-case class OpenPositionCtx(ledger: Ledger, clOrdID: String=null, lifecycle: TradeLifecycle.Value=TradeLifecycle.Waiting) extends ActorCtx
-case class ClosePositionCtx(ledger: Ledger, takeProfitClOrdID: String, stoplossClOrdID: String, lifecycle: TradeLifecycle.Value=TradeLifecycle.Waiting) extends ActorCtx
+sealed trait SideEffect
+case class PublishMetrics(gauges: Map[String, Any], now: Option[Long]) extends SideEffect
+case class CancelOrder(clOrdID: String) extends SideEffect
+case class AmendOrder(clOrdID: String, price: Double) extends SideEffect
+case class OpenInitOrder(side: OrderSide.Value, ordType: OrderType.Value, clOrdID: String, qty: Double, price: Option[Double] = None) extends SideEffect
+case class OpenTakeProfitStoplossOrders(side: OrderSide.Value, qty: Double, takeProfitClOrdID: String, takeProfitLimit: Double, stoplossClOrdID: String, stoplossMargin: Option[Double] = None, stoplossPeg: Option[Double] = None) extends SideEffect

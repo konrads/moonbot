@@ -1,12 +1,12 @@
 package moon
 
-import com.typesafe.config.{ConfigFactory, ConfigObject}
-import org.scalatest._
-import org.scalatest.matchers.should._
-import play.api.libs.json.JsSuccess
+import com.typesafe.config.ConfigFactory
 import moon.ModelsSpec._
 import moon.OrderSide._
 import moon.OrderType._
+import org.scalatest._
+import org.scalatest.matchers.should._
+import play.api.libs.json.JsSuccess
 
 import scala.collection.SortedSet
 

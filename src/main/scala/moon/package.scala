@@ -48,6 +48,12 @@ package object moon {
     val Live, Dry, Backtest = Value
   }
 
+  object Dir extends Enumeration {
+    type Dir = Value
+    val LongDir = Value("Long")
+    val ShortDir = Value("Short")
+  }
+
   // adding "value" as per:
   // https://stackoverflow.com/questions/42275983/scala-how-to-define-an-enum-with-extra-attributes
   object Sentiment extends Enumeration {
@@ -56,6 +62,16 @@ package object moon {
     val Bear = Value(-1, "Bear")
     val Neutral = Value(0, "Neutral")
     implicit val aFormat = Json.formatEnum(this)
+  }
+
+  object TradeLifecycle extends Enumeration {
+    type TradeLifecycle = Value
+    val Waiting = Value                   // issued new order, awaiting confirmation of fill/postOnlyFailure(if in open)/(cancel if in close)
+    val IssuingNew = Value                // awaiting order creation confirmation
+    val IssuingOpenAmend = Value          // awaiting amend confirmation
+    val IssuingOpenCancel = Value         // awaiting cancellation confirmation
+    val IssuingTakeProfitCancel = Value   // awaiting takProfit cancel confirmation
+    val IssuingStoplossCancel = Value     // awaiting stoploss cancel confirmation
   }
 
   val dateFormat = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ").withZone(DateTimeZone.UTC)
@@ -88,7 +104,7 @@ package object moon {
     BigDecimal(x).setScale(10, BigDecimal.RoundingMode.HALF_UP).toDouble
 
 
-//  var uuidCnt = 0;  def uuid: String = synchronized { uuidCnt += 1; "%05d".format(uuidCnt) }
+  // var uuidCnt = 0;  def uuid: String = synchronized { uuidCnt += 1; "%05d".format(uuidCnt) }
   def uuid: String =
     java.util.UUID.randomUUID().toString
 

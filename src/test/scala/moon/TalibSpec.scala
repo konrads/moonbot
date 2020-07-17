@@ -1,9 +1,9 @@
 package moon
 
-import org.scalatest._
-import org.scalatest.matchers.should._
 import moon.talib._
 import org.joda.time.DateTime
+import org.scalatest._
+import org.scalatest.matchers.should._
 
 class TalibSpec extends FlatSpec with Matchers with Inside {
   "TA-LIB" should "work with sma" in {

@@ -1,8 +1,7 @@
 package moon
 
 import com.github.nscala_time.time.Imports._
-import moon.OrderSide.OrderSide
-import moon.OrderSide._
+import moon.OrderSide.{OrderSide, _}
 import moon.OrderStatus._
 import moon.OrderType._
 import org.joda.time.DateTime

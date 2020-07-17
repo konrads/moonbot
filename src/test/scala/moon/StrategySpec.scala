@@ -1,9 +1,9 @@
 package moon
 
 import com.typesafe.config.ConfigFactory
+import moon.Sentiment._
 import org.scalatest._
 import org.scalatest.matchers.should._
-import moon.Sentiment._
 
 
 class StrategySpec extends FlatSpec with Matchers with Inside {

@@ -2,7 +2,7 @@ package moon
 
 import java.io.File
 
-import moon.OrchestratorActor2._
+import moon.OrchestratorActor._
 import play.api.libs.json.{JsError, JsSuccess}
 
 import scala.io.Source
@@ -55,7 +55,7 @@ class ExchangeSim(
       }
     }
 
-    val dslLoopFun = OrchestratorActor2.asDsl(
+    val dslLoopFun = OrchestratorActor.asDsl(
       strategy,
       tradeQty,
       takeProfitMargin, stoplossMargin,
@@ -66,14 +66,14 @@ class ExchangeSim(
       eventBacklog match {
         case Nil => (ctx, exchangeCtx)
         case head :: tail =>
-          val (ctx2, effectOpt) = dslLoopFun(ctx, head)
+          val (ctx2, effectOpt) = dslLoopFun(ctx, head, log)
           val (exchangeCtx2, newEvents) = effectOpt.map(e => paperExchangeEffectHandler(exchangeCtx, e, metrics)).getOrElse((exchangeCtx, Nil))
           val eventBacklog2 = tail ++ newEvents
           simLoop(ctx2, exchangeCtx2, eventBacklog2)
       }
 
     val ctx0: Ctx = InitCtx(Ledger())
-    val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((ctx0, ExchangeCtx())) {
+    val (finalCtx, _finalExchangeCtx) = eventIter.foldLeft((ctx0, ExchangeCtx())) {
       case ((ctx, exchangeCtx), event) => simLoop(ctx, exchangeCtx, Seq(WsEvent(event)))
     }
     finalCtx
