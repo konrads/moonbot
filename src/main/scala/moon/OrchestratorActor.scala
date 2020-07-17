@@ -386,7 +386,7 @@ object OrchestratorActor {
           Behaviors.receiveMessage { event =>
             val (ctx2, effect) = behaviorDsl(ctx, event, actorCtx.log)
             val (exchangeCtx2, newEvents) = effect.map { e =>
-              paperExchangeEffectHandler(exchangeCtx, e, metrics, actorCtx.log, publishMetrics=false)
+              paperExchangeEffectHandler(exchangeCtx, e, metrics, actorCtx.log)
             }.getOrElse((exchangeCtx, Nil))
 
             newEvents.foreach(e => actorCtx.self ! e)
@@ -399,9 +399,18 @@ object OrchestratorActor {
     }
   }
 
-  case class ExchangeCtx(orders: Seq[Order]=Vector.empty, bid: Double=0, ask: Double=0, timestampMs: Long=0, lastMetricsMs: Long=0, lastCtx: Ctx=null)
+  case class ExchangeCtx(orders: Seq[Order]=Vector.empty, byClOrdIDMaxAsk: Map[String, Double]=Map.empty, byClOrdIDMinBid: Map[String, Double]=Map.empty, bid: Double=0, ask: Double=0)
 
-  def paperExchangeEffectHandler(exchangeCtx: ExchangeCtx, effect: SideEffect, metrics: Option[Metrics], log: org.slf4j.Logger, publishMetrics: Boolean): (ExchangeCtx, Seq[ActorEvent]) = ???
+  def paperExchangeEffectHandler(exchangeCtx: ExchangeCtx, effect: SideEffect, metrics: Option[Metrics], log: org.slf4j.Logger): (ExchangeCtx, Seq[ActorEvent]) = {
+    effect match {
+      case PublishMetrics(gauges, now) => metrics.foreach(_.gauge(gauges, now))
+      case CancelOrder(clOrdID) => ???
+      case AmendOrder(clOrdID, price) => ???
+      case OpenInitOrder(side, ordType, clOrdID, qty, price) => ???
+      case OpenTakeProfitStoplossOrders(side, qty, takeProfitClOrdID, takeProfitLimit, stoplossClOrdID, stoplossMargin, stoplossPeg) => ???
+    }
+    ???
+  }
 }
 
 case class IrrecoverableError(msg: String, cause: Throwable) extends Exception(msg, cause)
