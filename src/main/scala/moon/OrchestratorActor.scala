@@ -8,6 +8,7 @@ import moon.OrderStatus._
 import moon.OrderType._
 import moon.Sentiment._
 import moon.TradeLifecycle._
+import org.joda.time.DateTime
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -384,13 +385,7 @@ object OrchestratorActor {
       Behaviors.setup { actorCtx =>
         def loop(ctx: Ctx, exchangeCtx: ExchangeCtx): Behavior[ActorEvent] =
           Behaviors.receiveMessage { event =>
-            val (ctx2, effect) = behaviorDsl(ctx, event, actorCtx.log)
-            val (exchangeCtx2, newEvents) = effect.map { e =>
-              paperExchangeEffectHandler(exchangeCtx, e, metrics, actorCtx.log)
-            }.getOrElse((exchangeCtx, Nil))
-
-            newEvents.foreach(e => actorCtx.self ! e)
-
+            val (ctx2, exchangeCtx2) = paperExchangeSideEffectHandler(behaviorDsl, ctx, exchangeCtx, metrics, actorCtx.log, false, event)
             loop(ctx2, exchangeCtx2)
           }
 
@@ -399,18 +394,160 @@ object OrchestratorActor {
     }
   }
 
-  case class ExchangeCtx(orders: Seq[Order]=Vector.empty, byClOrdIDMaxAsk: Map[String, Double]=Map.empty, byClOrdIDMinBid: Map[String, Double]=Map.empty, bid: Double=0, ask: Double=0)
+  case class OrderInfo(order: Order, cappedHigh: Option[Double]=None, cappedLow: Option[Double]=None, peg: Option[Double]=None)
+  case class ExchangeCtx(orders: Map[String, OrderInfo]=Map.empty, bid: Double=0, ask: Double=0, nextMetricsTs: Long=0, lastTs: Long=0)
 
-  def paperExchangeEffectHandler(exchangeCtx: ExchangeCtx, effect: SideEffect, metrics: Option[Metrics], log: org.slf4j.Logger): (ExchangeCtx, Seq[ActorEvent]) = {
-    effect match {
-      case PublishMetrics(gauges, now) => metrics.foreach(_.gauge(gauges, now))
-      case CancelOrder(clOrdID) => ???
-      case AmendOrder(clOrdID, price) => ???
-      case OpenInitOrder(side, ordType, clOrdID, qty, price) => ???
-      case OpenTakeProfitStoplossOrders(side, qty, takeProfitClOrdID, takeProfitLimit, stoplossClOrdID, stoplossMargin, stoplossPeg) => ???
+  def paperExchangeSideEffectHandler(behaviorDsl: (Ctx, ActorEvent, org.slf4j.Logger) => (Ctx, Option[SideEffect]), ctx2: Ctx, exchangeCtx2: ExchangeCtx, metrics: Option[Metrics], log: org.slf4j.Logger, triggerMetrics: Boolean, events: ActorEvent*): (Ctx, ExchangeCtx) = {
+    val ev :: evs = events
+    val (eCtx, preEvents) = paperExchangePreHandler(exchangeCtx2, ev, log, triggerMetrics)
+    val (ctx3, effects) = behaviorDsl(ctx2, ev, log)
+    val (exchangeCtx3, postEvents) = effects.foldLeft((eCtx, Seq.empty[ActorEvent])) {
+      case ((eCtx, events), eff) =>
+        val (eCtx2, evs) = paperExchangePostHandler(eCtx, eff, metrics, log)
+        (eCtx2, events ++ evs)
     }
-    ???
+    val events2 = preEvents ++ evs ++ postEvents
+    if (events2.nonEmpty)
+      (ctx3, exchangeCtx3)
+    else
+      paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx3, metrics, log, triggerMetrics, events2:_*)
   }
+
+  def paperExchangePreHandler(exchangeCtx: ExchangeCtx, event: ActorEvent, log: org.slf4j.Logger, triggerMetrics: Boolean): (ExchangeCtx, Seq[ActorEvent]) = {
+    // handle timestamp based events, ie. SendMetrics
+    val timestampMsOpt = (event match {
+      case x:Trade            => Some(x.data.head.timestamp)
+      case x:OrderBookSummary => Some(x.timestamp)
+      case x:OrderBook        => Some(x.data.head.timestamp)
+      case x:Info             => Some(x.timestamp)
+      case x:Funding          => Some(x.data.head.timestamp)
+      case x:UpsertOrder      => Some(x.data.head.timestamp)
+      case _                  => None
+    }).map(_.getMillis)
+
+    val (exchangeCtx2, events2) = (triggerMetrics, timestampMsOpt) match {
+      case (true, Some(ts)) if ts > exchangeCtx.nextMetricsTs =>
+        val currMetricsTs = if (exchangeCtx.nextMetricsTs > 0)
+          exchangeCtx.nextMetricsTs
+        else
+          ts
+        (exchangeCtx.copy(nextMetricsTs = currMetricsTs + 60000, lastTs=ts), Seq(SendMetrics(Some(currMetricsTs))))
+      case (_, Some(ts)) =>
+        (exchangeCtx.copy(lastTs=ts), Nil)
+      case _ =>
+        (exchangeCtx, Nil)
+    }
+
+    // handle price based events, ie. fills
+    val (askOpt, bidOpt) = event match {
+      case x:Trade =>
+        val firstTrade = x.data.head
+        val (ask, bid) = if (firstTrade.side == Buy)
+          (firstTrade.price, firstTrade.price - 0.5)
+        else
+          (firstTrade.price + 0.5, firstTrade.price)
+        (Some(ask), Some(bid))
+      case x:OrderBookSummary => (Some(x.ask), Some(x.bid))
+      case x:OrderBook        => (Some(x.summary.ask), Some(x.summary.bid))
+      case _                  => (None, None)
+    }
+
+    val exchangeCtx3 = bidOpt match {
+      case Some(bid) =>
+        val orders2 = exchangeCtx2.orders map {
+          case (k, v@OrderInfo(_, Some(cappedHigh), _, _)) if bid > cappedHigh => k -> v.copy(cappedHigh=Some(bid))
+          case kv => kv
+        }
+        exchangeCtx2.copy(orders=orders2)
+      case None => exchangeCtx2
+    }
+
+    val exchangeCtx4 = askOpt match {
+      case Some(ask) =>
+        val orders3 = exchangeCtx3.orders map {
+          case (k, v@OrderInfo(_, _, Some(cappedLow), _)) if ask < cappedLow => k -> v.copy(cappedHigh=Some(ask))
+          case kv => kv
+        }
+        exchangeCtx3.copy(orders=orders3)
+      case None => exchangeCtx3
+    }
+
+    val (exchangeCtx5, events3) = (askOpt, bidOpt) match {
+      case (Some(ask), Some(bid)) =>
+        val filledOrders = exchangeCtx4.orders.values.map(oi => maybeFill(oi, ask, bid)).collect { case Some(oi) => oi }
+        val upsertOrders = UpsertOrder(Some("update"), filledOrders.map(_.order).map(o => OrderData(orderID=o.orderID, clOrdID=o.clOrdID, orderQty=Some(o.orderQty), price=o.price, side=Some(o.side), ordStatus=o.ordStatus, ordType=Some(o.ordType), timestamp=o.timestamp)).toSeq)
+        val exchangeCtx3 = exchangeCtx4.copy(ask=ask, bid=bid, orders=exchangeCtx2.orders ++ filledOrders.map(x => x.order.clOrdID.get -> x))
+        (exchangeCtx3, Seq(WsEvent(upsertOrders)))
+      case _ => (exchangeCtx2, Nil)
+    }
+    (exchangeCtx5, events2 ++ events3)
+  }
+
+  def paperExchangePostHandler(exchangeCtx: ExchangeCtx, effect: SideEffect, metrics: Option[Metrics], log: org.slf4j.Logger): (ExchangeCtx, Seq[ActorEvent]) = {
+    effect match {
+      case PublishMetrics(gauges, now) =>
+        metrics.foreach(_.gauge(gauges, now))
+        (exchangeCtx, Nil)
+      case CancelOrder(clOrdID) =>
+        val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders.map {
+          case (k, v) if k == clOrdID && v.order.ordStatus.exists(s => s != Canceled && s != Filled) =>
+            val v2 = v.copy(order=v.order.copy(ordStatus=Some(Canceled)))
+            k -> v2
+          case other => other
+        })
+        val event = RestEvent(Success(Orders(Seq(exchangeCtx2.orders(clOrdID).order))))
+        (exchangeCtx2, Seq(event))
+      case AmendOrder(clOrdID, price) =>
+        val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders.map {
+          case (k, v) if k == clOrdID && v.order.ordStatus.exists(s => s != Canceled && s != Filled) =>
+            val v2 = v.copy(order=v.order.copy(price=Some(price)))
+            val v3 = maybeFill(v2, exchangeCtx.ask, exchangeCtx.bid).getOrElse(v2)
+            k -> v3
+          case other => other
+        })
+        val event = RestEvent(Success(exchangeCtx2.orders(clOrdID).order))
+        (exchangeCtx2, Seq(event))
+      case OpenInitOrder(side, ordType, clOrdID, qty, price) =>
+        val o = Order(orderID=uuid, clOrdID=Some(clOrdID), orderQty=qty, price=price, side=side, ordType=ordType, symbol="...", timestamp=new DateTime(exchangeCtx.lastTs))
+        val oi = OrderInfo(o, None, None, None)
+        val oi2 = maybeFill(oi, exchangeCtx.ask, exchangeCtx.bid).getOrElse(oi)
+        val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders + (clOrdID -> oi2))
+        val event = RestEvent(Success(oi2.order))
+        (exchangeCtx2, Seq(event))
+      case OpenTakeProfitStoplossOrders(side, qty, takeProfitClOrdID, takeProfitLimit, stoplossClOrdID, stoplossMargin, stoplossPeg) =>
+        val toi = OrderInfo(
+          Order(orderID=uuid, clOrdID=Some(takeProfitClOrdID), orderQty=qty, price=Some(takeProfitLimit), side=side, ordType=Limit, symbol="...", timestamp=new DateTime(exchangeCtx.lastTs)),
+        )
+        val soi = if (stoplossMargin.isDefined)
+          OrderInfo(
+            Order(orderID=uuid, clOrdID=Some(stoplossClOrdID), orderQty=qty, price=stoplossMargin, side=side, ordType=Stop, symbol="...", timestamp=new DateTime(exchangeCtx.lastTs)),
+          )
+        else
+          OrderInfo(
+            Order(orderID=uuid, clOrdID=Some(stoplossClOrdID), orderQty=qty, price=None, side=side, ordType=Stop, symbol="...", timestamp=new DateTime(exchangeCtx.lastTs)),
+            cappedHigh = if (side == Sell) Some(exchangeCtx.ask) else None,
+            cappedLow = if (side == Buy) Some(exchangeCtx.bid) else None,
+            peg = stoplossPeg.map(math.abs)
+          )
+        val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders ++ Map(toi.order.clOrdID.get -> toi, soi.order.clOrdID.get -> soi))
+        val event = RestEvent(Success(Orders(Seq(toi.order, soi.order))))
+        (exchangeCtx2, Seq(event))
+    }
+  }
+
+  def maybeFill(oi: OrderInfo, ask: Double, bid: Double): Option[OrderInfo] = oi match {
+    case OrderInfo(order, _, _, _) if order.ordStatus.exists(x => x == Filled || x == Canceled) => None
+    case OrderInfo(order, None, None, None) if order.ordType == Market => Some(oi.copy(order=order.copy(ordStatus=Some(Filled), price=Some(if (order.side == Buy) ask else bid))))
+    case OrderInfo(order, None, None, None) if order.ordType == Limit && order.side == Buy  && order.price.exists(_ >= ask) => Some(oi.copy(order=order.copy(ordStatus=Some(Filled))))
+    case OrderInfo(order, None, None, None) if order.ordType == Limit && order.side == Sell && order.price.exists(_ <= bid) => Some(oi.copy(order=order.copy(ordStatus=Some(Filled))))
+    case OrderInfo(order, None, None, None) if order.ordType == Stop  && order.side == Buy  && order.price.exists(_ <= ask) => Some(oi.copy(order=order.copy(ordStatus=Some(Filled))))
+    case OrderInfo(order, None, None, None) if order.ordType == Stop  && order.side == Sell && order.price.exists(_ >= bid) => Some(oi.copy(order=order.copy(ordStatus=Some(Filled))))
+    case OrderInfo(order, None, Some(cappedLow),  Some(peg)) if cappedLow + peg >= ask => Some(oi.copy(order=order.copy(ordStatus=Some(Filled), price=Some(cappedLow + peg))))    // buy trailing stoploss
+    case OrderInfo(order, Some(cappedHigh), None, Some(peg)) if cappedHigh - peg >= bid => Some(oi.copy(order=order.copy(ordStatus=Some(Filled), price=Some(cappedHigh - peg))))  // sell trailing stoploss
+    case _ => ???
+
+  }
+
 }
 
 case class IrrecoverableError(msg: String, cause: Throwable) extends Exception(msg, cause)

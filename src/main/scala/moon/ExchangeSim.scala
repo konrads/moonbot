@@ -55,43 +55,16 @@ class ExchangeSim(
       }
     }
 
-    val dslLoopFun = OrchestratorActor.asDsl(
+    val behaviorDsl = OrchestratorActor.asDsl(
       strategy,
       tradeQty,
       takeProfitMargin, stoplossMargin,
       openWithMarket,
       useTrailingStoploss)
 
-    def simLoop(ctx: Ctx, exchangeCtx: ExchangeCtx, eventBacklog: Seq[ActorEvent]): (Ctx, ExchangeCtx) =
-      eventBacklog match {
-        case Nil => (ctx, exchangeCtx)
-        case head :: tail =>
-          val (ctx2, effectOpt) = dslLoopFun(ctx, head, log)
-          val (exchangeCtx2, newEvents) = effectOpt.map(e => paperExchangeEffectHandler(exchangeCtx, e, metrics, log)).getOrElse((exchangeCtx, Nil))
-          val eventBacklog2 = tail ++ newEvents
-          simLoop(ctx2, exchangeCtx2, eventBacklog2)
-      }
-
-    val ctx0: Ctx = InitCtx(Ledger())
-    val (finalCtx, _finalExchangeCtx, _nextSendMetrics) = eventIter.foldLeft((ctx0, ExchangeCtx(), 0l)) {
-      case ((ctx, exchangeCtx, nextSendMetrics), event) =>
-        val timestampOpt = (event match {
-          case x:Trade            => Some(x.data.head.timestamp)
-          case x:OrderBookSummary => Some(x.timestamp)
-          case x:OrderBook        => Some(x.data.head.timestamp)
-          case x:Info             => Some(x.timestamp)
-          case x:Funding          => Some(x.data.head.timestamp)
-          case x:UpsertOrder      => Some(x.data.head.timestamp)
-          case _                  => None
-        }).map(_.getMillis)
-        val canTriggerMetrics = timestampOpt.exists(_ > nextSendMetrics)
-        val eventBacklog = if (canTriggerMetrics)
-          Seq(SendMetrics(Some(nextSendMetrics)), WsEvent(event))
-        else
-          Seq(WsEvent(event))
-        val nextSendMetrics2 = if (canTriggerMetrics) nextSendMetrics + 60*1000 else nextSendMetrics
-        val (ctx2, exchangeCtx2) = simLoop(ctx, exchangeCtx, eventBacklog)
-        (ctx2, exchangeCtx2, nextSendMetrics2)
+    val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((InitCtx(Ledger()):Ctx, ExchangeCtx())) {
+      case ((ctx2, exchangeCtx2), event) =>
+        paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, WsEvent(event))
     }
     finalCtx
   }
