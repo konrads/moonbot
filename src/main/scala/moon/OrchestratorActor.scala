@@ -452,6 +452,7 @@ object OrchestratorActor {
       case _                  => (None, None)
     }
 
+    // update trailing stop sells
     val exchangeCtx3 = bidOpt match {
       case Some(bid) =>
         val orders2 = exchangeCtx2.orders map {
@@ -462,6 +463,7 @@ object OrchestratorActor {
       case None => exchangeCtx2
     }
 
+    // update trailing stop buys
     val exchangeCtx4 = askOpt match {
       case Some(ask) =>
         val orders3 = exchangeCtx3.orders map {
@@ -476,9 +478,9 @@ object OrchestratorActor {
       case (Some(ask), Some(bid)) =>
         val filledOrders = exchangeCtx4.orders.values.map(oi => maybeFill(oi, ask, bid)).collect { case Some(oi) => oi }
         val upsertOrders = UpsertOrder(Some("update"), filledOrders.map(_.order).map(o => OrderData(orderID=o.orderID, clOrdID=o.clOrdID, orderQty=Some(o.orderQty), price=o.price, side=Some(o.side), ordStatus=o.ordStatus, ordType=Some(o.ordType), timestamp=o.timestamp)).toSeq)
-        val exchangeCtx3 = exchangeCtx4.copy(ask=ask, bid=bid, orders=exchangeCtx2.orders ++ filledOrders.map(x => x.order.clOrdID.get -> x))
-        (exchangeCtx3, Seq(WsEvent(upsertOrders)))
-      case _ => (exchangeCtx2, Nil)
+        val exchangeCtx5 = exchangeCtx4.copy(ask=ask, bid=bid, orders=exchangeCtx4.orders ++ filledOrders.map(x => x.order.clOrdID.get -> x))
+        (exchangeCtx5, Seq(WsEvent(upsertOrders)))
+      case _ => (exchangeCtx4, Nil)
     }
     (exchangeCtx5, events2 ++ events3)
   }
