@@ -5,8 +5,9 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import javax.xml.bind.DatatypeConverter
-import org.joda.time.format.DateTimeFormat
+import moon.{Funding, Info, OrderBook, OrderBookSummary, Trade, UpsertOrder, WsModel}
 import org.joda.time.{DateTime, DateTimeZone}
+import org.joda.time.format.DateTimeFormat
 import play.api.libs.json.{Json, Reads}
 
 
@@ -125,6 +126,63 @@ package object moon {
         PersistentState(pandl = conf.getDouble("pandl"), restarts = conf.getInt("restarts"))
       } else
         PersistentState(pandl = 0, restarts = 0)
+    }
+  }
+
+  class OptimizedIter(backedBy: Iterator[WsModel], issueSynthetic: Boolean=false) extends Iterator[WsModel] {
+    var lastTs: DateTime = null
+    var lastOrderBookSummary: OrderBookSummary = null
+    var cache: Vector[WsModel] = Vector.empty
+
+    override def hasNext: Boolean =
+      if (cache.nonEmpty)
+        true
+      else if (backedBy.hasNext) {
+        val nextVal = backedBy.next
+        nextVal match {
+          case x:Trade            => lastTs = x.data.head.timestamp
+          case x:OrderBookSummary => lastTs = x.timestamp
+          case x:OrderBook        => lastTs = x.data.head.timestamp
+          case x:Info             => lastTs = x.timestamp
+          case x:Funding          => lastTs = x.data.head.timestamp
+          case x:UpsertOrder      => lastTs = x.data.head.timestamp
+          case _                  => ()
+        }
+
+        backedBy.next match {
+          case _:OrderBookSummary => ???  // unexpected synthetic in the stream!!! if needed, repeat logic from OrderBook
+          case x:OrderBook =>
+            val summary = x.summary
+            if (summary.isEquivalent(lastOrderBookSummary))
+              hasNext
+            else {
+              lastOrderBookSummary = summary
+              cache = Vector(summary)
+              true
+            }
+          case x:Trade if issueSynthetic =>
+            val firstTrade = x.data.head
+            val (ask, bid) = if (firstTrade.side == OrderSide.Buy)
+              (firstTrade.price, firstTrade.price - 0.5)
+            else
+              (firstTrade.price + 0.5, firstTrade.price)
+            val synthetic = OrderBookSummary("orderBook10", lastTs, ask, bid)
+            if (synthetic.isEquivalent(lastOrderBookSummary))
+              cache = Vector(x)
+            else
+              cache = Vector(x, synthetic)
+            true
+          case other =>
+            cache = Vector(other)
+            true
+        }
+      } else
+        false
+
+    override def next(): WsModel = {
+      val head +: tail = cache
+      cache = tail
+      head
     }
   }
 }

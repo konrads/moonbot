@@ -39,6 +39,7 @@ object BotApp extends App {
   val openWithMarket         = conf.optBoolean("bot.openWithMarket").getOrElse(false)
   val useTrailingStoploss    = conf.optBoolean("bot.useTrailingStoploss").getOrElse(false)
   val backtestDataDir        = conf.optString("bot.backtestDataDir")
+  val useSynthetics          = conf.optBoolean("bot.useSynthetics").getOrElse(false)
   val runType                = conf.optString("bot.runType").map(_.toLowerCase) match {
     case Some("live")     => Live
     case Some("dry")      => Dry
@@ -104,6 +105,7 @@ object BotApp extends App {
       |• openWithMarket:       $openWithMarket
       |• runType:              $runType
       |• backtestDataDir:      $backtestDataDir
+      |• useSynthetics:        $useSynthetics
       |""".stripMargin)
 
   val metrics = Metrics(graphiteHost, graphitePort, namespace)
@@ -117,7 +119,8 @@ object BotApp extends App {
       tradeQty = tradeQty,
       takeProfitMargin = takeProfitMargin, stoplossMargin = stoplossMargin,
       metrics = Some(metrics),
-      openWithMarket = openWithMarket)
+      openWithMarket = openWithMarket,
+      useSynthetics = useSynthetics)
     val finalCtx = sim.run()
     log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl}")
   } else {

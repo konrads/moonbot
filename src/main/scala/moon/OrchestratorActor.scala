@@ -73,7 +73,7 @@ object OrchestratorActor {
               ||   Ledger minimally filled, ready to go!     |
               ||                                             |
               |`-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-'""".stripMargin)
-          (ctx.withLedger(ledger2), None)
+          (IdleCtx(ledger2), None)
         } else
           (ctx.withLedger(ledger2), None)
       case (InitCtx(ledger), RestEvent(Success(data))) =>
@@ -92,10 +92,12 @@ object OrchestratorActor {
         if (log.isDebugEnabled) log.debug(s"idle: Sentiment is $sentiment")
         if (sentiment == Bull) {
           val effect = openPositionOrder(LongDir, ledger)
-          (OpenPositionCtx(dir = LongDir, ledger = ledger3), Some(effect))
+          log.info(s"idle: starting afresh with $LongDir order: ${effect.clOrdID}...")
+          (OpenPositionCtx(dir = LongDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
         } else if (sentiment == Bear) {
           val effect = openPositionOrder(ShortDir, ledger)
-          (OpenPositionCtx(dir = ShortDir, ledger = ledger3), Some(effect))
+          log.info(s"idle: starting afresh with $ShortDir order: ${effect.clOrdID}...")
+          (OpenPositionCtx(dir = ShortDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
         } else // Neutral or Dry run
           (ctx.withLedger(ledger3), None)
       case (IdleCtx(_), RestEvent(Success(data))) =>
@@ -394,89 +396,89 @@ object OrchestratorActor {
     }
   }
 
-  case class ExchangeOrder(orderID: String, clOrdID: String, qty: Double, side: OrderSide.Value, ordType: OrderType.Value, status: OrderStatus.Value, price: Option[Double]=None, peg: Option[Double]=None, high: Option[Double]=None, low: Option[Double]=None, timestamp: DateTime) {
+  case class ExchangeOrder(orderID: String, clOrdID: String, qty: Double, side: OrderSide.Value, ordType: OrderType.Value, status: OrderStatus.Value, price: Option[Double]=None, trailingPeg: Option[Double]=None, longHigh: Option[Double]=None, shortLow: Option[Double]=None, timestamp: DateTime) {
     def toRest: Order = Order(orderID=orderID, clOrdID=Some(clOrdID), symbol="...", timestamp=timestamp, ordType=ordType, ordStatus=Some(status), side=side, orderQty=qty, price=price)
     def toWs: OrderData = OrderData(orderID=orderID, clOrdID=Some(clOrdID), timestamp=timestamp, ordType=Some(ordType), ordStatus=Some(status), side=Some(side), orderQty=Some(qty), price=price)
   }
   case class ExchangeCtx(orders: Map[String, ExchangeOrder]=Map.empty, bid: Double=0, ask: Double=0, nextMetricsTs: Long=0, lastTs: Long=0)
 
-  def paperExchangeSideEffectHandler(behaviorDsl: (Ctx, ActorEvent, org.slf4j.Logger) => (Ctx, Option[SideEffect]), ctx2: Ctx, exchangeCtx2: ExchangeCtx, metrics: Option[Metrics], log: org.slf4j.Logger, triggerMetrics: Boolean, events: ActorEvent*): (Ctx, ExchangeCtx) = {
-    val ev :: evs = events
-    val (eCtx, preEvents) = paperExchangePreHandler(exchangeCtx2, ev, log, triggerMetrics)
-    val (ctx3, effects) = behaviorDsl(ctx2, ev, log)
-    val (exchangeCtx3, postEvents) = effects.foldLeft((eCtx, Seq.empty[ActorEvent])) {
-      case ((eCtx, events), eff) =>
+  def paperExchangeSideEffectHandler(behaviorDsl: (Ctx, ActorEvent, org.slf4j.Logger) => (Ctx, Option[SideEffect]), ctx: Ctx, exchangeCtx: ExchangeCtx, metrics: Option[Metrics], log: org.slf4j.Logger, triggerMetrics: Boolean, events: ActorEvent*): (Ctx, ExchangeCtx) = {
+    val ev +: evs = events
+    val (eCtx, preEvents) = paperExchangePreHandler(exchangeCtx, ev, log, triggerMetrics)
+    if (preEvents.nonEmpty) log.debug(s"paperExch:: adding preEvents: ${preEvents.mkString(", ")}")
+    val (ctx2, effects) = behaviorDsl(ctx, ev, log)
+    log.debug(s"paperExch:: handling event $ev, result ctx2: ${ctx2.getClass.getSimpleName}")
+    if (effects.nonEmpty) log.debug(s"paperExch:: adding effects: ${effects.mkString(", ")}")
+    val (eCtx2, postEvents) = effects.foldLeft((eCtx, Seq.empty[ActorEvent])) {
+      case ((eCtx, pEvs), eff) =>
         val (eCtx2, evs) = paperExchangePostHandler(eCtx, eff, metrics, log)
-        (eCtx2, events ++ evs)
+        (eCtx2, pEvs ++ evs)
     }
+    if (postEvents.nonEmpty) log.debug(s"paperExch:: adding postEvents: ${postEvents.mkString(", ")}")
     val events2 = preEvents ++ evs ++ postEvents
-    if (events2.nonEmpty)
-      (ctx3, exchangeCtx3)
+    if (events2.isEmpty)
+      (ctx2, eCtx2)
     else
-      paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx3, metrics, log, triggerMetrics, events2:_*)
+      paperExchangeSideEffectHandler(behaviorDsl, ctx2, eCtx2, metrics, log, triggerMetrics, events2:_*)
   }
 
   def paperExchangePreHandler(exchangeCtx: ExchangeCtx, event: ActorEvent, log: org.slf4j.Logger, triggerMetrics: Boolean): (ExchangeCtx, Seq[ActorEvent]) = {
     // handle timestamp based events, ie. SendMetrics
     val timestampMsOpt = (event match {
-      case x:Trade            => Some(x.data.head.timestamp)
-      case x:OrderBookSummary => Some(x.timestamp)
-      case x:OrderBook        => Some(x.data.head.timestamp)
-      case x:Info             => Some(x.timestamp)
-      case x:Funding          => Some(x.data.head.timestamp)
-      case x:UpsertOrder      => Some(x.data.head.timestamp)
+      case WsEvent(x:Trade)            => Some(x.data.head.timestamp)
+      case WsEvent(x:OrderBookSummary) => Some(x.timestamp)
+      case WsEvent(x:OrderBook)        => Some(x.data.head.timestamp)
+      case WsEvent(x:Info)             => Some(x.timestamp)
+      case WsEvent(x:Funding)          => Some(x.data.head.timestamp)
+      case WsEvent(x:UpsertOrder)      => Some(x.data.head.timestamp)
       case _                  => None
     }).map(_.getMillis)
 
-    val (exchangeCtx2, events2) = (triggerMetrics, timestampMsOpt) match {
-      case (true, Some(ts)) if ts > exchangeCtx.nextMetricsTs =>
-        val currMetricsTs = if (exchangeCtx.nextMetricsTs > 0)
-          exchangeCtx.nextMetricsTs
-        else
-          ts
-        (exchangeCtx.copy(nextMetricsTs = currMetricsTs + 60000, lastTs=ts), Seq(SendMetrics(Some(currMetricsTs))))
-      case (_, Some(ts)) =>
-        (exchangeCtx.copy(lastTs=ts), Nil)
+    val (exchangeCtx2, tsEvents) = timestampMsOpt match {
+      case Some(ts) =>
+        if (triggerMetrics && ts > exchangeCtx.nextMetricsTs) {
+          val currMetricsTs = if (exchangeCtx.nextMetricsTs > 0)
+            exchangeCtx.nextMetricsTs
+          else
+            ts
+          (exchangeCtx.copy(nextMetricsTs = currMetricsTs + 60000, lastTs = ts), Seq(SendMetrics(Some(currMetricsTs))))
+        } else
+          (exchangeCtx.copy(lastTs=ts), Nil)
       case _ =>
         (exchangeCtx, Nil)
     }
 
     // handle price based events, ie. fills
     val (askOpt, bidOpt) = event match {
-      case x:Trade =>
-        val firstTrade = x.data.head
-        val (ask, bid) = if (firstTrade.side == Buy)
-          (firstTrade.price, firstTrade.price - 0.5)
-        else
-          (firstTrade.price + 0.5, firstTrade.price)
-        (Some(ask), Some(bid))
-      case x:OrderBookSummary => (Some(x.ask), Some(x.bid))
-      case x:OrderBook        => (Some(x.summary.ask), Some(x.summary.bid))
-      case _                  => (None, None)
+      case WsEvent(x:OrderBookSummary) => (Some(x.ask), Some(x.bid))
+      case WsEvent(x:OrderBook)        => (Some(x.summary.ask), Some(x.summary.bid))
+      case _                           => (None, None)
     }
-
     // update trailing highs/lows
     val exchangeCtx3 = (askOpt, bidOpt) match {
       case (Some(ask), Some(bid)) =>
+        log.debug(s"paperExch:: updates to ask: $ask, bid: $bid")
         val orders2 = exchangeCtx2.orders map {
-          case (k, v:ExchangeOrder) if v.high.exists(bid > _) => k -> v.copy(high=Some(bid))
-          case (k, v:ExchangeOrder) if v.low.exists(ask < _) => k -> v.copy(high=Some(ask))
+          case (k, v:ExchangeOrder) if v.longHigh.exists(bid > _) => k -> v.copy(longHigh=Some(bid))
+          case (k, v:ExchangeOrder) if v.shortLow.exists(ask < _) => k -> v.copy(longHigh=Some(ask))
           case kv => kv
         }
         exchangeCtx2.copy(orders=orders2)
       case _ => exchangeCtx2
     }
-
-    val (exchangeCtx4, events3) = (askOpt, bidOpt) match {
+    val (exchangeCtx4, filledEvents) = (askOpt, bidOpt) match {
       case (Some(ask), Some(bid)) =>
         val filledOrders = exchangeCtx3.orders.values.map(o => maybeFill(o, ask, bid)).collect { case Some(o) => o }
-        val wsOrders = filledOrders.map(_.toWs)
-        // val upsertOrders = UpsertOrder(Some("update"), filledOrders.map(o => OrderData(orderID=o.orderID, clOrdID=Some(o.clOrdID), orderQty=Some(o.qty), price=o.price, side=Some(o.side), ordStatus=Some(o.status), ordType=Some(o.ordType), timestamp=new DateTime(exchangeCtx.lastTs))).toSeq)
-        val exchangeCtx5 = exchangeCtx3.copy(ask=ask, bid=bid, orders=exchangeCtx3.orders ++ filledOrders.map(x => x.clOrdID -> x))
-        (exchangeCtx5, Seq(WsEvent(UpsertOrder(Some("update"), wsOrders.toSeq))))
+        if (filledOrders.isEmpty)
+          (exchangeCtx3.copy(ask=ask, bid=bid), Nil)
+        else {
+          val wsOrders = filledOrders.map(_.toWs)
+          val exchangeCtx4 = exchangeCtx3.copy(ask=ask, bid=bid, orders=exchangeCtx3.orders ++ filledOrders.map(x => x.clOrdID -> x))
+          (exchangeCtx4, Seq(WsEvent(UpsertOrder(Some("update"), wsOrders.toSeq))))
+        }
       case _ => (exchangeCtx3, Nil)
     }
-    (exchangeCtx4, events2 ++ events3)
+    (exchangeCtx4, tsEvents ++ filledEvents)
   }
 
   def paperExchangePostHandler(exchangeCtx: ExchangeCtx, effect: SideEffect, metrics: Option[Metrics], log: org.slf4j.Logger): (ExchangeCtx, Seq[ActorEvent]) = {
@@ -512,9 +514,9 @@ object OrchestratorActor {
       case OpenTakeProfitStoplossOrders(side, qty, takeProfitClOrdID, takeProfitLimit, stoplossClOrdID, stoplossMargin, stoplossPeg) =>
         val to = ExchangeOrder(orderID=uuid, clOrdID=takeProfitClOrdID, qty=qty, price=Some(takeProfitLimit), side=side, status=New, ordType=Limit, timestamp=new DateTime(exchangeCtx.lastTs))
         val so = ExchangeOrder(orderID=uuid, clOrdID=stoplossClOrdID, qty=qty, price=stoplossMargin, side=side, status=New, ordType=Stop, timestamp=new DateTime(exchangeCtx.lastTs),
-          high=if (side == Sell) Some(exchangeCtx.ask) else None,
-          low=if (side == Buy) Some(exchangeCtx.bid) else None,
-          peg=stoplossPeg.map(math.abs)
+          longHigh=if (stoplossPeg.isDefined && side == Sell) Some(exchangeCtx.bid) else None,
+          shortLow=if (stoplossPeg.isDefined && side == Buy)  Some(exchangeCtx.ask) else None,
+          trailingPeg=stoplossPeg.map(math.abs)
         )
         val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders ++ Map(to.clOrdID -> to, so.clOrdID -> so))
         val event = RestEvent(Success(Orders(Seq(to.toRest, so.toRest))))
@@ -523,23 +525,28 @@ object OrchestratorActor {
   }
 
   def maybeFill(o: ExchangeOrder, ask: Double, bid: Double): Option[ExchangeOrder] =
+    // if filled/canceled - noop
     if (o.status == Filled || o.status == Canceled)
       None
+    // market - fill at current ask/bid
     else if (o.ordType == Market && o.side == Buy)
       Some(o.copy(price=Some(ask), status=Filled))
     else if (o.ordType == Market && o.side == Sell)
-      Some(o.copy(price=Some(ask), status=Filled))
-    else if (o.low.isDefined && o.peg.isDefined && o.low.get + o.peg.get <= ask) // buy
-      Some(o.copy(status=Filled, price=Some(o.low.get + o.peg.get)))
-    else if (o.high.isDefined && o.peg.isDefined && o.high.get - o.peg.get >= bid) // sell
-      Some(o.copy(status=Filled, price=Some(o.low.get + o.peg.get)))
-    else if (o.ordType == Limit && o.side == Buy && o.price.exists(_ >= ask))
-      Some(o.copy(status=Filled))
-    else if (o.ordType == Limit && o.side == Sell && o.price.exists(_ <= bid))
-      Some(o.copy(status=Filled))
+      Some(o.copy(price=Some(bid), status=Filled))
+    // trailing stoploss
+    else if (o.shortLow.isDefined && o.trailingPeg.isDefined && o.shortLow.get + o.trailingPeg.get <= ask) // buy
+      Some(o.copy(status=Filled, price=Some(o.shortLow.get + o.trailingPeg.get)))
+    else if (o.longHigh.isDefined && o.trailingPeg.isDefined && o.longHigh.get - o.trailingPeg.get >= bid) // sell
+      Some(o.copy(status=Filled, price=Some(o.longHigh.get - o.trailingPeg.get)))
+    // vanilla stoploss
     else if (o.ordType == Stop && o.side == Buy && o.price.exists(_ <= ask))
       Some(o.copy(status=Filled))
     else if (o.ordType == Stop && o.side == Sell && o.price.exists(_ >= bid))
+      Some(o.copy(status=Filled))
+    // limit
+    else if (o.ordType == Limit && o.side == Buy && o.price.exists(_ >= ask))
+      Some(o.copy(status=Filled))
+    else if (o.ordType == Limit && o.side == Sell && o.price.exists(_ <= bid))
       Some(o.copy(status=Filled))
     else
       None
