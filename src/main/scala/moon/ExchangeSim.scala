@@ -2,7 +2,7 @@ package moon
 
 import java.io.File
 
-import moon.OrchestratorActor._
+import moon.Orchestrator._
 import play.api.libs.json.{JsError, JsSuccess}
 
 import scala.io.Source
@@ -49,7 +49,7 @@ class ExchangeSim(
     }
     val eventIter = new OptimizedIter(eventIter0, useSynthetics)
 
-    val behaviorDsl = OrchestratorActor.asDsl(
+    val behaviorDsl = Orchestrator.asDsl(
       strategy,
       tradeQty,
       takeProfitMargin, stoplossMargin,

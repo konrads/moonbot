@@ -126,7 +126,7 @@ object BotApp extends App {
   } else {
     implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
     val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
-    val behaviorDsl=OrchestratorActor.asDsl(
+    val behaviorDsl=Orchestrator.asDsl(
       strategy=strategy,
       tradeQty=tradeQty,
       takeProfitMargin=takeProfitMargin,
@@ -136,14 +136,14 @@ object BotApp extends App {
 
     val orchestrator = if (runType == Live) {
       log.info(s"Instantiating Live Run...")
-      OrchestratorActor.asLiveBehavior(
+      Orchestrator.asLiveBehavior(
         restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
         metrics=Some(metrics),
         flushSessionOnRestart=flushSessionOnRestart,
         behaviorDsl=behaviorDsl)
     } else if (runType == Dry) {
       log.info(s"Instantiating Dry Run...")
-      OrchestratorActor.asDryBehavior(
+      Orchestrator.asDryBehavior(
         metrics=Some(metrics),
         behaviorDsl=behaviorDsl)
     } else

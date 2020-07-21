@@ -15,7 +15,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 
-object OrchestratorActor {
+object Orchestrator {
   def asDsl(strategy: Strategy,
             tradeQty: Int,
             takeProfitMargin: Double, stoplossMargin: Double,
