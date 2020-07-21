@@ -18,9 +18,9 @@ class ExchangeSim(
     useTrailingStoploss: Boolean = false,
     useSynthetics: Boolean = false) {
 
-  def run(): Ctx = {
-    implicit val log = org.slf4j.LoggerFactory.getLogger(classOf[ExchangeSim])
+  val log = org.slf4j.LoggerFactory.getLogger(classOf[ExchangeSim])
 
+  def run(): Ctx = {
     val eventIter0: Iterator[WsModel] = {
       var prevFilename: String = null
       for {
@@ -57,8 +57,7 @@ class ExchangeSim(
       useTrailingStoploss)
 
     val (finalCtx, _finalExchangeCtx) = eventIter.foldLeft((InitCtx(Ledger()):Ctx, ExchangeCtx())) {
-      case ((ctx2, exchangeCtx2), event) =>
-        paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, WsEvent(event))
+      case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, WsEvent(event))
     }
     finalCtx
   }
