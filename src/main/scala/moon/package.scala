@@ -79,6 +79,8 @@ package object moon {
 
   def parseDateTime(asStr: String) = DateTime.parse(asStr, dateFormat)
 
+  def formatDateTime(asDt: DateTime) = dateFormat.print(asDt)
+
   implicit val jodaDateReads = Reads[DateTime](js => js.validate[String].map[DateTime](parseDateTime))
 
   // For optional values:
@@ -149,7 +151,7 @@ package object moon {
           case _                  => ()
         }
 
-        backedBy.next match {
+        nextVal match {
           case _:OrderBookSummary => ???  // unexpected synthetic in the stream!!! if needed, repeat logic from OrderBook
           case x:OrderBook =>
             val summary = x.summary

@@ -73,7 +73,19 @@ object Orchestrator {
               ||   Ledger minimally filled, ready to go!     |
               ||                                             |
               |`-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-'""".stripMargin)
-          (IdleCtx(ledger2), None)
+          val strategyRes = strategy.strategize(ledger2)
+          val (sentiment, ledger3) = (strategyRes.sentiment, strategyRes.ledger)
+          if (log.isDebugEnabled) log.debug(s"idle: Sentiment is $sentiment")
+          if (sentiment == Bull) {
+            val effect = openPositionOrder(LongDir, ledger)
+            log.info(s"idle: starting afresh with $LongDir order: ${effect.clOrdID}...")
+            (OpenPositionCtx(dir = LongDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
+          } else if (sentiment == Bear) {
+            val effect = openPositionOrder(ShortDir, ledger)
+            log.info(s"idle: starting afresh with $ShortDir order: ${effect.clOrdID}...")
+            (OpenPositionCtx(dir = ShortDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
+          } else // Neutral or Dry run
+            (IdleCtx(ledger3), None)
         } else
           (ctx.withLedger(ledger2), None)
       case (InitCtx(ledger), RestEvent(Success(data))) =>
@@ -85,6 +97,7 @@ object Orchestrator {
 
       // idle state
       case (IdleCtx(ledger), WsEvent(wsData)) =>
+        // FIXME: repeated from InitCtx...
         if (log.isDebugEnabled) log.debug(s"idle: WsEvent: $wsData")
         val ledger2 = ledger.record(wsData)
         val strategyRes = strategy.strategize(ledger2)
@@ -460,7 +473,7 @@ object Orchestrator {
         log.debug(s"paperExch:: updates to ask: $ask, bid: $bid")
         val orders2 = exchangeCtx2.orders map {
           case (k, v:ExchangeOrder) if v.longHigh.exists(bid > _) => k -> v.copy(longHigh=Some(bid))
-          case (k, v:ExchangeOrder) if v.shortLow.exists(ask < _) => k -> v.copy(longHigh=Some(ask))
+          case (k, v:ExchangeOrder) if v.shortLow.exists(ask < _) => k -> v.copy(shortLow=Some(ask))
           case kv => kv
         }
         exchangeCtx2.copy(orders=orders2)

@@ -1,5 +1,6 @@
 package moon
 
+import org.joda.time.DateTime
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{FlatSpec, Inside}
 
@@ -35,6 +36,12 @@ object ModelsSpec {
 
   def wsOrderAmend(orderID: String, price: Double, timestamp: String) =
     s"""{"table":"order","action":"update","data":[{"orderID":"$orderID","price":$price,"text":"Amended price: Amend from testnet.bitmex.com Submission from testnet.bitmex.com","transactTime":"$timestamp","timestamp":"$timestamp","clOrdID":"","account":299045,"symbol":"XBTUSD"}]}"""
+
+  def wsOrderBook10(bidPrice: Double, bidVol: Double, askPrice: Double, askVol: Double, timestampL: Long) =
+    s"""{"table":"orderBook10","action":"update","data":[{"symbol":"XBTUSD","bids":[[$bidPrice,$bidVol]],"timestamp":"${formatDateTime(new DateTime(timestampL))}","asks":[[$askPrice,$askVol]]}]}"""
+
+  def wsTrade(price: Double, vol: Double, side: OrderSide.Value=OrderSide.Buy, tickDirection: TickDirection.Value=TickDirection.ZeroPlusTick, timestampL: Long) =
+    s"""{"table":"trade","action":"insert","data":[{"timestamp":"${formatDateTime(new DateTime(timestampL))}","symbol":"XBTUSD","side":"$side","size":$vol,"price":$price,"tickDirection":"ZeroPlusTick","trdMatchID":"$uuid","grossValue":${price*vol},"homeNotional":${price*vol},"foreignNotional":$vol}]}"""
 
   def restOrderNew(orderID: String, side: OrderSide.Value, price: Double, orderQty: Double, ordType: OrderType.Value, timestamp: String, ordStatus: OrderStatus.Value=OrderStatus.New) = ordType match {
     case OrderType.Limit =>
