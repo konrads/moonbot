@@ -9,13 +9,24 @@ import com.typesafe.scalalogging.Logger
  */
 object TrainingApp extends App {
   val log = Logger("TrainingApp")
+  // global params
+  val takeProfitMargins     = (5 until 10 by 5).map(_.toDouble)
+  val stoplossMargins       = (5 until 10 by 5).map(_.toDouble)
+  val openWithMarkets       = Seq(true, false)
+  val useTrailingStoplosses = Seq(true, false)
 
-  def bruteForceRun(desc: String, backtestDataDir: String="data/training", tradeQty: Int=100, testSpecs: Iterator[(Double, Double, Boolean, Boolean, Strategy)]): (Double, Strategy) = {
+
+  def bruteForceRun(desc: String, backtestDataDir: String="data/training", tradeQty: Int=100, strategies: Iterator[Strategy]): (Double, Strategy) = {
     var winningStrategy: Strategy = null
     var winningPandl: Double = Double.MinPositiveValue
 
-    while (testSpecs.hasNext) {
-      val (takeProfitMargin, stoplossMargin, openWithMarket, useTrailingStoploss, strategy) = testSpecs.next
+    for {
+      takeProfitMargin    <- takeProfitMargins
+      stoplossMargin      <- stoplossMargins
+      openWithMarket      <- openWithMarkets
+      useTrailingStoploss <- useTrailingStoplosses
+      strategy            <- strategies
+    } {
       val sim = new ExchangeSim(
         dataDir = backtestDataDir,
         strategy = strategy,
@@ -38,15 +49,11 @@ object TrainingApp extends App {
     (winningPandl, winningStrategy)
   }
 
-  def trainRsi(): (Double, Strategy) = {
-    val testSpecs = for {
-      takeProfitMargin    <- (6 until 10 by 2).map(_.toDouble)
-      stoplossMargin      <- (6 until 10 by 2).map(_.toDouble)
-      openWithMarket      <- Seq(true, false)
-      useTrailingStoploss <- Seq(true, false)
-      window              <- 5 until 100 by 5
-      upper               <- 50 until 70 by 5
-      lower               <- 30 until 50 by 5
+  def trainRsi: (Double, Strategy) = {
+    val strategies = for {
+      window <- 5 until 100 by 5
+      upper  <- 50 until 60 by 5
+      lower  <- 40 until 50 by 5
       if upper != lower
     } yield {
       val conf = ConfigFactory.parseString(
@@ -54,10 +61,27 @@ object TrainingApp extends App {
             |upper  = $upper
             |lower  = $lower
             |""".stripMargin)
-      (takeProfitMargin, stoplossMargin, openWithMarket, useTrailingStoploss, new RSIStrategy(conf))
+      new RSIStrategy(conf)
     }
-    bruteForceRun(desc="RSI", testSpecs=testSpecs.iterator)
+    bruteForceRun(desc="RSI", strategies=strategies.iterator)
   }
 
-  trainRsi()
+  def trainIndecreasing: (Double, Strategy) = {
+    val strategies = for {
+      periods     <- Seq(Seq(5, 4, 3), Seq(7, 5, 3), Seq(9, 6, 3), Seq(11, 7, 3))
+      maxAbsSlope <- Seq(1.5, 2.0, 2.5)
+      minAbsSlope <- Seq(10.0, 15.0, 20.0)
+    } yield {
+      val conf = ConfigFactory.parseString(
+        s"""|periods = ${periods.mkString(", ")}
+            |maxAbsSlope  = $maxAbsSlope
+            |minAbsSlope  = $minAbsSlope
+            |""".stripMargin)
+      new IndecreasingStrategy(conf)
+    }
+    bruteForceRun(desc="INDECREASING", strategies=strategies.iterator)
+  }
+
+  trainRsi
+  // trainIndecreasing
 }
