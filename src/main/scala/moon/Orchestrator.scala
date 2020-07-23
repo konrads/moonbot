@@ -193,7 +193,6 @@ object Orchestrator {
           case _ => // ignore
             (ctx2, None)
         }
-      case (ctx2@OpenPositionCtx(dir, _, _, ledger), WsEvent(data)) if canShortcutInOpen(dir, ledger, data) => (ctx2.copy(ledger=ledger.record(data)), None)  // dir based shortcut
       case (ctx2@OpenPositionCtx(dir, lifecycle, clOrdID, ledger), WsEvent(data)) =>
         val clOrdIDMatch = data match {
           case o: Order => Some(o.clOrdID.contains(clOrdID))
@@ -225,24 +224,28 @@ object Orchestrator {
           case (_, Some(Canceled), Some(true)) =>
             throw ExternalCancelError(s"Unexpected cancellation of $dir opening clOrdID: ${orderOpt.get.clOrdID}")
           case (IssuingNew | IssuingOpenAmend, _, Some(true)) | (Waiting, _, None) => // either order created, amended, or orderBook, Trade, etc. Up for review!
-            val (shouldKeepGoing, ledger3) = shouldKeepOpen(dir, ledger2)
-            if (!shouldKeepGoing) {
-              log.info(s"Open $dir: having a change of heart, cancelling ${orderOpt.get.fullOrdID}...")
-              val effect = CancelOrder(clOrdID)
-              val ctx3 = ctx2.copy(ledger = ledger3, lifecycle = IssuingOpenCancel)
-              (ctx3, Some(effect))
-            } else {
-              // need to update best price?
-              val bestPrice = bestOpenPrice(dir, ledger3)
-              if (orderOpt.get.price != bestPrice) {
-                log.info(s"Open $dir: best price moved, will change: ${orderOpt.get.price} -> $bestPrice")
-                val effect = AmendOrder(clOrdID, bestPrice)
-                val ctx3 = ctx2.copy(ledger = ledger3, lifecycle = IssuingOpenAmend)
+            if (canShortcutInOpen(dir, ledger, data))  // check the correct bid/ask increase/decrease
+              (ctx2.copy(ledger=ledger.record(data)), None)
+            else {
+              val (shouldKeepGoing, ledger3) = shouldKeepOpen(dir, ledger2)
+              if (!shouldKeepGoing) {
+                log.info(s"Open $dir: having a change of heart, cancelling ${orderOpt.get.fullOrdID}...")
+                val effect = CancelOrder(clOrdID)
+                val ctx3 = ctx2.copy(ledger = ledger3, lifecycle = IssuingOpenCancel)
                 (ctx3, Some(effect))
               } else {
-                if (log.isDebugEnabled) log.debug(s"Open $dir: noop @ orderID: ${orderOpt.get.fullOrdID}, lifecycle: $lifecycle, data: $data")
-                val ctx3 = ctx2.copy(ledger = ledger3, lifecycle = Waiting)
-                (ctx3, None)
+                // need to update best price?
+                val bestPrice = bestOpenPrice(dir, ledger3)
+                if (orderOpt.get.price != bestPrice) {
+                  log.info(s"Open $dir: best price moved, will change: ${orderOpt.get.price} -> $bestPrice")
+                  val effect = AmendOrder(clOrdID, bestPrice)
+                  val ctx3 = ctx2.copy(ledger = ledger3, lifecycle = IssuingOpenAmend)
+                  (ctx3, Some(effect))
+                } else {
+                  if (log.isDebugEnabled) log.debug(s"Open $dir: noop @ orderID: ${orderOpt.get.fullOrdID}, lifecycle: $lifecycle, data: $data")
+                  val ctx3 = ctx2.copy(ledger = ledger3, lifecycle = Waiting)
+                  (ctx3, None)
+                }
               }
             }
           case _ =>

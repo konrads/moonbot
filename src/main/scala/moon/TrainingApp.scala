@@ -1,5 +1,6 @@
 package moon
 
+import moon.OrderStatus._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 
@@ -18,7 +19,7 @@ object TrainingApp extends App {
 
   def bruteForceRun(desc: String, backtestDataDir: String="data/training", tradeQty: Int=100, strategies: Iterator[Strategy]): (Double, Strategy) = {
     var winningStrategy: Strategy = null
-    var winningPandl: Double = Double.MinPositiveValue
+    var winningPandl: Double = Double.MinValue
 
     for {
       takeProfitMargin    <- takeProfitMargins
@@ -38,12 +39,15 @@ object TrainingApp extends App {
         useSynthetics = false)
       val (finalCtx, finalExchangeCtx) = sim.run()
       val finalPandl = finalCtx.ledger.ledgerMetrics.runningPandl
+      val finalPrice = finalCtx.ledger.myOrders.lastOption.map(_.price).getOrElse(0.0)
+      val finalPriceUSD = finalPandl * finalPrice
+      val finalTradeCnt = finalCtx.ledger.myOrders.filter(_.ordStatus == Filled)
       if (finalPandl > winningPandl) {
-        log.warn(s"$desc: -=-=-!!!NEW WINNER!!!-=-=- pandL: $finalPandl, strategy conf: ${strategy.config}, takeProfitMargin: $takeProfitMargin, stoplossMargin: $stoplossMargin, openWithMarket: $openWithMarket, useTrailingStoploss: $useTrailingStoploss")
+        log.error(s"$desc: *** !!!NEW WINNER!!! *** pandL: $finalPandl / ${finalPriceUSD} ($finalTradeCnt), strategy conf: ${strategy.config}, takeProfitMargin: $takeProfitMargin, stoplossMargin: $stoplossMargin, openWithMarket: $openWithMarket, useTrailingStoploss: $useTrailingStoploss")
         winningPandl = finalPandl
         winningStrategy = strategy
       } else
-        log.warn(s"$desc: running PandL: $finalPandl, strategy conf: ${strategy.config}, takeProfitMargin: $takeProfitMargin, stoplossMargin: $stoplossMargin, openWithMarket: $openWithMarket, useTrailingStoploss: $useTrailingStoploss")
+        log.warn(s"$desc: running PandL: $finalPandl / ${finalPriceUSD} ($finalTradeCnt), strategy conf: ${strategy.config}, takeProfitMargin: $takeProfitMargin, stoplossMargin: $stoplossMargin, openWithMarket: $openWithMarket, useTrailingStoploss: $useTrailingStoploss")
     }
 
     (winningPandl, winningStrategy)
@@ -51,10 +55,10 @@ object TrainingApp extends App {
 
   def trainRsi: (Double, Strategy) = {
     val strategies = for {
-      window <- 5 until 100 by 5
-      upper  <- 50 until 60 by 5
-      lower  <- 40 until 50 by 5
-      if upper != lower
+      window <- 5  until 100 by 5
+      upper  <- 40 until 70  by 5
+      lower  <- 30 until 60  by 5
+      if upper > lower
     } yield {
       val conf = ConfigFactory.parseString(
         s"""|window = $window
