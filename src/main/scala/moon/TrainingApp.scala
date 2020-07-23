@@ -41,7 +41,7 @@ object TrainingApp extends App {
       val finalPandl = finalCtx.ledger.ledgerMetrics.runningPandl
       val finalPrice = finalCtx.ledger.myOrders.lastOption.map(_.price).getOrElse(0.0)
       val finalPriceUSD = finalPandl * finalPrice
-      val finalTradeCnt = finalCtx.ledger.myOrders.filter(_.ordStatus == Filled)
+      val finalTradeCnt = finalCtx.ledger.myOrders.count(_.ordStatus == Filled)
       if (finalPandl > winningPandl) {
         log.error(s"$desc: *** !!!NEW WINNER!!! *** pandL: $finalPandl / ${finalPriceUSD} ($finalTradeCnt), strategy conf: ${strategy.config}, takeProfitMargin: $takeProfitMargin, stoplossMargin: $stoplossMargin, openWithMarket: $openWithMarket, useTrailingStoploss: $useTrailingStoploss")
         winningPandl = finalPandl
