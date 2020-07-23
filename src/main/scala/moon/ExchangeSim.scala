@@ -20,7 +20,7 @@ class ExchangeSim(
 
   val log = org.slf4j.LoggerFactory.getLogger(classOf[ExchangeSim])
 
-  def run(): Ctx = {
+  def run(): (Ctx, ExchangeCtx) = {
     val eventIter0: Iterator[WsModel] = {
       var prevFilename: String = null
       for {
@@ -56,9 +56,9 @@ class ExchangeSim(
       openWithMarket,
       useTrailingStoploss)
 
-    val (finalCtx, _finalExchangeCtx) = eventIter.foldLeft((InitCtx(Ledger()):Ctx, ExchangeCtx())) {
+    val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((InitCtx(Ledger()):Ctx, ExchangeCtx())) {
       case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, WsEvent(event))
     }
-    finalCtx
+    (finalCtx, finalExchangeCtx)
   }
 }

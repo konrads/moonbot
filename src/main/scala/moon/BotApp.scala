@@ -121,7 +121,7 @@ object BotApp extends App {
       metrics = Some(metrics),
       openWithMarket = openWithMarket,
       useSynthetics = useSynthetics)
-    val finalCtx = sim.run()
+    val (finalCtx, finalExchangeCtx) = sim.run()
     log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl}")
   } else {
     implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()

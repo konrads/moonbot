@@ -26,6 +26,7 @@ object Orchestrator {
       case LongDir => l.bidPrice
       case ShortDir => l.askPrice
     }
+
     def shouldKeepOpen(d: Dir.Value, l: Ledger): (Boolean, Ledger) = {
       val strategyRes = strategy.strategize(l)
       val (sentiment, l2) = (strategyRes.sentiment, strategyRes.ledger)
@@ -48,6 +49,14 @@ object Orchestrator {
         case (ShortDir, false) => OpenTakeProfitStoplossOrders(Buy, tradeQty, uuid, openPrice-takeProfitMargin, uuid, stoplossMargin=Some(openPrice+stoplossMargin))
         case _ => ???  // to be rid of warnings: It would fail on the following inputs: (_, false), (_, true)
       }
+
+    def canShortcutInOpen(dir: Dir.Value, l: Ledger, data: WsModel): Boolean = (dir, data) match {
+      case (LongDir,  o:OrderBookSummary) => o.bid <= l.bidPrice
+      case (ShortDir, o:OrderBookSummary) => o.ask >= l.askPrice
+      case (LongDir,  o:OrderBook)        => o.summary.bid <= l.bidPrice
+      case (ShortDir, o:OrderBook)        => o.summary.ask >= l.askPrice
+      case _ => false
+    }
 
     def tick(ctx: Ctx, event: ActorEvent, log: org.slf4j.Logger): (Ctx, Option[SideEffect]) = (ctx, event) match {
       // Common states/events
@@ -78,11 +87,11 @@ object Orchestrator {
           if (log.isDebugEnabled) log.debug(s"idle: Sentiment is $sentiment")
           if (sentiment == Bull) {
             val effect = openPositionOrder(LongDir, ledger)
-            log.info(s"idle: starting afresh with $LongDir order: ${effect.clOrdID}...")
+            log.info(s"idle: starting afresh with $LongDir order: ${effect.clOrdID} @ ${effect.price.getOrElse(s"~${ledger.bidPrice}")}...")
             (OpenPositionCtx(dir = LongDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
           } else if (sentiment == Bear) {
             val effect = openPositionOrder(ShortDir, ledger)
-            log.info(s"idle: starting afresh with $ShortDir order: ${effect.clOrdID}...")
+            log.info(s"idle: starting afresh with $ShortDir order: ${effect.clOrdID} @ ${effect.price.getOrElse(s"~${ledger.askPrice}")}...")
             (OpenPositionCtx(dir = ShortDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
           } else // Neutral or Dry run
             (IdleCtx(ledger3), None)
@@ -105,11 +114,11 @@ object Orchestrator {
         if (log.isDebugEnabled) log.debug(s"idle: Sentiment is $sentiment")
         if (sentiment == Bull) {
           val effect = openPositionOrder(LongDir, ledger)
-          log.info(s"idle: starting afresh with $LongDir order: ${effect.clOrdID}...")
+          log.info(s"idle: starting afresh with $LongDir order: ${effect.clOrdID} @ ${effect.price.getOrElse(s"~${ledger.bidPrice}")}...")
           (OpenPositionCtx(dir = LongDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
         } else if (sentiment == Bear) {
           val effect = openPositionOrder(ShortDir, ledger)
-          log.info(s"idle: starting afresh with $ShortDir order: ${effect.clOrdID}...")
+          log.info(s"idle: starting afresh with $ShortDir order: ${effect.clOrdID} @ ${effect.price.getOrElse(s"~${ledger.askPrice}")}...")
           (OpenPositionCtx(dir = ShortDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
         } else // Neutral or Dry run
           (ctx.withLedger(ledger3), None)
@@ -184,6 +193,7 @@ object Orchestrator {
           case _ => // ignore
             (ctx2, None)
         }
+      case (ctx2@OpenPositionCtx(dir, _, _, ledger), WsEvent(data)) if canShortcutInOpen(dir, ledger, data) => (ctx2.copy(ledger=ledger.record(data)), None)  // dir based shortcut
       case (ctx2@OpenPositionCtx(dir, lifecycle, clOrdID, ledger), WsEvent(data)) =>
         val clOrdIDMatch = data match {
           case o: Order => Some(o.clOrdID.contains(clOrdID))
@@ -214,7 +224,7 @@ object Orchestrator {
             (IdleCtx(ledger2), None)
           case (_, Some(Canceled), Some(true)) =>
             throw ExternalCancelError(s"Unexpected cancellation of $dir opening clOrdID: ${orderOpt.get.clOrdID}")
-          case (IssuingNew | IssuingOpenAmend, _, Some(true)) | (Waiting, _, None) => // either orer created, amended, or orderBook, Trade, etc. Up for review!
+          case (IssuingNew | IssuingOpenAmend, _, Some(true)) | (Waiting, _, None) => // either order created, amended, or orderBook, Trade, etc. Up for review!
             val (shouldKeepGoing, ledger3) = shouldKeepOpen(dir, ledger2)
             if (!shouldKeepGoing) {
               log.info(s"Open $dir: having a change of heart, cancelling ${orderOpt.get.fullOrdID}...")
@@ -420,7 +430,7 @@ object Orchestrator {
     val (eCtx, preEvents) = paperExchangePreHandler(exchangeCtx, ev, log, triggerMetrics)
     if (preEvents.nonEmpty) log.debug(s"paperExch:: adding preEvents: ${preEvents.mkString(", ")}")
     val (ctx2, effects) = behaviorDsl(ctx, ev, log)
-    log.debug(s"paperExch:: handling event $ev, result ctx2: ${ctx2.getClass.getSimpleName}")
+    if (log.isDebugEnabled) log.debug(s"paperExch:: handling event $ev, result ctx2: ${ctx2.getClass.getSimpleName}")
     if (effects.nonEmpty) log.debug(s"paperExch:: adding effects: ${effects.mkString(", ")}")
     val (eCtx2, postEvents) = effects.foldLeft((eCtx, Seq.empty[ActorEvent])) {
       case ((eCtx, pEvs), eff) =>
@@ -428,7 +438,7 @@ object Orchestrator {
         (eCtx2, pEvs ++ evs)
     }
     if (postEvents.nonEmpty) log.debug(s"paperExch:: adding postEvents: ${postEvents.mkString(", ")}")
-    val events2 = preEvents ++ evs ++ postEvents
+    val events2 =  evs ++ preEvents ++ postEvents
     if (events2.isEmpty)
       (ctx2, eCtx2)
     else
@@ -444,7 +454,7 @@ object Orchestrator {
       case WsEvent(x:Info)             => Some(x.timestamp)
       case WsEvent(x:Funding)          => Some(x.data.head.timestamp)
       case WsEvent(x:UpsertOrder)      => Some(x.data.head.timestamp)
-      case _                  => None
+      case _                           => None
     }).map(_.getMillis)
 
     val (exchangeCtx2, tsEvents) = timestampMsOpt match {
@@ -470,7 +480,7 @@ object Orchestrator {
     // update trailing highs/lows
     val exchangeCtx3 = (askOpt, bidOpt) match {
       case (Some(ask), Some(bid)) =>
-        log.debug(s"paperExch:: updates to ask: $ask, bid: $bid")
+        if (log.isDebugEnabled) log.debug(s"paperExch:: updates to ask: ${exchangeCtx2.ask} -> $ask, bid: ${exchangeCtx2.bid} -> $bid")
         val orders2 = exchangeCtx2.orders map {
           case (k, v:ExchangeOrder) if v.longHigh.exists(bid > _) => k -> v.copy(longHigh=Some(bid))
           case (k, v:ExchangeOrder) if v.shortLow.exists(ask < _) => k -> v.copy(shortLow=Some(ask))
@@ -485,6 +495,7 @@ object Orchestrator {
         if (filledOrders.isEmpty)
           (exchangeCtx3.copy(ask=ask, bid=bid), Nil)
         else {
+          log.info(s"paperExch:: Filled orders: ${filledOrders.map(o => s"${o.clOrdID} @ ${o.price.get}").mkString(", ")}")
           val wsOrders = filledOrders.map(_.toWs)
           val exchangeCtx4 = exchangeCtx3.copy(ask=ask, bid=bid, orders=exchangeCtx3.orders ++ filledOrders.map(x => x.clOrdID -> x))
           (exchangeCtx4, Seq(WsEvent(UpsertOrder(Some("update"), wsOrders.toSeq))))

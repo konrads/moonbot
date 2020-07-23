@@ -208,9 +208,10 @@ object talib {
     else {
       val mas = for(p <- maPeriods) yield polyfit(xs.takeRight(p))._1
       val sortedMas = mas.sorted
-      if (mas.forall(_ > 0) && mas == sortedMas)
+      val isUnique = mas.toSet.size == mas.size  // ensure no repetition in the sequence, ie. true increasing/decreasing
+      if (mas.forall(_ > 0) && isUnique && mas == sortedMas)
         Some(mas)
-      else if (mas.forall(_ < 0) && mas == sortedMas.reverse)
+      else if (mas.forall(_ < 0) && isUnique && mas == sortedMas.reverse)
         Some(mas)
       else
         None
