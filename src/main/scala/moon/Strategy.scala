@@ -12,6 +12,7 @@ case class StrategyResult(sentiment: Sentiment.Value, metrics: Map[String, Doubl
 
 trait Strategy {
   val log = Logger[Strategy]
+  val config: Config
   val MIN_EMA_WINDOW = 200  // from experiments, EMA is unlikely to change once window > 200
 
   // eliminating caching till I resolve how to pass on the latest ledger

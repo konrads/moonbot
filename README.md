@@ -87,6 +87,11 @@ sbt "runMain moon.Cli --ordertype limit --side buy --price 9000 --qty 30 order"
 ...etc
 ```
 
+Train (via brute force...). Consider changing the root log level to `warn` in [logback.xml](src/main/resources/logback.xml).
+```
+sbt "runMain moon.TrainingApp"
+```
+
 Gather all ws json events, for analysis:
 ```
 sbt "runMain moon.Cli monitorDebug" | grep "###" | sed 's/.*ws json: //'
