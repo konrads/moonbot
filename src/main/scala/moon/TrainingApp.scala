@@ -39,7 +39,7 @@ object TrainingApp extends App {
       val (finalCtx, finalExchangeCtx) = sim.run()
       val finalPandl = finalCtx.ledger.ledgerMetrics.runningPandl
       if (finalPandl > winningPandl) {
-        log.warn(s"$desc: !!!NEW WINNER!!! pandL: $finalPandl, conf: ${strategy.config}")
+        log.warn(s"$desc: *** !!!NEW WINNER!!! *** pandL: $finalPandl, conf: ${strategy.config}")
         winningPandl = finalPandl
         winningStrategy = strategy
       } else
