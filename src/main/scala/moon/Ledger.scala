@@ -1,25 +1,26 @@
 package moon
 
-import com.github.nscala_time.time.Imports._
-import moon.OrderSide.{OrderSide, _}
+import moon.OrderSide._
 import moon.OrderStatus._
 import moon.OrderType._
 import org.joda.time.DateTime
 
-import scala.collection.SortedSet
+import scala.collection.immutable.ListMap
 
 
-case class LedgerOrder(orderID: String, clOrdID: String=null, price: Double, qty: Double, ordStatus: OrderStatus, side: OrderSide, ordType: OrderType.Value=null, ordRejReason: Option[String]=None, timestamp: DateTime, myOrder: Boolean=false) extends Ordered[LedgerOrder] {
-  import scala.math.Ordered.orderingToOrdered
-  override def compare(that: LedgerOrder): Int = -((this.timestamp, this.orderID) compare (that.timestamp, that.orderID))
+case class LedgerOrder(orderID: String, clOrdID: String=null, price: Double, qty: Double, ordStatus: OrderStatus, side: OrderSide, ordType: OrderType.Value=null, ordRejReason: Option[String]=None, timestamp: DateTime, myOrder: Boolean=false) {
   lazy val fullOrdID = s"$orderID / $clOrdID"
 }
 
-case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, lastOrderTimestamp: DateTime=new DateTime(0), lastTradeData: TradeData=null, runningPandl: Double=0)
+case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, lastOrderID: String=null, lastTradeData: TradeData=null, runningPandl: Double=0)
 
 case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[TradeData]=Vector.empty,
-                  ledgerOrders: SortedSet[LedgerOrder]=SortedSet.empty[LedgerOrder], ledgerOrdersByID: Map[String, LedgerOrder]=Map.empty, ledgerOrdersByClOrdID: Map[String, LedgerOrder]=Map.empty,
+                  ledgerOrdersByID: ListMap[String, LedgerOrder]=ListMap.empty,
+                  ledgerOrdersByClOrdID: ListMap[String, LedgerOrder]=ListMap.empty,
                   ledgerMetrics: LedgerMetrics=LedgerMetrics()) {
+
+  @deprecated lazy val ledgerOrders = ledgerOrdersByID.values
+
   // rest
   def record(data: RestModel): Ledger = data match {
     case os:Orders =>
@@ -29,16 +30,19 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[Trade
         case Some(existing) if existing.ordStatus == Filled || existing.ordStatus == Canceled =>
           // copy all except for ordStatus
           val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), side=o.side, ordType=o.ordType, timestamp=o.timestamp)
-          val ledgerOrdersByClOrdID2 = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2)
-          copy(ledgerOrders=ledgerOrders-existing+existing2, ledgerOrdersByID=ledgerOrdersByID + (existing2.orderID -> existing2), ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
+          copy(
+            ledgerOrdersByID = ledgerOrdersByID + (existing2.orderID -> existing2),
+            ledgerOrdersByClOrdID = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2))
         case Some(existing) =>
           val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), ordStatus=o.ordStatus.getOrElse(existing.ordStatus), price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), timestamp=o.timestamp)
-          val ledgerOrdersByClOrdID2 = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2)
-          copy(ledgerOrders=ledgerOrders-existing+existing2, ledgerOrdersByID=ledgerOrdersByID + (existing2.orderID -> existing2), ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
+          copy(
+            ledgerOrdersByID = ledgerOrdersByID + (existing2.orderID -> existing2),
+            ledgerOrdersByClOrdID = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2))
         case None =>
           val lo = LedgerOrder(orderID=o.orderID, clOrdID=o.clOrdID.orNull, qty=o.orderQty, price=o.stopPx.getOrElse(o.price.getOrElse(-1.0)), side=o.side, ordType=o.ordType, timestamp=o.timestamp, ordStatus=o.ordStatus.getOrElse(New), ordRejReason=o.ordRejReason, myOrder=true)
-          val ledgerOrdersByClOrdID2 = if (lo.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (lo.clOrdID -> lo)
-          copy(ledgerOrders=ledgerOrders+lo, ledgerOrdersByID=ledgerOrdersByID + (lo.orderID -> lo), ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
+          copy(
+            ledgerOrdersByID = ledgerOrdersByID + (lo.orderID -> lo),
+            ledgerOrdersByClOrdID = if (lo.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID +(lo.clOrdID -> lo))
       }
     case _ =>
       this
@@ -47,8 +51,8 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[Trade
   def record(data: WsModel): Ledger = data match {
     case o: UpsertOrder => {
       // if doesn't exist, insert new ledger order, else update the lifecycle (maybe more...)
-      val (ledgerOrders2, ledgerOrdersByID2, ledgerOrdersByClOrdID2) = o.data.foldLeft((ledgerOrders, ledgerOrdersByID, ledgerOrdersByClOrdID)) {
-        case ((ls, lsById, lsByClOrdID), od) =>
+      val (ledgerOrdersByID2, ledgerOrdersByClOrdID2) = o.data.foldLeft(ledgerOrdersByID, ledgerOrdersByClOrdID) {
+        case ((lsById, lsByClOrdID), od) =>
           lsById.get(od.orderID) match {
             case Some(lo) =>
               val lo2 = (lo.ordStatus, od.ordStatus) match {
@@ -98,15 +102,15 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[Trade
                 case _ => lo
               }
               val lsByClOrdID2 = if (lo2.clOrdID == null) lsByClOrdID else lsByClOrdID + (lo2.clOrdID -> lo2)
-              (ls - lo + lo2, lsById + (lo2.orderID -> lo2), lsByClOrdID2)
+              (lsById + (lo2.orderID -> lo2), lsByClOrdID2)
             case None =>
               // expecting REST to fill in the initial order...
               val lo = LedgerOrder(orderID=od.orderID, clOrdID=od.clOrdID.orNull, price=od.stopPx.getOrElse(od.avgPx.getOrElse(od.price.getOrElse(-1))), qty=od.cumQty.getOrElse(od.orderQty.getOrElse(0.0)), side=od.side.orNull, ordType=od.ordType.orNull, timestamp=od.timestamp, ordStatus=od.ordStatus.getOrElse(New), ordRejReason=od.ordRejReason)
               val lsByClOrdID2 = if (lo.clOrdID == null) lsByClOrdID else lsByClOrdID + (lo.clOrdID -> lo)
-              (ls + lo, lsById + (lo.orderID -> lo), lsByClOrdID2)
+              (lsById + (lo.orderID -> lo), lsByClOrdID2)
           }
       }
-      copy(ledgerOrders=ledgerOrders2, ledgerOrdersByID=ledgerOrdersByID2, ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
+      copy(ledgerOrdersByID=ledgerOrdersByID2, ledgerOrdersByClOrdID=ledgerOrdersByClOrdID2)
     }
     case o: OrderBookSummary => copy(orderBookSummary = o)
     case o: OrderBook => copy(orderBookSummary = o.summary)  // deprecated...
@@ -114,7 +118,7 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[Trade
     case td: TradeData => copy(tradeDatas = tradeDatas :+ td)
     case _ => this
   }
-  lazy val myOrders: SortedSet[LedgerOrder] = ledgerOrders.filter(_.myOrder)
+  lazy val myOrders: Seq[LedgerOrder] = ledgerOrdersByID.values.filter(_.myOrder).toVector
   lazy val isMinimallyFilled: Boolean = orderBookSummary != null && tradeDatas.nonEmpty
   lazy val bidPrice: Double = orderBookSummary.bid
   lazy val askPrice: Double = orderBookSummary.ask
@@ -137,10 +141,13 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[Trade
       "data.pandl.delta"     -> 0.0,
     ) ++ m
 
-    val currOrders = l.ledgerOrders.filter(o => o.myOrder && o.ordStatus == Filled)
+    val currOrders = l.ledgerOrdersByID.values.filter(o => o.myOrder && o.ordStatus == Filled)
     // FIXME: *BIG* assumption - counting filled order pairs. Probably should instead use a concept of legs/roundtrips
-    val currOrders2 = currOrders.takeWhile(_.timestamp > l.ledgerMetrics.lastOrderTimestamp)
-    val currOrders3 = if (currOrders2.size % 2 == 1) currOrders2.drop(1) else currOrders2
+    val currOrders2 = if (l.ledgerMetrics.lastOrderID == null)
+      currOrders
+    else
+      currOrders.dropWhile(_.orderID != l.ledgerMetrics.lastOrderID).drop(1)
+    val currOrders3 = if (currOrders2.size % 2 == 1) currOrders2.dropRight(1) else currOrders2
     if (currOrders3.isEmpty)
       l.copy(ledgerMetrics=l.ledgerMetrics.copy(metrics=metricsVals, lastTradeData=currTradeDatas.lastOption.orNull))
     else {
@@ -156,7 +163,7 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[Trade
       val runningPandl2 = l.ledgerMetrics.runningPandl + pandlDelta
       val ledgerMetrics2 = l.ledgerMetrics.copy(
         metrics = metricsVals + ("data.pandl.pandl" -> runningPandl2) + ("data.pandl.delta" -> pandlDelta),
-        lastOrderTimestamp = currOrders3.head.timestamp,
+        lastOrderID = currOrders3.last.orderID,
         runningPandl = runningPandl2,
         lastTradeData=currTradeDatas.lastOption.orNull
       )

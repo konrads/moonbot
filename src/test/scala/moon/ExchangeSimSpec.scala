@@ -7,7 +7,6 @@ import moon.OrderSide._
 import moon.OrderStatus._
 import moon.OrderType._
 import moon.Sentiment._
-import org.joda.time.DateTime
 import org.scalatest._
 import org.scalatest.matchers.should._
 
@@ -23,7 +22,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   }
 
   def validateContains(ctx: Ctx, eCtx: ExchangeCtx, status: OrderStatus.Value, side: OrderSide.Value, ordType: OrderType.Value, price: Double, qty: Double) = {
-    ctx.ledger.ledgerOrders.count(o => o.ordStatus == status && o.side == side && o.ordType == ordType && o.price == price && o.qty == qty) shouldBe 1
+    ctx.ledger.ledgerOrdersByID.values.count(o => o.ordStatus == status && o.side == side && o.ordType == ordType && o.price == price && o.qty == qty) shouldBe 1
     eCtx.orders.values.count(o => o.status == status && o.side == side && o.ordType == ordType && o.price.contains(price) && o.qty == qty) shouldBe 1
   }
 
@@ -51,7 +50,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bull, wsOrderBook10(110, 10, 115, 15, timestampL = startMs + 2 * minMs)),
     )
     ctx.getClass shouldBe classOf[ClosePositionCtx]
-    ctx.ledger.ledgerOrders.size shouldBe 3
+    ctx.ledger.ledgerOrdersByID.size shouldBe 3
     validateContains(ctx, eCtx, Filled, Buy, Market, 105, 100) // init
     validateContains(ctx, eCtx, New, Sell, Limit, 115, 100) // takeProfit
     validateContains(ctx, eCtx, New, Sell, Stop, 100, 100) // stoploss
@@ -64,7 +63,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bear, wsOrderBook10(110, 10, 115, 15, timestampL = startMs + 2 * minMs)),
     )
     ctx.getClass shouldBe classOf[IdleCtx]
-    ctx.ledger.ledgerOrders.size shouldBe 3
+    ctx.ledger.ledgerOrdersByID.size shouldBe 3
     validateContains(ctx, eCtx, Filled, Sell, Market, 100, 100) // init
     validateContains(ctx, eCtx, OrderStatus.Canceled, Buy, Limit, 90, 100) // takeProfit
     validateContains(ctx, eCtx, Filled, Buy, Stop, 105, 100) // stoploss
@@ -78,7 +77,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bear, wsOrderBook10(94, 10, 99,  15, timestampL = startMs + 3 * minMs)), // trigger stoploss @ 95 (100-5)
     )
     ctx.getClass shouldBe classOf[IdleCtx]
-    ctx.ledger.ledgerOrders.size shouldBe 3
+    ctx.ledger.ledgerOrdersByID.size shouldBe 3
     validateContains(ctx, eCtx, Filled, Buy, Limit, 100, 100) // init
     validateContains(ctx, eCtx, OrderStatus.Canceled, Sell, Limit, 110, 100) // takeProfit
     validateContains(ctx, eCtx, Filled, Sell, Stop, 95, 100) // vanilla stoploss
@@ -92,7 +91,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bull, wsOrderBook10(106, 10, 116, 15, timestampL = startMs + 3 * minMs)), // trigger stoploss @ 105 (100+5)
     )
     ctx.getClass shouldBe classOf[IdleCtx]
-    ctx.ledger.ledgerOrders.size shouldBe 3
+    ctx.ledger.ledgerOrdersByID.size shouldBe 3
     validateContains(ctx, eCtx, Filled, Sell, Limit, 105, 100) // init
     validateContains(ctx, eCtx, OrderStatus.Canceled, Buy, Limit, 95, 100) // takeProfit
     validateContains(ctx, eCtx, Filled, Buy, Stop, 110, 100) // vanilla stoploss
@@ -109,7 +108,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs + 7 * minMs)), // trigger stoploss @ 101 (106-5)
     )
     ctx.getClass shouldBe classOf[IdleCtx]
-    ctx.ledger.ledgerOrders.size shouldBe 3
+    ctx.ledger.ledgerOrdersByID.size shouldBe 3
     validateContains(ctx, eCtx, Filled, Buy, Limit, 100, 100) // init
     validateContains(ctx, eCtx, OrderStatus.Canceled, Sell, Limit, 110, 100) // takeProfit
     validateContains(ctx, eCtx, Filled, Sell, Stop, 101, 100) // trailing stoploss
@@ -126,7 +125,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bull, wsOrderBook10(100, 10, 105, 15, timestampL = startMs + 7 * minMs)), // trigger stoploss @ 99 (94+5)
     )
     ctx.getClass shouldBe classOf[IdleCtx]
-    ctx.ledger.ledgerOrders.size shouldBe 3
+    ctx.ledger.ledgerOrdersByID.size shouldBe 3
     validateContains(ctx, eCtx, Filled, Sell, Limit, 105, 100) // init
     validateContains(ctx, eCtx, OrderStatus.Canceled, Buy, Limit, 95, 100) // takeProfit
     validateContains(ctx, eCtx, Filled, Buy, Stop, 104, 100) // stoploss
@@ -141,7 +140,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bull, wsOrderBook10(120, 10, 125, 15, timestampL = startMs + 2 * minMs)),
     )
     ctx.getClass shouldBe classOf[OpenPositionCtx]
-    ctx.ledger.ledgerOrders.size shouldBe 1
+    ctx.ledger.ledgerOrdersByID.size shouldBe 1
     validateContains(ctx, eCtx, New, Buy, Limit, 120, 100) // init, after amendments
   }
 
@@ -154,7 +153,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bear, wsOrderBook10(85, 10, 90, 15, timestampL = startMs + 2 * minMs)),
     )
     ctx.getClass shouldBe classOf[OpenPositionCtx]
-    ctx.ledger.ledgerOrders.size shouldBe 1
+    ctx.ledger.ledgerOrdersByID.size shouldBe 1
     validateContains(ctx, eCtx, New, Sell, Limit, 90, 100) // init, after amendments
   }
 

@@ -8,8 +8,6 @@ import org.scalatest._
 import org.scalatest.matchers.should._
 import play.api.libs.json.JsSuccess
 
-import scala.collection.SortedSet
-
 
 class LedgerSpec extends FlatSpec with Matchers with Inside {
   val bbandsStrategy = new BBandsStrategy(ConfigFactory.parseString(""))
@@ -83,21 +81,21 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
 
   it should "work for incremental and full pandl" in {
     val l = buildLedger(Ledger(),
-      // o1 - postonly err
-      ("rest", restOrderNew("o1", OrderSide.Buy, 10, 10, OrderType.Limit, "2010-01-01T00:00:00.000Z")),
-      ("ws",   wsOrderNew("o1", OrderSide.Buy, 11, 10, OrderType.Limit, "2010-01-01T00:00:00.000Z")),
-      ("ws",   wsOrderPostOnlyFailure("o1", OrderSide.Buy, 12, 13, "2010-01-01T00:00:00.000Z")),
-      // o2 - buy filled
-      ("rest", restOrderNew("o2", OrderSide.Buy, 10, 10, OrderType.Limit, "2010-01-02T00:00:00.000Z")),
-      ("ws",   wsOrderNew("o2", OrderSide.Buy, 11, 10, OrderType.Limit, "2010-01-02T00:00:00.000Z")),
-      ("ws",   wsOrderFilled("o2", 12, 13, 10, OrderType.Limit, "2010-01-02T12:00:00.000Z")),
+      // o4 - hence not myOrder, not initiated by Rest...
+      ("ws",   wsOrderNew("o4", OrderSide.Buy, 11, 10, OrderType.Limit, "2010-01-04T06:00:00.000Z")),
+      ("ws",   wsOrderFilled("o4", 12, 13, 10, OrderType.Limit, "2010-01-04T12:00:00.000Z")),
       // o3 - sell canceled
       ("rest", restOrderNew("o3", OrderSide.Sell, 10, 10, OrderType.Limit, "2010-01-03T00:00:00.000Z")),
       ("ws",   wsOrderNew("o3", OrderSide.Sell, 11, 10, OrderType.Limit, "2010-01-03T00:00:00.000Z")),
       ("ws",   wsOrderCancelled("o3", "2010-01-03T12:00:00.000Z")),
-      // o4 - not myOrder
-      ("ws",   wsOrderNew("o4", OrderSide.Buy, 11, 10, OrderType.Limit, "2010-01-04T06:00:00.000Z")),
-      ("ws",   wsOrderFilled("o4", 12, 13, 10, OrderType.Limit, "2010-01-04T12:00:00.000Z")),
+      // o2 - buy filled
+      ("rest", restOrderNew("o2", OrderSide.Buy, 10, 10, OrderType.Limit, "2010-01-02T00:00:00.000Z")),
+      ("ws",   wsOrderNew("o2", OrderSide.Buy, 11, 10, OrderType.Limit, "2010-01-02T00:00:00.000Z")),
+      ("ws",   wsOrderFilled("o2", 12, 13, 10, OrderType.Limit, "2010-01-02T12:00:00.000Z")),
+      // o1 - postonly err
+      ("rest", restOrderNew("o1", OrderSide.Buy, 10, 10, OrderType.Limit, "2010-01-01T00:00:00.000Z")),
+      ("ws",   wsOrderNew("o1", OrderSide.Buy, 11, 10, OrderType.Limit, "2010-01-01T00:00:00.000Z")),
+      ("ws",   wsOrderPostOnlyFailure("o1", OrderSide.Buy, 12, 13, "2010-01-01T00:00:00.000Z")),
     )
     l.ledgerOrders.size shouldBe 4
     l.ledgerOrders.toVector.map(_.orderID) shouldBe Vector("o4", "o3", "o2", "o1")
@@ -110,43 +108,46 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     val metrics3 = l2.ledgerMetrics
     metrics3.metrics shouldBe Map.empty  // no buy/sell as yet
 
-    // add sell and buy, recalculate metrics, expect the last buy to be ignored
+    // add sell and buy, note, only the sell is used to the latest pandl, as o6 buy is pair-less
     val l4 = buildLedger(l3,
-      // o2 - buy filled
+      // o5 - buy filled
       ("rest", restOrderNew("o5", OrderSide.Sell, 10, 10, OrderType.Market, "2010-01-05T00:00:00.000Z")),
       ("ws",   wsOrderNew("o5", OrderSide.Sell, 11, 10, OrderType.Market, "2010-01-05T00:00:00.000Z")),
       ("ws",   wsOrderFilled("o5", 20, 24, 10, OrderType.Market, "2010-01-05T12:00:00.000Z")),
-      // o2 - buy filled
+      // o6 - buy filled
       ("rest", restOrderNew("o6", OrderSide.Buy, 10, 10, OrderType.Market, "2010-01-06T00:00:00.000Z")),
       ("ws",   wsOrderNew("o6", OrderSide.Buy, 11, 10, OrderType.Market, "2010-01-06T00:00:00.000Z")),
       ("ws",   wsOrderFilled("o6", 8, 6, 10, OrderType.Market, "2010-01-06T12:00:00.000Z")),
     )
-    l4.ledgerOrders.toVector.map(_.orderID) shouldBe Vector("o6", "o5", "o4", "o3", "o2", "o1")
+    l4.ledgerOrders.toVector.map(_.orderID) shouldBe Vector("o4", "o3", "o2", "o1", "o5", "o6")
 
     val l5 = l4.withMetrics(strategy = bbandsStrategy)
     val metrics5 = l5.ledgerMetrics
-    metrics5 shouldBe LedgerMetrics(Map("data.price" -> 55.0, "data.pandl.pandl" -> 0.3524439102564103, "data.pandl.delta" -> 0.3524439102564103, "data.sentiment" -> 0.0, "data.bbands.score" -> 0.0, "data.myTradeCnt" -> 3, "data.volume" -> 0, "data.bbands.sentiment" -> 0.0), parseDateTime("2010-01-05T12:00:00.000Z"), null, 0.3524439102564103)  // no buy/sell as yet
+    metrics5 shouldBe LedgerMetrics(Map("data.price" -> 55.0, "data.pandl.pandl" -> 0.3524439102564103, "data.pandl.delta" -> 0.3524439102564103, "data.sentiment" -> 0.0, "data.bbands.score" -> 0.0, "data.myTradeCnt" -> 3, "data.volume" -> 0.0, "data.bbands.sentiment" -> 0.0), "o5", null, 0.3524439102564103)
 
-    // add sell, recalculate metrics
+    // add sell, recalculate metrics - expect no runningPandl change as not matching Buy
     val l6 = buildLedger(l5,
-      // o2 - buy filled
+      // o8 - sell filled
       ("rest", restOrderNew("o7", OrderSide.Sell, 10, 10, OrderType.Market, "2010-01-07T00:00:00.000Z")),
       ("ws",   wsOrderNew("o7", OrderSide.Sell, 11, 10, OrderType.Market, "2010-01-07T00:00:00.000Z")),
       ("ws",   wsOrderFilled("o7", 20, 24, 10, OrderType.Market, "2010-01-07T12:00:00.000Z")),
     )
+    l6.ledgerOrders.toVector.map(_.orderID) shouldBe Vector("o4", "o3", "o2", "o1", "o5", "o6", "o7")
     val l7 = l6.withMetrics(strategy = bbandsStrategy)
     val metrics7 = l7.ledgerMetrics
-    metrics7 shouldBe LedgerMetrics(Map("data.price" -> 55.0, "data.pandl.pandl" -> 1.6008814102564104, "data.pandl.delta" -> 1.2484375, "data.sentiment" -> 0.0, "data.bbands.score" -> 0.0, "data.myTradeCnt" -> 4, "data.volume" -> 0.0, "data.bbands.sentiment" -> 0.0), parseDateTime("2010-01-07T12:00:00.000Z"), null, 1.6008814102564104)  // no buy/sell as yet
-  }
+    metrics7 shouldBe LedgerMetrics(Map("data.price" -> 55.0, "data.pandl.pandl" -> 1.6008814102564104, "data.pandl.delta" -> 1.2484375, "data.sentiment" -> 0.0, "data.bbands.score" -> 0.0, "data.myTradeCnt" -> 4, "data.volume" -> 0.0, "data.bbands.sentiment" -> 0.0), "o7", null, 1.6008814102564104)
 
-  it should "order LedgerOrders desc" in {
-    val set = SortedSet(
-      LedgerOrder("o1",   "clo1",   12, 23, null, null, null, None, parseDateTime("2010-01-01T00:00:00.000Z"), true),
-      LedgerOrder("o3",   "clo3",   12, 23, null, null, null, None, parseDateTime("2010-01-03T00:00:00.000Z"), true),
-      LedgerOrder("o3.5", "clo3.5", 12, 23, null, null, null, None, parseDateTime("2010-01-03T12:00:00.000Z"), true),
-      LedgerOrder("o2",   "clo2",   12, 23, null, null, null, None, parseDateTime("2010-01-02T00:00:00.000Z"), true),
+    // add pairless buy
+    val l8 = buildLedger(l7,
+      // o8 - sell filled
+      ("rest", restOrderNew("o8", OrderSide.Buy, 10, 10, OrderType.Market, "2010-01-07T00:00:00.000Z")),
+      ("ws",   wsOrderNew("o8", OrderSide.Buy, 11, 10, OrderType.Market, "2010-01-07T00:00:00.000Z")),
+      ("ws",   wsOrderFilled("o8", 20, 24, 10, OrderType.Market, "2010-01-07T12:00:00.000Z")),
     )
-    set.toVector.map(_.orderID) shouldBe Vector("o3.5", "o3", "o2", "o1")
+    l8.ledgerOrders.toVector.map(_.orderID) shouldBe Vector("o4", "o3", "o2", "o1", "o5", "o6", "o7", "o8")
+    val l9 = l8.withMetrics(strategy = bbandsStrategy)
+    val metrics9 = l9.ledgerMetrics
+    metrics9 shouldBe  LedgerMetrics(Map("data.price" -> 55.0, "data.pandl.pandl" -> 1.6008814102564104, "data.pandl.delta" -> 0, "data.sentiment" -> 0.0, "data.bbands.score" -> 0.0, "data.myTradeCnt" -> 5, "data.volume" -> 0, "data.bbands.sentiment" -> 0.0), "o7", null, 1.6008814102564104)
   }
 
   it should "do basic pandl" in {
