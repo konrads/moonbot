@@ -26,7 +26,8 @@ object TrainingApp extends App {
   val rsiLower                = 50 to 65 by 5
   val rsiUpper                = 80 to 95 by 5
   // indecreasing
-  val indecreasingPeriods     = Seq(Seq(7, 5, 4, 3), Seq(9, 7, 5, 3), Seq(12, 9, 6, 3))
+  val indecreasingPeriods     = Seq(Seq(5, 4, 3),    Seq(7, 5, 3),    Seq(9, 6, 3),
+                                    Seq(7, 5, 4, 3), Seq(9, 7, 5, 3), Seq(12, 9, 6, 3))
   val indecreasingMinAbsSlope = Seq(2.1, 2.3, 2.5)
   val indecreasingMaxAbsSlope = Seq(10.0, 15.0)
   // macd
