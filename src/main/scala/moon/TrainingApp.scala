@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.Logger
 
 import scala.collection.immutable.ListMap
 // colours from: https://www.scala-lang.org/api/current/scala/Console$.html
-import Console.{GREEN, RED, RESET, BOLD}
+import Console.{GREEN, RED, RESET, BOLD, UNDERLINED}
 
 
 /**
@@ -26,9 +26,9 @@ object TrainingApp extends App {
   val rsiLower                = 50 to 65 by 5
   val rsiUpper                = 80 to 95 by 5
   // indecreasing
-  val indecreasingPeriods     = Seq(/* Seq(5, 4, 3), Seq(7, 5, 3), */ Seq(7, 5, 4, 3), Seq(9, 7, 5, 3), Seq(12, 9, 6, 3))
-  val indecreasingMinAbsSlope = Seq(/* 1.5, */ 2.1, 2.3, 2.5)
-  val indecreasingMaxAbsSlope = Seq(10.0 /*, 15.0, 20.0*/)
+  val indecreasingPeriods     = Seq(Seq(7, 5, 4, 3), Seq(9, 7, 5, 3), Seq(12, 9, 6, 3))
+  val indecreasingMinAbsSlope = Seq(2.1, 2.3, 2.5)
+  val indecreasingMaxAbsSlope = Seq(10.0, 15.0)
   // macd
   val macdResamplePeriods     = 30*1000 to 120*1000 by 10*1000
   // bbands
@@ -155,6 +155,10 @@ object TrainingApp extends App {
       case "indecreasing" => trainIndecreasing
       case "macd"         => trainMacd
       case "bbands"       => trainBbands
+      case "all"          =>
+        val allReses = Map("RSI" -> trainRsi, "INDECREASING" -> trainIndecreasing, "MACD" -> trainMacd, "BBANDS" -> trainBbands)
+        val (desc, (pandl, strategy)) = allReses.toSeq.sortBy(_._2._1).last
+        log.warn(s"$GREEN$BOLD$UNDERLINED$desc: BEST OF ALL pandl: $pandl, strategy conf: ${strategy.config}$RESET")
       case _ =>
         log.error(s"${RED}Invalid indicator: ${args(0)}$RESET")
         System.exit(-1)
