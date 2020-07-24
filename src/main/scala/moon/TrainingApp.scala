@@ -40,16 +40,16 @@ object TrainingApp extends App {
         useSynthetics = false)
       val (finalCtx, finalExchangeCtx) = sim.run()
       val finalPandl = finalCtx.ledger.ledgerMetrics.runningPandl
-      val finalPrice = finalCtx.ledger.myOrders.takeRight(2).map(_.price).max  // taking 2 in case last 1 hasn't got a price
-      val finalPriceUSD = finalPandl * finalPrice
+      val finalPrice = (finalCtx.ledger.bidPrice + finalCtx.ledger.askPrice) / 2
+      val finalPandlUSD = finalPandl * finalPrice
       val finalTrades = finalCtx.ledger.myOrders.filter(_.ordStatus == Filled)
       val finalLimitTrades = finalTrades.filter(_.ordType == Limit)
       if (finalPandl > winningPandl) {
-        log.error(s"$desc: *** !!!NEW WINNER!!! *** pandl: $finalPandl / ${finalPriceUSD} (${finalLimitTrades.size} / ${finalTrades.size}), strategy conf: ${strategy.config}, takeProfitMargin: $takeProfitMargin, stoplossMargin: $stoplossMargin, openWithMarket: $openWithMarket, useTrailingStoploss: $useTrailingStoploss")
+        log.error(s"$desc: *** !!!NEW WINNER!!! *** pandl: $finalPandl / $finalPandlUSD (${finalLimitTrades.size} / ${finalTrades.size}), strategy conf: ${strategy.config}, takeProfitMargin: $takeProfitMargin, stoplossMargin: $stoplossMargin, openWithMarket: $openWithMarket, useTrailingStoploss: $useTrailingStoploss")
         winningPandl = finalPandl
         winningStrategy = strategy
       } else
-        log.warn(s"$desc: running pandl: $finalPandl / ${finalPriceUSD} (${finalLimitTrades.size} / ${finalTrades.size}), strategy conf: ${strategy.config}, takeProfitMargin: $takeProfitMargin, stoplossMargin: $stoplossMargin, openWithMarket: $openWithMarket, useTrailingStoploss: $useTrailingStoploss")
+        log.warn(s"$desc: running pandl: $finalPandl / $finalPandlUSD (${finalLimitTrades.size} / ${finalTrades.size}), strategy conf: ${strategy.config}, takeProfitMargin: $takeProfitMargin, stoplossMargin: $stoplossMargin, openWithMarket: $openWithMarket, useTrailingStoploss: $useTrailingStoploss")
     }
 
     (winningPandl, winningStrategy)
