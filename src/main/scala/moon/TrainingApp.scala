@@ -40,7 +40,7 @@ object TrainingApp extends App {
         useSynthetics = false)
       val (finalCtx, finalExchangeCtx) = sim.run()
       val finalPandl = finalCtx.ledger.ledgerMetrics.runningPandl
-      val finalPrice = finalCtx.ledger.myOrders.lastOption.map(_.price).getOrElse(0.0)
+      val finalPrice = finalCtx.ledger.myOrders.takeRight(2).map(_.price).max  // taking 2 in case last 1 hasn't got a price
       val finalPriceUSD = finalPandl * finalPrice
       val finalTrades = finalCtx.ledger.myOrders.filter(_.ordStatus == Filled)
       val finalLimitTrades = finalTrades.filter(_.ordType == Limit)
