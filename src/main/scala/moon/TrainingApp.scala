@@ -22,7 +22,7 @@ object TrainingApp extends App {
   val openWithMarkets         = Seq(false, true)
   val useTrailingStoplosses   = Seq(false, true)
   // rsi
-  val rsiWindows              = 50 to 100 by 5
+  val rsiWindows              = 10 to 100 by 5
   val rsiLower                = 50 to 65 by 5
   val rsiUpper                = 80 to 95 by 5
   // indecreasing
@@ -157,8 +157,13 @@ object TrainingApp extends App {
       case "macd"         => trainMacd
       case "bbands"       => trainBbands
       case "all"          =>
-        val allReses = Map("RSI" -> trainRsi, "INDECREASING" -> trainIndecreasing, "MACD" -> trainMacd, "BBANDS" -> trainBbands)
-        val (desc, (pandl, strategy)) = allReses.toSeq.sortBy(_._2._1).last
+        val allReses = Map(
+          // "RSI"          -> trainRsi,
+          "INDECREASING" -> trainIndecreasing,
+          "MACD"         -> trainMacd,
+          "BBANDS"       -> trainBbands,
+        )
+        val (desc, (pandl, strategy)) = allReses.toSeq.maxBy(_._2._1)
         log.warn(s"$GREEN$BOLD$UNDERLINED$desc: BEST OF ALL pandl: $pandl, strategy conf: ${strategy.config}$RESET")
       case _ =>
         log.error(s"${RED}Invalid indicator: ${args(0)}$RESET")
@@ -178,3 +183,13 @@ object TrainingApp extends App {
 // 20:36:51 ERROR TrainingApp - INDECREASING: !!!FINAL WINNER!!! pandl: -1.149828745754082E-5 / -0.10825350184088244 (7 / 10), strategy conf: Config(SimpleConfigObject({"maxAbsSlope":10,"minAbsSlope":2.5,"periods":[11,7,3]})), takeProfitMargin: 5.0, stoplossMargin: 5.0, openWithMarket: false, useTrailingStoploss: false
 // 22:11:51 ERROR TrainingApp - INDECREASING: !!!FINAL WINNER!!! pandl: 1.986037232197188E-5 / 0.18698044031828476 (5 / 6), strategy conf: Config(SimpleConfigObject({"maxAbsSlope":10,"minAbsSlope":2.5,"periods":[9,6,3]})), takeProfitMargin: 15.0, stoplossMargin: 15.0, openWithMarket: false, useTrailingStoploss: true
 // 22:21:59 ERROR TrainingApp - INDECREASING: NEW WINNER pandl: 2.344868712292683E-5 / 0.2207635270905754 (2 / 2), strategy conf: Config(SimpleConfigObject({"maxAbsSlope":10,"minAbsSlope":2.3,"periods":[12,9,6,3]})), takeProfitMargin: 15.0, stoplossMargin: 15.0, openWithMarket: false, useTrailingStoploss: true
+
+// BBANDS:
+// 07:22:36 ERROR TrainingApp - BBANDS: NEW WINNER pandl: 1.736868385355042E-5 / 0.15928385744994752 (2 / 2), strategy conf: Config(SimpleConfigObject({"devDown":1.8,"devUp":2.2,"window":6})), takeProfitMargin: 10, stoplossMargin: 15, openWithMarket: false, useTrailingStoploss: true
+// 07:29:00 ERROR TrainingApp - BBANDS: NEW WINNER pandl: 2.333576439042008E-5 / 0.21400646128344494 (2 / 2), strategy conf: Config(SimpleConfigObject({"devDown":1.8,"devUp":2.2,"window":6})), takeProfitMargin: 15, stoplossMargin: 15, openWithMarket: false, useTrailingStoploss: true
+
+// MACD: 21:36:42 ERROR TrainingApp - MACD: NEW WINNER pandl: 8.833493745676047E-8 / 8.10097627681586E-4 (15 / 20), strategy conf: Config(SimpleConfigObject({"resamplePeriodMs":30000})), takeProfitMargin: 15, stoplossMargin: 15, openWithMarket: false, useTrailingStoploss: false
+
+
+// Lets drill more into:
+// INDECREASING:
