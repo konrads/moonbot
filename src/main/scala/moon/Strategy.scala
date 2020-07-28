@@ -37,6 +37,7 @@ object Strategy {
     case "bbands"        => new BBandsStrategy(config)
     case "rsi"           => new RSIStrategy(config)
     case "macd"          => new MACDStrategy(config)
+    case "ma"            => new MAStrategy(config)
     case "alternating"   => new AlternatingStrategy(config)  // test strategy
     case "weighted"      => new WeightedStrategy(config, parentConfig)
   }
@@ -278,9 +279,14 @@ class IndecreasingStrategy(val config: Config) extends Strategy {
 class MAStrategy(val config: Config) extends Strategy {
   val window = config.optInt("window").getOrElse(26)
   val maType: MA.Value = config.optString("maType").map(MA.withName).getOrElse(SMA)
-  val upper = config.optDouble("upper").getOrElse(0.00000000001)
-  val lower = config.optDouble("lower").getOrElse(0.00000000001)
+  val upper = config.optDouble("upper").getOrElse(0.9)
+  val lower = config.optDouble("lower").getOrElse(-0.9)
+  val upperDelta = config.optDouble("upperDelta").getOrElse(10.0)
+  val lowerDelta = config.optDouble("lowerDelta").getOrElse(-10.0)
   val resamplePeriodMs = config.optInt("resamplePeriodMs").getOrElse(60 * 1000)
+  val capFun = capProportionalExtremes()
+  assert (upper > 0 && lower < 0)
+  assert (upperDelta > 0 && lowerDelta < 0)
   log.info(s"Strategy ${this.getClass.getSimpleName}: window: $window, resamplePeriodMs: $resamplePeriodMs")
   override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
     val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, (window+1) * resamplePeriodMs, dropLast=false)
@@ -290,15 +296,16 @@ class MAStrategy(val config: Config) extends Strategy {
     val currMa = ma(prices, window, maType)
     val currPrice = (ledger.askPrice + ledger.bidPrice) / 2
     val delta = currPrice - currMa
-    val sentiment = if (delta > upper)
+    val score = capFun(delta)
+    val sentiment = if (score > upper && delta > upperDelta)
       Bull
-    else if (delta < lower)
+    else if (score < lower && delta < lowerDelta)
       Bear
     else
       Neutral
     StrategyResult(
       sentiment,
-      Map[String, Double]("data.ma.sentiment" -> sentiment.id, "data.ma.delta" -> delta, "data.ma.upper" -> upper, "data.ma.lower" -> lower),
+      Map[String, Double]("data.ma.sentiment" -> sentiment.id, "data.ma.delta" -> delta, "data.ma.score" -> score, "data.ma.upperDelta" -> upperDelta, "data.ma.lowerDelta" -> lowerDelta),
       ledger.copy(tradeDatas = tradeDatas2))
   }
 }

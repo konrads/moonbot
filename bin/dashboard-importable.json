@@ -1006,6 +1006,137 @@
       },
       {
         "aliasColors": {},
+        "bars": false,
+        "dashLength": 10,
+        "dashes": false,
+        "datasource": "Local Graphite",
+        "fill": 1,
+        "gridPos": {
+          "h": 5,
+          "w": 24,
+          "x": 0,
+          "y": 53
+        },
+        "id": 17,
+        "legend": {
+          "avg": false,
+          "current": false,
+          "max": false,
+          "min": false,
+          "show": true,
+          "total": false,
+          "values": false
+        },
+        "lines": true,
+        "linewidth": 1,
+        "links": [],
+        "nullPointMode": "connected",
+        "percentage": false,
+        "pointradius": 5,
+        "points": false,
+        "renderer": "flot",
+        "seriesOverrides": [
+          {
+            "alias": "upperDelta",
+            "color": "#dcdcdc",
+            "dashes": true
+          },
+          {
+            "alias": "lowerDelta",
+            "color": "#969696",
+            "dashes": true
+          },
+          {
+            "alias": "delta",
+            "color": "#70dbed"
+          },
+          {
+            "alias": "bull",
+            "color": "__profit_green__",
+            "lines": false,
+            "points": true
+          },
+          {
+            "alias": "bear",
+            "color": "__loss_red__",
+            "lines": false,
+            "points": true
+          }
+        ],
+        "spaceLength": 10,
+        "stack": false,
+        "steppedLine": false,
+        "targets": [
+          {
+            "refCount": 2,
+            "refId": "A",
+            "target": "aliasByMetric(moon.__pair__.data.ma.delta)"
+          },
+          {
+            "refCount": 2,
+            "refId": "B",
+            "target": "aliasByMetric(moon.__pair__.data.ma.upperDelta)"
+          },
+          {
+            "refCount": 4,
+            "refId": "C",
+            "target": "aliasByMetric(moon.__pair__.data.ma.lowerDelta)"
+          },
+          {
+            "refCount": 1,
+            "refId": "D",
+            "target": "alias(multiplySeries(moon.__pair__.data.ma.delta, divideSeries(removeAboveValue(moon.__pair__.data.ma.sentiment, 0), moon.__pair__.data.ma.sentiment)), 'bear')",
+            "textEditor": true
+          },
+          {
+            "refCount": 1,
+            "refId": "E",
+            "target": "alias(multiplySeries(moon.__pair__.data.ma.delta, divideSeries(removeBelowValue(moon.__pair__.data.ma.sentiment, 0), moon.__pair__.data.ma.sentiment)), 'bull')",
+            "textEditor": true
+          }
+        ],
+        "thresholds": [],
+        "timeFrom": null,
+        "timeShift": null,
+        "title": "Above/Below MA",
+        "tooltip": {
+          "shared": true,
+          "sort": 0,
+          "value_type": "individual"
+        },
+        "type": "graph",
+        "xaxis": {
+          "buckets": null,
+          "mode": "time",
+          "name": null,
+          "show": true,
+          "values": []
+        },
+        "yaxes": [
+          {
+            "format": "short",
+            "label": null,
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true
+          },
+          {
+            "format": "short",
+            "label": null,
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true
+          }
+        ],
+        "yaxis": {
+          "align": false,
+          "alignLevel": null
+        }
+      },
+      {
+        "aliasColors": {},
         "bars": true,
         "dashLength": 10,
         "dashes": false,
@@ -1015,7 +1146,7 @@
           "h": 5,
           "w": 8,
           "x": 0,
-          "y": 48
+          "y": 58
         },
         "id": 22,
         "legend": {
@@ -1107,7 +1238,7 @@
           "h": 5,
           "w": 4,
           "x": 8,
-          "y": 48
+          "y": 58
         },
         "id": 23,
         "legend": {
@@ -1199,7 +1330,7 @@
           "h": 5,
           "w": 4,
           "x": 12,
-          "y": 48
+          "y": 58
         },
         "id": 24,
         "legend": {
@@ -1297,7 +1428,7 @@
           "h": 5,
           "w": 4,
           "x": 16,
-          "y": 48
+          "y": 58
         },
         "id": 25,
         "interval": null,
@@ -1374,7 +1505,7 @@
           "h": 5,
           "w": 4,
           "x": 20,
-          "y": 48
+          "y": 58
         },
         "id": 26,
         "interval": null,
