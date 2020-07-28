@@ -119,6 +119,7 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[Trade
     case _ => this
   }
   lazy val myOrders: Seq[LedgerOrder] = ledgerOrdersByID.values.filter(_.myOrder).toVector
+  lazy val myTrades: Seq[LedgerOrder] = myOrders.filter(_.ordStatus == Filled)
   lazy val isMinimallyFilled: Boolean = orderBookSummary != null && tradeDatas.nonEmpty
   lazy val bidPrice: Double = orderBookSummary.bid
   lazy val askPrice: Double = orderBookSummary.ask
@@ -135,7 +136,7 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[Trade
       "data.price"           -> (l.bidPrice + l.askPrice) / 2,
       "data.volume"          -> volume,
       "data.sentiment"       -> s.id,
-      "data.myTradeCnt"      -> l.myOrders.count(_.ordStatus == Filled),
+      "data.myTradeCnt"      -> l.myTrades.size,
       // following will be updated if have filled myOrders since last withMetrics()
       "data.pandl.pandl"     -> l.ledgerMetrics.runningPandl,
       "data.pandl.delta"     -> 0.0,
