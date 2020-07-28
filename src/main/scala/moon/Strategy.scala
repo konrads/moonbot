@@ -6,6 +6,7 @@ import moon.OrderSide._
 import moon.Sentiment._
 import moon.TickDirection._
 import moon.talib._
+import moon.talib.MA._
 
 
 case class StrategyResult(sentiment: Sentiment.Value, metrics: Map[String, Double], ledger: Ledger)
@@ -269,6 +270,35 @@ class IndecreasingStrategy(val config: Config) extends Strategy {
     StrategyResult(
       sentiment,
       Map[String, Double]("data.indecreasing.sentiment" -> sentiment.id, "data.indecreasing.lower" -> -minAbsSlope, "data.indecreasing.upper" -> minAbsSlope) ++ avgSlope.map("data.indecreasing.slope" -> _).view.toMap,
+      ledger.copy(tradeDatas = tradeDatas2))
+  }
+}
+
+
+class MAStrategy(val config: Config) extends Strategy {
+  val window = config.optInt("window").getOrElse(26)
+  val maType: MA.Value = config.optString("maType").map(MA.withName).getOrElse(SMA)
+  val upper = config.optDouble("upper").getOrElse(0.00000000001)
+  val lower = config.optDouble("lower").getOrElse(0.00000000001)
+  val resamplePeriodMs = config.optInt("resamplePeriodMs").getOrElse(60 * 1000)
+  log.info(s"Strategy ${this.getClass.getSimpleName}: window: $window, resamplePeriodMs: $resamplePeriodMs")
+  override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
+    val tradeDatas2 = Strategy.latestTradesData(ledger.tradeDatas, (window+1) * resamplePeriodMs, dropLast=false)
+    val resampledTicks = resample(tradeDatas2, resamplePeriodMs)
+    val ffilled = ffill(resampledTicks).takeRight(MIN_EMA_WINDOW)  // in case change from SMA => EMA
+    val prices = ffilled.map(_._2.weightedPrice)  // Note: textbook TA suggests close not weightedPrice, also calendar minutes, not minutes since now...
+    val currMa = ma(prices, window, maType)
+    val currPrice = (ledger.askPrice + ledger.bidPrice) / 2
+    val delta = currPrice - currMa
+    val sentiment = if (delta > upper)
+      Bull
+    else if (delta < lower)
+      Bear
+    else
+      Neutral
+    StrategyResult(
+      sentiment,
+      Map[String, Double]("data.ma.sentiment" -> sentiment.id, "data.ma.delta" -> delta, "data.ma.upper" -> upper, "data.ma.lower" -> lower),
       ledger.copy(tradeDatas = tradeDatas2))
   }
 }

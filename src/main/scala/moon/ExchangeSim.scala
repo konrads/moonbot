@@ -54,7 +54,8 @@ class ExchangeSim(
       tradeQty,
       takeProfitMargin, stoplossMargin,
       openWithMarket,
-      useTrailingStoploss)
+      useTrailingStoploss,
+      true)
 
     val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((InitCtx(Ledger()):Ctx, ExchangeCtx())) {
       case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, WsEvent(event))

@@ -5,10 +5,11 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import javax.xml.bind.DatatypeConverter
-import moon.{Funding, Info, OrderBook, OrderBookSummary, Trade, UpsertOrder, WsModel}
-import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.DateTimeFormat
+import org.joda.time.{DateTime, DateTimeZone}
 import play.api.libs.json.{Json, Reads}
+
+import scala.Console.{GREEN, RED, RESET}
 
 
 package object moon {
@@ -186,5 +187,12 @@ package object moon {
       cache = tail
       head
     }
+  }
+
+  def pretty(s: => String, sentiment: Sentiment.Value=Sentiment.Neutral, shouldColour: Boolean=false): String = (sentiment, shouldColour) match {
+    case (_, false) | (Sentiment.Neutral, _) => s
+    case (Sentiment.Bull, true)              => s"$GREEN$s$RESET"
+    case (Sentiment.Bear, true)              => s"$RED$s$RESET"
+    case _                                   => ???  // to avoid warning: It would fail on the following input: (_, true)
   }
 }
