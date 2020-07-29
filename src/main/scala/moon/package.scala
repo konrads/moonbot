@@ -97,11 +97,12 @@ package object moon {
     // ...etc, will add if needed
   }
 
-  def timeit(f: => Unit, runs: Int=100): Double = {
+  def timeit[T](f: => T, runs: Int=10): (Double, T) = {
     val start = System.currentTimeMillis
-    for (i <- 0 to runs) f
+    val res = for (i <- 0 to runs) yield f
     val end = System.currentTimeMillis
-    (end - start).toDouble / runs
+    val avgRuntime = (end - start).toDouble / runs
+    (avgRuntime, res.head)
   }
 
   def round(x: Double): Double =

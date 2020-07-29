@@ -311,6 +311,12 @@ class MAStrategy(val config: Config) extends Strategy {
 }
 
 
+class HVFStrategy(val config: Config, val parentConfig: Config) extends Strategy {
+  override def strategize(ledger: Ledger): StrategyResult = {
+    ???
+  }
+}
+
 class WeightedStrategy(val config: Config, val parentConfig: Config) extends Strategy {
   import scala.jdk.CollectionConverters._
   val weights = (for (k <- config.getObject("weights").keySet().asScala) yield k -> config.getDouble(s"weights.$k")).toMap
