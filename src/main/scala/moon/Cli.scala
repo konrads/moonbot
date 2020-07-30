@@ -196,11 +196,11 @@ object Cli extends App {
           log.info(s"...wsData: $wsData\n                                ledgerOrders:${ledger2.ledgerOrders.map(o => s"\n                                - $o").mkString}")
           if (ledger2.isMinimallyFilled) {
             val strategyRes = strategy.strategize(ledger2)
-            val (s, m, l) = (strategyRes.sentiment, strategyRes.metrics, strategyRes.ledger)
+            val (s, m) = (strategyRes.sentiment, strategyRes.metrics)
             if (s == Bull)
-              log.info(s"bullish - $s! would buy @ ${l.bidPrice}, metrics: $m")
+              log.info(s"bullish - $s! would buy @ ${ledger2.bidPrice}, metrics: $m")
             else if (s == Bear)
-              log.info(s"bearish - $s! would sell @ ${l.askPrice}, metrics: $m")
+              log.info(s"bearish - $s! would sell @ ${ledger2.askPrice}, metrics: $m")
             else
               log.info(s"neutral - $s..., metrics: $m")
           } else {

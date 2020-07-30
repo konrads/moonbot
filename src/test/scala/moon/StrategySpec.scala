@@ -30,7 +30,6 @@ class StrategySpec extends FlatSpec with Matchers with Inside {
       .record(TradeData(side=null, size=1, price=4, tickDirection=null, timestamp=parseDateTime("2010-01-02T00:04:04.000Z")))
       .record(TradeData(side=null, size=1, price=5, tickDirection=null, timestamp=parseDateTime("2010-01-02T00:05:05.000Z")))
     val res = bbandsStrategy.strategize(l)
-    res.ledger.tradeDatas.size shouldBe 6
     res.sentiment shouldBe Neutral
     res.metrics shouldBe Map(
       "data.bbands.sentiment" -> 0.0,
@@ -41,12 +40,11 @@ class StrategySpec extends FlatSpec with Matchers with Inside {
     )
 
     // round 2 - with big gap, multiple trades rolled into 1 minute
-    val l2 = res.ledger
-      .record(TradeData(side=null, size=1, price=7, tickDirection=null, timestamp=parseDateTime("2010-01-02T00:09:01.000Z")))
-      .record(TradeData(side=null, size=1, price=8, tickDirection=null, timestamp=parseDateTime("2010-01-02T00:09:02.000Z")))
-      .record(TradeData(side=null, size=4, price=9, tickDirection=null, timestamp=parseDateTime("2010-01-02T00:09:03.000Z")))
+    val l2 = l
+      .record(TradeData(side=null, size=1, price=7, tickDirection=null, timestamp=parseDateTime("2010-01-02T00:08:01.000Z")))
+      .record(TradeData(side=null, size=1, price=8, tickDirection=null, timestamp=parseDateTime("2010-01-02T00:08:02.000Z")))
+      .record(TradeData(side=null, size=4, price=9, tickDirection=null, timestamp=parseDateTime("2010-01-02T00:08:03.000Z")))
     val res2 = bbandsStrategy.strategize(l2)
-    res2.ledger.tradeDatas.size shouldBe 6
     res2.sentiment shouldBe Bear
     res2.metrics shouldBe Map(
       "data.bbands.sentiment" -> -1.0,
@@ -57,17 +55,16 @@ class StrategySpec extends FlatSpec with Matchers with Inside {
     )
 
     // round 3 - with enormous gap, ie. this trade is last known
-    val l3 = res2.ledger
+    val l3 = l2
       .record(TradeData(side=null, size=1, price=10, tickDirection=null, timestamp=parseDateTime("2010-01-02T00:20:00.000Z")))
     val res3 = bbandsStrategy.strategize(l3)
-    res3.ledger.tradeDatas.size shouldBe 2
     res3.sentiment shouldBe Bear
     res3.metrics shouldBe Map(
       "data.bbands.sentiment" -> -1.0,
       "data.bbands.score"     -> -1.0,
-      "data.bbands.upper"     -> 10.399999999999999,
-      "data.bbands.middle"    -> 9.2,  // (9+9+9+9+10)/5
-      "data.bbands.lower"     -> 8.799999999999999,
+      "data.bbands.upper"     -> 10.600000000000001,
+      "data.bbands.middle"    -> 8.8,  // (9+9+9+9+10)/5
+      "data.bbands.lower"     -> 8.200000000000001,
     )
   }
 }

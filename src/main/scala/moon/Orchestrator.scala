@@ -29,12 +29,12 @@ object Orchestrator {
       case ShortDir => l.askPrice
     }
 
-    def shouldKeepOpen(d: Dir.Value, l: Ledger): (Boolean, Ledger) = {
+    def shouldKeepOpen(d: Dir.Value, l: Ledger): Boolean = {
       val strategyRes = strategy.strategize(l)
-      val (sentiment, l2) = (strategyRes.sentiment, strategyRes.ledger)
-      val shouldKeepGoing = (d == LongDir && sentiment == Bull) || (d == ShortDir && sentiment == Bear)
-      (shouldKeepGoing, l2)
+      val shouldKeepGoing = (d == LongDir && strategyRes.sentiment == Bull) || (d == ShortDir && strategyRes.sentiment == Bear)
+      shouldKeepGoing
     }
+
     def openPositionOrder(d: Dir.Value, l: Ledger): OpenInitOrder = (d, openWithMarket) match {
       case (LongDir, true)   => OpenInitOrder(Buy, Market, uuid, tradeQty)
       case (LongDir, false)  => OpenInitOrder(Buy, Limit, uuid, tradeQty, Some(l.bidPrice))
@@ -85,18 +85,17 @@ object Orchestrator {
               ||                                             |
               |`-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-'""".stripMargin)
           val strategyRes = strategy.strategize(ledger2)
-          val (sentiment, ledger3) = (strategyRes.sentiment, strategyRes.ledger)
-          if (log.isDebugEnabled) log.debug(s"idle: Sentiment is $sentiment")
-          if (sentiment == Bull) {
-            val effect = openPositionOrder(LongDir, ledger)
-            log.info(s"idle: starting afresh with $LongDir order: ${effect.clOrdID} @ ${effect.price.getOrElse(s"~${ledger.bidPrice}")}...")
-            (OpenPositionCtx(dir = LongDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
-          } else if (sentiment == Bear) {
-            val effect = openPositionOrder(ShortDir, ledger)
-            log.info(s"idle: starting afresh with $ShortDir order: ${effect.clOrdID} @ ${effect.price.getOrElse(s"~${ledger.askPrice}")}...")
-            (OpenPositionCtx(dir = ShortDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
+          if (log.isDebugEnabled) log.debug(s"idle: Sentiment is ${strategyRes.sentiment}")
+          if (strategyRes.sentiment == Bull) {
+            val effect = openPositionOrder(LongDir, ledger2)
+            log.info(s"idle: starting afresh with $LongDir order: ${effect.clOrdID} @ ${effect.price.getOrElse(s"~${ledger2.bidPrice}")}...")
+            (OpenPositionCtx(dir = LongDir, ledger = ledger2, clOrdID = effect.clOrdID), Some(effect))
+          } else if (strategyRes.sentiment == Bear) {
+            val effect = openPositionOrder(ShortDir, ledger2)
+            log.info(s"idle: starting afresh with $ShortDir order: ${effect.clOrdID} @ ${effect.price.getOrElse(s"~${ledger2.askPrice}")}...")
+            (OpenPositionCtx(dir = ShortDir, ledger = ledger2, clOrdID = effect.clOrdID), Some(effect))
           } else // Neutral or Dry run
-            (IdleCtx(ledger3), None)
+            (IdleCtx(ledger2), None)
         } else
           (ctx.withLedger(ledger2), None)
       case (InitCtx(ledger), RestEvent(Success(data))) =>
@@ -112,18 +111,17 @@ object Orchestrator {
         if (log.isDebugEnabled) log.debug(s"idle: WsEvent: $wsData")
         val ledger2 = ledger.record(wsData)
         val strategyRes = strategy.strategize(ledger2)
-        val (sentiment, ledger3) = (strategyRes.sentiment, strategyRes.ledger)
-        if (log.isDebugEnabled) log.debug(s"idle: Sentiment is $sentiment")
-        if (sentiment == Bull) {
+        if (log.isDebugEnabled) log.debug(s"idle: Sentiment is ${strategyRes.sentiment}")
+        if (strategyRes.sentiment == Bull) {
           val effect = openPositionOrder(LongDir, ledger)
           log.info(s"idle: starting afresh with $LongDir order: ${effect.clOrdID} @ ${effect.price.getOrElse(s"~${ledger.bidPrice}")}...")
-          (OpenPositionCtx(dir = LongDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
-        } else if (sentiment == Bear) {
+          (OpenPositionCtx(dir = LongDir, ledger = ledger2, clOrdID = effect.clOrdID), Some(effect))
+        } else if (strategyRes.sentiment == Bear) {
           val effect = openPositionOrder(ShortDir, ledger)
           log.info(s"idle: starting afresh with $ShortDir order: ${effect.clOrdID} @ ${effect.price.getOrElse(s"~${ledger.askPrice}")}...")
-          (OpenPositionCtx(dir = ShortDir, ledger = ledger3, clOrdID = effect.clOrdID), Some(effect))
+          (OpenPositionCtx(dir = ShortDir, ledger = ledger2, clOrdID = effect.clOrdID), Some(effect))
         } else // Neutral or Dry run
-          (ctx.withLedger(ledger3), None)
+          (ctx.withLedger(ledger2), None)
       case (IdleCtx(_), RestEvent(Success(data))) =>
         if (log.isDebugEnabled) log.debug(s"idle: unexpected RestEvent: $data")
         (ctx.withLedger(ctx.ledger.record(data)), None)
@@ -229,23 +227,22 @@ object Orchestrator {
             if (canShortcutInOpen(dir, ledger, data))  // check the correct bid/ask increase/decrease
               (ctx2.copy(ledger=ledger.record(data)), None)
             else {
-              val (shouldKeepGoing, ledger3) = shouldKeepOpen(dir, ledger2)
-              if (!shouldKeepGoing) {
+              if (! shouldKeepOpen(dir, ledger2)) {
                 log.info(s"Open $dir: having a change of heart, cancelling ${orderOpt.get.fullOrdID}...")
                 val effect = CancelOrder(clOrdID)
-                val ctx3 = ctx2.copy(ledger = ledger3, lifecycle = IssuingOpenCancel)
+                val ctx3 = ctx2.copy(ledger = ledger2, lifecycle = IssuingOpenCancel)
                 (ctx3, Some(effect))
               } else {
                 // need to update best price?
-                val bestPrice = bestOpenPrice(dir, ledger3)
+                val bestPrice = bestOpenPrice(dir, ledger2)
                 if (orderOpt.get.price != bestPrice) {
                   log.info(s"Open $dir: best price moved, will change: ${orderOpt.get.price} -> $bestPrice")
                   val effect = AmendOrder(clOrdID, bestPrice)
-                  val ctx3 = ctx2.copy(ledger = ledger3, lifecycle = IssuingOpenAmend)
+                  val ctx3 = ctx2.copy(ledger = ledger2, lifecycle = IssuingOpenAmend)
                   (ctx3, Some(effect))
                 } else {
                   if (log.isDebugEnabled) log.debug(s"Open $dir: noop @ orderID: ${orderOpt.get.fullOrdID}, lifecycle: $lifecycle, data: $data")
-                  val ctx3 = ctx2.copy(ledger = ledger3, lifecycle = Waiting)
+                  val ctx3 = ctx2.copy(ledger = ledger2, lifecycle = Waiting)
                   (ctx3, None)
                 }
               }

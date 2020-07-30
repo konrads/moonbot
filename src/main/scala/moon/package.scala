@@ -56,6 +56,11 @@ package object moon {
     val ShortDir = Value("Short")
   }
 
+  object DataFreq extends Enumeration {
+    type Dir = Value
+    val `10s`, `1m`, `1h` = Value
+  }
+
   // adding "value" as per:
   // https://stackoverflow.com/questions/42275983/scala-how-to-define-an-enum-with-extra-attributes
   object Sentiment extends Enumeration {

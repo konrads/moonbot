@@ -123,7 +123,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
 
     val l5 = l4.withMetrics(strategy = bbandsStrategy)
     val metrics5 = l5.ledgerMetrics
-    metrics5 shouldBe LedgerMetrics(Map("data.price" -> 55.0, "data.pandl.pandl" -> 0.3524439102564103, "data.pandl.delta" -> 0.3524439102564103, "data.sentiment" -> 0.0, "data.bbands.score" -> 0.0, "data.myTradeCnt" -> 3, "data.volume" -> 0.0, "data.bbands.sentiment" -> 0.0), "o5", null, 0.3524439102564103)
+    metrics5 shouldBe LedgerMetrics(Map("data.price" -> 55.0, "data.pandl.pandl" -> 0.3524439102564103, "data.pandl.delta" -> 0.3524439102564103, "data.sentiment" -> 0.0, "data.bbands.score" -> 0.0, "data.myTradeCnt" -> 3, "data.volume" -> 0.0, "data.bbands.sentiment" -> 0.0), "o5", 0.3524439102564103)
 
     // add sell, recalculate metrics - expect no runningPandl change as not matching Buy
     val l6 = buildLedger(l5,
@@ -135,7 +135,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     l6.ledgerOrders.toVector.map(_.orderID) shouldBe Vector("o4", "o3", "o2", "o1", "o5", "o6", "o7")
     val l7 = l6.withMetrics(strategy = bbandsStrategy)
     val metrics7 = l7.ledgerMetrics
-    metrics7 shouldBe LedgerMetrics(Map("data.price" -> 55.0, "data.pandl.pandl" -> 1.6008814102564104, "data.pandl.delta" -> 1.2484375, "data.sentiment" -> 0.0, "data.bbands.score" -> 0.0, "data.myTradeCnt" -> 4, "data.volume" -> 0.0, "data.bbands.sentiment" -> 0.0), "o7", null, 1.6008814102564104)
+    metrics7 shouldBe LedgerMetrics(Map("data.price" -> 55.0, "data.pandl.pandl" -> 1.6008814102564104, "data.pandl.delta" -> 1.2484375, "data.sentiment" -> 0.0, "data.bbands.score" -> 0.0, "data.myTradeCnt" -> 4, "data.volume" -> 0.0, "data.bbands.sentiment" -> 0.0), "o7", 1.6008814102564104)
 
     // add pairless buy
     val l8 = buildLedger(l7,
@@ -147,7 +147,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     l8.ledgerOrders.toVector.map(_.orderID) shouldBe Vector("o4", "o3", "o2", "o1", "o5", "o6", "o7", "o8")
     val l9 = l8.withMetrics(strategy = bbandsStrategy)
     val metrics9 = l9.ledgerMetrics
-    metrics9 shouldBe  LedgerMetrics(Map("data.price" -> 55.0, "data.pandl.pandl" -> 1.6008814102564104, "data.pandl.delta" -> 0, "data.sentiment" -> 0.0, "data.bbands.score" -> 0.0, "data.myTradeCnt" -> 5, "data.volume" -> 0, "data.bbands.sentiment" -> 0.0), "o7", null, 1.6008814102564104)
+    metrics9 shouldBe  LedgerMetrics(Map("data.price" -> 55.0, "data.pandl.pandl" -> 1.6008814102564104, "data.pandl.delta" -> 0, "data.sentiment" -> 0.0, "data.bbands.score" -> 0.0, "data.myTradeCnt" -> 5, "data.volume" -> 0, "data.bbands.sentiment" -> 0.0), "o7", 1.6008814102564104)
   }
 
   it should "do basic pandl" in {

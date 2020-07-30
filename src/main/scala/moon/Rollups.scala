@@ -1,20 +1,28 @@
 package moon
 
+import moon.DataFreq._
+
 object Rollups {
   def apply(maxHours: Int): Rollups =
-    Rollups(
-      m=RollupBuckets(window = 60*1000, maxBuckets = 60*(maxHours+1)),
-      h=RollupBuckets(window = 60*60*1000, maxBuckets = maxHours),
-    )
+    Rollups(Map(
+      `10s` -> RollupBuckets(window = 10*1000, maxBuckets = 60*6*(maxHours+1)),
+      `1m`  -> RollupBuckets(window = 60*1000, maxBuckets = 60*(maxHours+1)),
+      `1h`  -> RollupBuckets(window = 60*60*1000, maxBuckets = maxHours),
+    ))
 }
 
 
-case class Rollups(m: RollupBuckets, h: RollupBuckets) {
-  def add(tsMs: Long, price: Double, vol: Double): Rollups =
-    copy(
-      m=m.add(tsMs, price, vol),
-      h=h.add(tsMs, price, vol)
-    )
+case class Rollups(_buckets: Map[DataFreq.Value, RollupBuckets]) {
+  def add(tsMs: Long, price: Double, vol: Double): Rollups = copy(_buckets.map { case (k, v) => k -> v.add(tsMs, price, vol) })
+
+  def forBucket(id: DataFreq.Value): RollupBuckets = _buckets(id).forecast
+
+  def isEmpty: Boolean =  {
+    val b = _buckets(`1m`)
+    b.high.isEmpty && b.currentPeriod <= 0
+  }
+
+  def nonEmpty: Boolean = ! isEmpty
 }
 
 
@@ -116,14 +124,9 @@ case class RollupBuckets(
     else if (newPeriod == currentPeriod + 1)
       // wrap up bucket, add to new bucket
       promote(true).prune.copy(currentHigh = price, currentLow = price, currentOpen = price, currentClose = price, currentVolume = vol, currentWeightedTotals = price * vol, currentPeriod = newPeriod)
-    else if (newPeriod > currentPeriod + 1) {
-      // wrap up bucket, ffill, add to new bucket
-      val x1 = promote(true)
-      val x2 = x1.ffill(newPeriod)
-      val x3 = x2.prune
-      val x4 = x3.copy(currentHigh = price, currentLow = price, currentOpen = price, currentClose = price, currentVolume = vol, currentWeightedTotals = price * vol, currentPeriod = newPeriod)
+    else if (newPeriod > currentPeriod + 1)
       promote(true).ffill(newPeriod).prune.copy(currentHigh = price, currentLow = price, currentOpen = price, currentClose = price, currentVolume = vol, currentWeightedTotals = price * vol, currentPeriod = newPeriod)
-    } else
+    else
       // bucket out of order, noop
       this
   }

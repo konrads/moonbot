@@ -18,7 +18,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   class TestStrategy(var sentiment: Sentiment.Value) extends Strategy {
     override val config: Config = null
     override def strategize(ledger: Ledger): StrategyResult =
-      StrategyResult(sentiment, Map.empty, ledger)
+      StrategyResult(sentiment, Map.empty)
   }
 
   def validateContains(ctx: Ctx, eCtx: ExchangeCtx, status: OrderStatus.Value, side: OrderSide.Value, ordType: OrderType.Value, price: Double, qty: Double) = {

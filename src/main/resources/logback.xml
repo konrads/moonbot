@@ -38,7 +38,7 @@
     </encoder>
   </appender>
 
-  <root level="info">  <!-- NOTE: set to debug for file.dbg! -->
+  <root level="info">  <!-- NOTE: set to debug for file.dbg!, warn for training! -->
     <appender-ref ref="console"/>
     <appender-ref ref="file"/>
     <appender-ref ref="file.dbg"/>

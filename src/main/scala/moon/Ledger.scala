@@ -1,5 +1,6 @@
 package moon
 
+import moon.DataFreq._
 import moon.OrderSide._
 import moon.OrderStatus._
 import moon.OrderType._
@@ -12,9 +13,9 @@ case class LedgerOrder(orderID: String, clOrdID: String=null, price: Double, qty
   lazy val fullOrdID = s"$orderID / $clOrdID"
 }
 
-case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, lastOrderID: String=null, lastTradeData: TradeData=null, runningPandl: Double=0)
+case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, lastOrderID: String=null, runningPandl: Double=0)
 
-case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[TradeData]=Vector.empty,
+case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups=Rollups(14*24),
                   ledgerOrdersByID: ListMap[String, LedgerOrder]=ListMap.empty,
                   ledgerOrdersByClOrdID: ListMap[String, LedgerOrder]=ListMap.empty,
                   ledgerMetrics: LedgerMetrics=LedgerMetrics()) {
@@ -114,43 +115,39 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[Trade
     }
     case o: OrderBookSummary => copy(orderBookSummary = o)
     case o: OrderBook => copy(orderBookSummary = o.summary)  // deprecated...
-    case t: Trade => copy(tradeDatas = tradeDatas ++ t.data)
-    case td: TradeData => copy(tradeDatas = tradeDatas :+ td)
+    case t: Trade => copy(tradeRollups = t.data.foldLeft(tradeRollups) { case (soFar, td) => soFar.add(td.timestamp.getMillis, td.price, td.size)})
+    case td: TradeData => copy(tradeRollups = tradeRollups.add(td.timestamp.getMillis, td.price, td.size))
     case _ => this
   }
   lazy val myOrders: Seq[LedgerOrder] = ledgerOrdersByID.values.filter(_.myOrder).toVector
   lazy val myTrades: Seq[LedgerOrder] = myOrders.filter(_.ordStatus == Filled)
-  lazy val isMinimallyFilled: Boolean = orderBookSummary != null && tradeDatas.nonEmpty
+  lazy val isMinimallyFilled: Boolean = orderBookSummary != null && tradeRollups.nonEmpty
   lazy val bidPrice: Double = orderBookSummary.bid
   lazy val askPrice: Double = orderBookSummary.ask
 
   def withMetrics(makerRebate: Double=.00025, takerFee: Double=.00075, strategy: Strategy): Ledger = {
-    val currTradeDatas = if (ledgerMetrics.lastTradeData == null)
-      tradeDatas
-    else
-      tradeDatas.dropWhile(_ != ledgerMetrics.lastTradeData).drop(1)
-    val volume = currTradeDatas.map(_.size).sum
+    val volume = tradeRollups.forBucket(`1m`).forecast.volume.lastOption.getOrElse(0)
     val strategyRes = strategy.strategize(this)
-    val (s, m, l) = (strategyRes.sentiment, strategyRes.metrics, strategyRes.ledger)
+    val (s, m) = (strategyRes.sentiment, strategyRes.metrics)
     val metricsVals = Map(
-      "data.price"           -> (l.bidPrice + l.askPrice) / 2,
+      "data.price"           -> (bidPrice + askPrice) / 2,
       "data.volume"          -> volume,
       "data.sentiment"       -> s.id,
-      "data.myTradeCnt"      -> l.myTrades.size,
+      "data.myTradeCnt"      -> myTrades.size,
       // following will be updated if have filled myOrders since last withMetrics()
-      "data.pandl.pandl"     -> l.ledgerMetrics.runningPandl,
+      "data.pandl.pandl"     -> ledgerMetrics.runningPandl,
       "data.pandl.delta"     -> 0.0,
     ) ++ m
 
-    val currOrders = l.ledgerOrdersByID.values.filter(o => o.myOrder && o.ordStatus == Filled)
+    val currOrders = ledgerOrdersByID.values.filter(o => o.myOrder && o.ordStatus == Filled)
     // FIXME: *BIG* assumption - counting filled order pairs. Probably should instead use a concept of legs/roundtrips
-    val currOrders2 = if (l.ledgerMetrics.lastOrderID == null)
+    val currOrders2 = if (ledgerMetrics.lastOrderID == null)
       currOrders
     else
-      currOrders.dropWhile(_.orderID != l.ledgerMetrics.lastOrderID).drop(1)
+      currOrders.dropWhile(_.orderID != ledgerMetrics.lastOrderID).drop(1)
     val currOrders3 = if (currOrders2.size % 2 == 1) currOrders2.dropRight(1) else currOrders2
     if (currOrders3.isEmpty)
-      l.copy(ledgerMetrics=l.ledgerMetrics.copy(metrics=metricsVals, lastTradeData=currTradeDatas.lastOption.orNull))
+      copy(ledgerMetrics=ledgerMetrics.copy(metrics=metricsVals))
     else {
       // import Ledger.log; log.debug(s"Ledger.withMetrics: lastOrderTimestamp: ${ledgerMetrics.lastOrderTimestamp}\nledgerOrders:${ledgerOrders.toVector.map(o => s"\n- $o").mkString}\ncurrOrders3:${currOrders3.toVector.map(o => s"\n- $o").mkString}")
       val pandlDelta = currOrders3.map {
@@ -161,14 +158,13 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeDatas: Seq[Trade
         case _                                                         =>  0.0
       }.sum
 
-      val runningPandl2 = l.ledgerMetrics.runningPandl + pandlDelta
-      val ledgerMetrics2 = l.ledgerMetrics.copy(
+      val runningPandl2 = ledgerMetrics.runningPandl + pandlDelta
+      val ledgerMetrics2 = ledgerMetrics.copy(
         metrics = metricsVals + ("data.pandl.pandl" -> runningPandl2) + ("data.pandl.delta" -> pandlDelta),
         lastOrderID = currOrders3.last.orderID,
-        runningPandl = runningPandl2,
-        lastTradeData=currTradeDatas.lastOption.orNull
+        runningPandl = runningPandl2
       )
-      l.copy(ledgerMetrics=ledgerMetrics2)
+      copy(ledgerMetrics=ledgerMetrics2)
     }
   }
 }

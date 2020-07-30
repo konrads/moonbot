@@ -2,6 +2,7 @@ package moon
 
 import org.scalatest._
 import org.scalatest.matchers.should._
+import moon.DataFreq._
 
 class RollupSpec extends FlatSpec with Matchers with Inside {
   it should "work for sequential timeseries" in {
@@ -76,48 +77,48 @@ class RollupSpec extends FlatSpec with Matchers with Inside {
 
   it should "respect m and h" in {
     val r = Rollups(3)
-    r.m.forecast.high.isEmpty shouldBe true
-    r.h.forecast.high.isEmpty shouldBe true
+    r.forBucket(`1m`).forecast.high.isEmpty shouldBe true
+    r.forBucket(`1h`).forecast.high.isEmpty shouldBe true
 
     val r2 = Seq((10, 1.0, 10.0), (71, 2.0, 20.0), (131, 3.0, 30.0), (200, 4.0, 40.0)).foldLeft(r) {
       case (soFar, (ts, price, volume)) => soFar.add(ts*60_000, price, volume)
     }
-    r2.m.forecast.high.toSet shouldBe Set(1.0, 2.0, 3.0, 4.0)
-    r2.m.forecast.high.size shouldBe 191
-    r2.m.forecast.low.size shouldBe 191
-    r2.m.forecast.open.size shouldBe 191
-    r2.m.forecast.close.size shouldBe 191
-    r2.m.forecast.weightedPrice.size shouldBe 191
-    r2.m.forecast.volume.size shouldBe 191
-    r2.m.forecast.period.size shouldBe 191
+    r2.forBucket(`1m`).forecast.high.toSet shouldBe Set(1.0, 2.0, 3.0, 4.0)
+    r2.forBucket(`1m`).forecast.high.size shouldBe 191
+    r2.forBucket(`1m`).forecast.low.size shouldBe 191
+    r2.forBucket(`1m`).forecast.open.size shouldBe 191
+    r2.forBucket(`1m`).forecast.close.size shouldBe 191
+    r2.forBucket(`1m`).forecast.weightedPrice.size shouldBe 191
+    r2.forBucket(`1m`).forecast.volume.size shouldBe 191
+    r2.forBucket(`1m`).forecast.period.size shouldBe 191
 
-    r2.h.forecast.high.toSet shouldBe Set(2.0, 3.0, 4.0)
-    r2.h.forecast.high.size shouldBe 3
-    r2.h.forecast.low.size shouldBe 3
-    r2.h.forecast.open.size shouldBe 3
-    r2.h.forecast.close.size shouldBe 3
-    r2.h.forecast.weightedPrice.size shouldBe 3
-    r2.h.forecast.volume.size shouldBe 3
-    r2.h.forecast.period.size shouldBe 3
+    r2.forBucket(`1h`).forecast.high.toSet shouldBe Set(2.0, 3.0, 4.0)
+    r2.forBucket(`1h`).forecast.high.size shouldBe 3
+    r2.forBucket(`1h`).forecast.low.size shouldBe 3
+    r2.forBucket(`1h`).forecast.open.size shouldBe 3
+    r2.forBucket(`1h`).forecast.close.size shouldBe 3
+    r2.forBucket(`1h`).forecast.weightedPrice.size shouldBe 3
+    r2.forBucket(`1h`).forecast.volume.size shouldBe 3
+    r2.forBucket(`1h`).forecast.period.size shouldBe 3
 
     val r3 = r2.add(260*60_000, 5.0, 50.0)
-    r3.m.forecast.high.toSet shouldBe Set(1.0, 2.0, 3.0, 4.0, 5.0)
-    r3.m.forecast.high.size shouldBe 240
-    r3.m.forecast.low.size shouldBe 240
-    r3.m.forecast.open.size shouldBe 240
-    r3.m.forecast.close.size shouldBe 240
-    r3.m.forecast.weightedPrice.size shouldBe 240
-    r3.m.forecast.volume.size shouldBe 240
-    r3.m.forecast.period.size shouldBe 240
+    r3.forBucket(`1m`).forecast.high.toSet shouldBe Set(1.0, 2.0, 3.0, 4.0, 5.0)
+    r3.forBucket(`1m`).forecast.high.size shouldBe 240
+    r3.forBucket(`1m`).forecast.low.size shouldBe 240
+    r3.forBucket(`1m`).forecast.open.size shouldBe 240
+    r3.forBucket(`1m`).forecast.close.size shouldBe 240
+    r3.forBucket(`1m`).forecast.weightedPrice.size shouldBe 240
+    r3.forBucket(`1m`).forecast.volume.size shouldBe 240
+    r3.forBucket(`1m`).forecast.period.size shouldBe 240
 
-    r3.h.forecast.high.toSet shouldBe Set(3.0, 4.0, 5.0)
-    r3.h.forecast.high.size shouldBe 3
-    r3.h.forecast.low.size shouldBe 3
-    r3.h.forecast.open.size shouldBe 3
-    r3.h.forecast.close.size shouldBe 3
-    r3.h.forecast.weightedPrice.size shouldBe 3
-    r3.h.forecast.volume.size shouldBe 3
-    r3.h.forecast.period.size shouldBe 3
+    r3.forBucket(`1h`).forecast.high.toSet shouldBe Set(3.0, 4.0, 5.0)
+    r3.forBucket(`1h`).forecast.high.size shouldBe 3
+    r3.forBucket(`1h`).forecast.low.size shouldBe 3
+    r3.forBucket(`1h`).forecast.open.size shouldBe 3
+    r3.forBucket(`1h`).forecast.close.size shouldBe 3
+    r3.forBucket(`1h`).forecast.weightedPrice.size shouldBe 3
+    r3.forBucket(`1h`).forecast.volume.size shouldBe 3
+    r3.forBucket(`1h`).forecast.period.size shouldBe 3
   }
 
   it should "perform quickly" in {

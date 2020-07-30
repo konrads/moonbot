@@ -136,7 +136,7 @@ case "$trail_arg" in
     log_green "Fetching and building graphite&grafana docker image..."
     cd $curr_dir/docker/grafana
     log_green "Fetching graphite&grafana docker image..."
-    docker build -t moon-grafana .
+    docker build --build-arg CONTAINER_TIMEZONE=Australia/Sydney -t moon-grafana .
     ;;
   "grafana-run")
     log_green "Starting grafana..."
