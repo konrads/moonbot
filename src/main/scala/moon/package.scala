@@ -57,7 +57,7 @@ package object moon {
   }
 
   object DataFreq extends Enumeration {
-    type Dir = Value
+    type DataFreq = Value
     val `10s`, `1m`, `1h` = Value
   }
 

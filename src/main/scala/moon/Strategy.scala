@@ -38,20 +38,6 @@ object Strategy {
     case "alternating"   => new AlternatingStrategy(config)  // test strategy
     case "weighted"      => new WeightedStrategy(config, parentConfig)
   }
-
-  def latestTradesData(tds: Seq[TradeData], periodMs: Int, dropLast: Boolean = true): Seq[TradeData] = {
-    if (tds.isEmpty)
-      tds
-    else {
-      val maxMs = tds.map(_.timestamp.getMillis).max
-      val minMs = maxMs - periodMs
-      val (pre, post) = tds.partition(_.timestamp.getMillis < minMs)
-      if (dropLast)
-        post
-      else
-        pre.lastOption.toVector ++ post
-    }
-  }
 }
 
 // Test strategy
@@ -76,7 +62,6 @@ class BBandsStrategy(val config: Config) extends Strategy {
   val capFun = capProportionalExtremes()
   log.info(s"Strategy ${this.getClass.getSimpleName}: window: $window, dataFreq: $dataFreq, devUp: $devUp, devDown: $devDown, minUpper: $minUpper, minLower: $minLower")
   override def strategize(ledger: Ledger): StrategyResult = {
-    //val cacheHit = cacheHitOrCalculate[(Option[(Double, Double, Double)], Seq[TradeData])](ledger.tradeDatas.lastOption) {
     val prices = ledger.tradeRollups.forBucket(dataFreq).weightedPrice.takeRight(window)
     val (sentiment, bbandsScore, upper, middle, lower) = if (prices.size == window)
       bbands(prices, devUp = devUp, devDown = devDown) match {

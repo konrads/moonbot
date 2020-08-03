@@ -1,5 +1,9 @@
 package moon
 
+import com.typesafe.scalalogging.Logger
+import moon.Dir._
+import moon.talib._
+
 object pattern {
 
   /**
@@ -59,6 +63,46 @@ object pattern {
    * - MA MOM
    * - P1..3 <--> T1..3
    */
-  class HVF()
+  private val log = Logger("pattern")
 
+
+  class HVF(setupMaPeriod: Int, initMinSlope: Double, minCandlesBetweenPsAndTs: Int = 5) {
+    def matches(xs: Vector[Double]): Option[HVFResult] = {
+      val (funnelIndStart, funnelIndEnd) = (xs.length/2, xs.length/4*3)  // funnel can be either from half to quarter of xs
+      for (i <- funnelIndStart to funnelIndEnd) {
+        val (setup, funnel) = xs.splitAt(i)
+        matches2(setup, funnel) match {
+          case Right(res) => return Some(res)
+          case Left(rejectReason) =>
+            log.debug(s"HVF rejected: $rejectReason")
+        }
+      }
+      None
+    }
+
+    private def matches2(setup: Vector[Double], funnel: Vector[Double]): Either[String, HVFResult] = {
+      val setupMaMom = ma_mom(setup, setupMaPeriod)
+      val setupMaMomAbs = math.abs(setupMaMom)
+
+      val dirOpt = if (setupMaMomAbs > initMinSlope && setupMaMom > 0)
+        Some(LongDir)
+      else if (setupMaMomAbs > initMinSlope && setupMaMom < 0)
+        Some(ShortDir)
+      else
+        None
+
+      dirOpt match {
+        case None =>
+          Left(s"Insufficient setupMaMom: $setupMaMom")
+        case Some(dir) =>
+          // look for ps and ts
+          ???
+      }
+    }
+
+    private def localMinMax(dir: Dir.Value, funnel: Vector[(Double, Int)], soFar: Vector[(Double, Int)]): Vector[(Double, Int)] = ???
+  }
+
+  case class HVFResult(dir: Dir.Value, initMaMom: Double, pAndTs: Vector[(Double, Int)], trigger: Double, targets: Vector[Target])
+  case class Target(takeProfit: Double, stoploss: Double)
 }

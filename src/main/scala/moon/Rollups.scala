@@ -54,7 +54,7 @@ case class RollupBuckets(
   lazy val forecast: RollupBuckets = promote(false).prune
 
   private def promote(useLatestVol: Boolean): RollupBuckets =
-    if (currentPeriod < 0)
+    if (currentVolume <= 0)  // FIXME: hack, suggests there's an entry present
       this
     else
       copy(

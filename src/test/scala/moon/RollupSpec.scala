@@ -8,9 +8,7 @@ class RollupSpec extends FlatSpec with Matchers with Inside {
   it should "work for sequential timeseries" in {
     // populate bucket #1
     val r1 = Seq((1, 20.0, 20.0), (3, 10.0, 10.0), (5, 5.0, 30.0), (6, 6.0, 40.0)).foldLeft(RollupBuckets(10, 10)) {
-      case (soFar, (ts, price, volume)) =>
-        val x = soFar.add(ts, price, volume)
-        x
+      case (soFar, (ts, price, volume)) => soFar.add(ts, price, volume)
     }
 
     r1.forecast.open shouldBe Vector(20.0)

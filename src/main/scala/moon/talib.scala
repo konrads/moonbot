@@ -1,7 +1,5 @@
 package moon
 
-import scala.collection.{Seq, SortedSet}
-
 object talib {
   object MA extends Enumeration {
     type MA = Value
@@ -200,6 +198,16 @@ object talib {
       )
     }
   }
+
+  def ma_mom(xs: Seq[Double], period: Int, maType: MA.Value = MA.SMA): Double =
+    if (xs.isEmpty)
+      0
+    else {
+      val t0 = ma(xs.dropRight(1), period, maType)
+      val t1 = ma(xs, period, maType)
+      t1 - t0
+    }
+
 
   /** Find increasing/decreasing slope of eg. 10, 5, 3 (e/s)ma's */
   def indecreasingSlope(xs: Seq[Double], maPeriods: Seq[Int]=Vector(10, 5, 3)): Option[Seq[Double]] = {
