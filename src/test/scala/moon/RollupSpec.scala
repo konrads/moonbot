@@ -86,7 +86,7 @@ class RollupSpec extends FlatSpec with Matchers with Inside {
     r2.forBucket(`1m`).forecast.low.size shouldBe 191
     r2.forBucket(`1m`).forecast.open.size shouldBe 191
     r2.forBucket(`1m`).forecast.close.size shouldBe 191
-    r2.forBucket(`1m`).forecast.weightedPrice.size shouldBe 191
+    r2.forBucket(`1m`).forecast.vwap.size shouldBe 191
     r2.forBucket(`1m`).forecast.volume.size shouldBe 191
     r2.forBucket(`1m`).forecast.period.size shouldBe 191
 
@@ -95,7 +95,7 @@ class RollupSpec extends FlatSpec with Matchers with Inside {
     r2.forBucket(`1h`).forecast.low.size shouldBe 3
     r2.forBucket(`1h`).forecast.open.size shouldBe 3
     r2.forBucket(`1h`).forecast.close.size shouldBe 3
-    r2.forBucket(`1h`).forecast.weightedPrice.size shouldBe 3
+    r2.forBucket(`1h`).forecast.vwap.size shouldBe 3
     r2.forBucket(`1h`).forecast.volume.size shouldBe 3
     r2.forBucket(`1h`).forecast.period.size shouldBe 3
 
@@ -105,7 +105,7 @@ class RollupSpec extends FlatSpec with Matchers with Inside {
     r3.forBucket(`1m`).forecast.low.size shouldBe 240
     r3.forBucket(`1m`).forecast.open.size shouldBe 240
     r3.forBucket(`1m`).forecast.close.size shouldBe 240
-    r3.forBucket(`1m`).forecast.weightedPrice.size shouldBe 240
+    r3.forBucket(`1m`).forecast.vwap.size shouldBe 240
     r3.forBucket(`1m`).forecast.volume.size shouldBe 240
     r3.forBucket(`1m`).forecast.period.size shouldBe 240
 
@@ -114,7 +114,7 @@ class RollupSpec extends FlatSpec with Matchers with Inside {
     r3.forBucket(`1h`).forecast.low.size shouldBe 3
     r3.forBucket(`1h`).forecast.open.size shouldBe 3
     r3.forBucket(`1h`).forecast.close.size shouldBe 3
-    r3.forBucket(`1h`).forecast.weightedPrice.size shouldBe 3
+    r3.forBucket(`1h`).forecast.vwap.size shouldBe 3
     r3.forBucket(`1h`).forecast.volume.size shouldBe 3
     r3.forBucket(`1h`).forecast.period.size shouldBe 3
   }

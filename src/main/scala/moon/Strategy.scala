@@ -62,7 +62,7 @@ class BBandsStrategy(val config: Config) extends Strategy {
   val capFun = capProportionalExtremes()
   log.info(s"Strategy ${this.getClass.getSimpleName}: window: $window, dataFreq: $dataFreq, devUp: $devUp, devDown: $devDown, minUpper: $minUpper, minLower: $minLower")
   override def strategize(ledger: Ledger): StrategyResult = {
-    val prices = ledger.tradeRollups.forBucket(dataFreq).weightedPrice.takeRight(window)
+    val prices = ledger.tradeRollups.forBucket(dataFreq).vwap.takeRight(window)
     val (sentiment, bbandsScore, upper, middle, lower) = if (prices.size == window)
       bbands(prices, devUp = devUp, devDown = devDown) match {
         case Some((upper, middle, lower)) => // make sure we have a full window, otherwise go neutral
@@ -104,7 +104,7 @@ class RSIStrategy(val config: Config) extends Strategy {
   val capFun = capProportionalExtremes()
   log.info(s"Strategy ${this.getClass.getSimpleName}: window: $window, dataFreq: $dataFreq, upper: $upper, lower: $lower, minUpper: $minUpper, minLower: $minLower")
   override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
-    val prices = ledger.tradeRollups.forBucket(dataFreq).weightedPrice.takeRight(window+1)
+    val prices = ledger.tradeRollups.forBucket(dataFreq).vwap.takeRight(window+1)
     val (sentiment, scoreVal) = rsi(prices) match {
       case Some(res) if prices.size > window =>  // make sure we have a full window (+1), otherwise go neutral
         val score: Double = if (res > upper)
@@ -141,7 +141,7 @@ class MACDStrategy(val config: Config) extends Strategy {
   assert(fastWindow < slowWindow)
   log.info(s"Strategy ${this.getClass.getSimpleName}: slowWindow: $slowWindow, fastWindow: $fastWindow, signalWindow: $signalWindow, dataFreq: $dataFreq, minUpper: $minUpper, minLower: $minLower")
   override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
-    val prices = ledger.tradeRollups.forBucket(dataFreq).weightedPrice.takeRight(slowWindow + signalWindow + 2)
+    val prices = ledger.tradeRollups.forBucket(dataFreq).vwap.takeRight(slowWindow + signalWindow + 2)
     val (sentiment, macdVal, macdSignal, macdHistogram, macdCapScore) = macd(prices, slowWindow, fastWindow, signalWindow) match {
       case Some((macd, signal, histogram)) =>
         val capScore = capFun(histogram)
@@ -171,7 +171,7 @@ class IndecreasingStrategy(val config: Config) extends Strategy {
   val maxPeriod = periods.max
   log.info(s"Strategy ${this.getClass.getSimpleName}: periods: ${periods.mkString(", ")}, minAbsSlope: $minAbsSlope, maxAbsSlope: $maxAbsSlope")
   override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
-    val prices = ledger.tradeRollups.forBucket(dataFreq).weightedPrice.takeRight(maxPeriod+1)
+    val prices = ledger.tradeRollups.forBucket(dataFreq).vwap.takeRight(maxPeriod+1)
     val (sentiment, avgSlope) = indecreasingSlope(prices, periods) match {
       case Some(slopes) =>
         val avgSlope = slopes.sum / slopes.size
@@ -204,7 +204,7 @@ class MAStrategy(val config: Config) extends Strategy {
   assert (upperDelta > 0 && lowerDelta < 0)
   log.info(s"Strategy ${this.getClass.getSimpleName}: window: $window, dataFreq: $dataFreq")
   override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
-    val prices = ledger.tradeRollups.forBucket(dataFreq).weightedPrice.takeRight(window+1)
+    val prices = ledger.tradeRollups.forBucket(dataFreq).vwap.takeRight(window+1)
     val currMa = ma(prices, window, maType)
     val currPrice = (ledger.askPrice + ledger.bidPrice) / 2
     val delta = currPrice - currMa
