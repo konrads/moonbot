@@ -1,30 +1,32 @@
 package moon
 
+import scala.math.Ordering
+
 package object pattern {
-  def hsAndLs(xs: Seq[Double], vertexCnt: Int): Seq[(Int, Boolean, Double)] = {
-    def hs(xs: Seq[Double], h: Double, hInd: Int, ind: Int): (Int, Double) =
+  def hsAndLs(xs: Seq[Candle], vertexCnt: Int, lookForH: Boolean = true): Seq[(Boolean, Candle)] = {
+    def high(xs: Seq[Candle], h: Double, hInd: Int, ind: Int): (Int, Double) =
       if (ind >= xs.size)
         (hInd, h)
-      else if (xs(ind) > h)
-        hs(xs, xs(ind), ind, ind+1)
+      else if (xs(ind).high > h)
+        high(xs, xs(ind).high, ind, ind+1)
       else
-        hs(xs, h, hInd, ind+1)
+        high(xs, h, hInd, ind+1)
 
-    def ls(xs: Seq[Double], l: Double, lInd: Int, ind: Int): (Int, Double) =
+    def low(xs: Seq[Candle], l: Double, lInd: Int, ind: Int): (Int, Double) =
       if (ind >= xs.size)
         (lInd, l)
-      else if (xs(ind) < l)
-        ls(xs, xs(ind), ind, ind+1)
+      else if (xs(ind).low < l)
+        low(xs, xs(ind).low, ind, ind+1)
       else
-        ls(xs, l, lInd, ind+1)
+        low(xs, l, lInd, ind+1)
 
-    def hsAndLs2(xs: Seq[Double], vertexCnt: Int, lookForH: Boolean, ind: Int, soFar: Seq[(Int, Boolean, Double)]): Seq[(Int, Boolean, Double)] =
+    def hsAndLs2(xs: Seq[Candle], vertexCnt: Int, lookForH: Boolean, ind: Int, soFar: Seq[(Boolean, Candle)]): Seq[(Boolean, Candle)] =
       if (vertexCnt == 0 || ind >= xs.size)
         soFar
       else if (lookForH) {
         // look for hs
-        val (hInd, h) = hs(xs, xs(ind), ind, ind + 1)
-        val soFar2 = soFar :+ (hInd, true, h)
+        val (hInd, h) = high(xs, xs(ind).high, ind, ind + 1)
+        val soFar2 = soFar :+ (true, xs(hInd))
         hsAndLs2(
           xs,
           vertexCnt - 1,
@@ -33,8 +35,8 @@ package object pattern {
           soFar2)
       } else {
         // look for ls
-        val (lInd, l) = ls(xs, xs(ind), ind, ind + 1)
-        val soFar2 = soFar :+ (lInd, false, l)
+        val (lInd, l) = low(xs, xs(ind).low, ind, ind + 1)
+        val soFar2 = soFar :+ (false, xs(lInd))
         hsAndLs2(
           xs,
           vertexCnt - 1,
@@ -42,6 +44,16 @@ package object pattern {
           lInd + 1,
           soFar2)
       }
-    hsAndLs2(xs, vertexCnt, true, 0, Vector.empty)
+    hsAndLs2(xs, vertexCnt, lookForH, 0, Vector.empty)
+  }
+
+  def max[T, I: Ordering](ts: Seq[(T, Int)])(toOrdering: T => I): (T, Int) = {
+    val (_, ind) = ts.map{ case (x, ind) => (toOrdering(x), ind)}.max
+    ts(ind)
+  }
+
+  def min[T, I: Ordering](ts: Seq[(T, Int)])(toOrdering: T => I): (T, Int) = {
+    val (_, ind) = ts.map{ case (x, ind) => (toOrdering(x), ind)}.min
+    ts(ind)
   }
 }

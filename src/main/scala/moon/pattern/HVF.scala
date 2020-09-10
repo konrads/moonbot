@@ -1,11 +1,11 @@
 package moon.pattern
 
 import com.typesafe.scalalogging.Logger
-import moon.Dir
+import moon.{Candle, Dir}
 import moon.Dir.{LongDir, ShortDir}
 import moon.talib.ma_mom
 
-class HVF {
+class HVF(dir: Dir.Value, minAmplitudeRatio2_1: Double, minAmplitudeRatio3_2: Double, maxRectRatio1_0: Double) {
   /**
    * HVF implementation (drawn for Long)
    *
@@ -140,78 +140,68 @@ class HVF {
    * - ** There’s a mention of minimal retracement % for RH2 and RH3, how about maximum? Eg. when the price goes over previous RH3, how do I know if it’s a breakout or a new RH3?
    * - is there *any* action on interim levels 1 and 2? ie. shifting of stoplosses?
    */
-  private val log = Logger("pattern")
 
-
-  class HVF(setupPeriod: Int, initMinSlope: Double, minCandlesBetweenHsAndLs: Int = 5) {
-    def matches(dir: Dir.Value, xs: Vector[Double]): Option[HVFCandidate] = {
-      // determine if we're long or short
-      val hsLs = shrinkingHsLs(dir, xs.zipWithIndex)
-
-      // check the trends prior to first long/short Hs & Ls
-
-     //  val candidateHLs = shrinkingHsLs(dir, funnel.zipWithIndex, Vector.empty)
-
-      val (funnelIndStart, funnelIndEnd) = (xs.length/2, xs.length/4*3)  // funnel can be either from half to quarter of xs
-      for (i <- funnelIndStart to funnelIndEnd) {
-        val (setup, funnel) = xs.splitAt(i)
-        matches2(setup, funnel) match {
-          case Some(res) => return Some(res)
-          case None      => None
-        }
-      }
-      None
-    }
-
-    private def matches2(setup: Vector[Double], funnel: Vector[Double]): Option[HVFCandidate] = {
-      val setupMaMom = ma_mom(setup, setupPeriod)
-      val setupMaMomAbs = math.abs(setupMaMom)
-
-      val dirOpt = if (setupMaMomAbs > initMinSlope && setupMaMom > 0)
-        Some(LongDir)
-      else if (setupMaMomAbs > initMinSlope && setupMaMom < 0)
-        Some(ShortDir)
+  def matches1(xs: Vector[Candle]): Either[String, HVFCandidate] = {
+    val lookForH = dir == ShortDir
+    val hsLs = hsAndLs(xs, 7, lookForH)
+    if (hsLs.size != 7)
+      Left(s"Not enough vertices: ${hsLs.size}")
+    else {
+      val impulse1 = HVFImpulse(resize1st(xs, hsLs(0), hsLs(1), hsLs(2)), hsLs(1), hsLs(2))
+      val impulse2 = HVFImpulse(resize1st(xs, hsLs(2), hsLs(3), hsLs(4)), hsLs(3), hsLs(4))
+      val impulse3 = HVFImpulse(resize1st(xs, hsLs(4), hsLs(5), hsLs(6)), hsLs(5), hsLs(6))
+      if (impulse2.amplitude / impulse1.amplitude > minAmplitudeRatio2_1 || impulse3.amplitude / impulse2.amplitude > minAmplitudeRatio3_2)
+        Left(s"Invalid amplitude ratios: ${impulse1.amplitude}, ${impulse2.amplitude}, ${impulse3.amplitude}")
+      else if (impulse2.rectRatio / impulse1.rectRatio > maxRectRatio1_0)
+        Left(s"Invalid rect ratios: ${impulse1.rectRatio}, ${impulse2.rectRatio}, ${impulse3.rectRatio}")
       else
-        None
-
-      dirOpt match {
-        case Some(dir) =>
-          // look for ps and ts
-//          val candidateHLs = shrinkingHsLs(dir, funnel.zipWithIndex, Vector.empty)
-//          val res = if (isAcceptableHVF(dir, candidateHLs))
-//            Some(calculateHFV(dir, candidateHLs))
-//          else if (candidateHLs.size >= 6)
-//            matches2(setup, funnel.drop(1))
-//          else
-//            None
-//          res
-          ???
-        case None =>
-          None
-      }
+        Right(HVFCandidate(dir, impulse1, impulse2, impulse3, null))
     }
-
-    def shrinkingHsLs(dir: Dir.Value, funnel: Vector[(Double, Int)], soFar: Vector[(Double, Int)]=Vector.empty): Either[String, Vector[(Double, Int)]] = ???
-    def percCriteria(hsLs: Vector[(Double, Int)]): Either[String, Vector[(Double, Int)]] = ???
-    def symmetricalCriteria(hsLs: Vector[(Double, Int)]): Either[String, Vector[(Double, Int)]] = ???
-
-
-
-    def isAcceptableHVF(dir: Dir.Value, hLs: Vector[(Double, Int)]): Boolean = ???
-    def calculateHFV(dir: Dir.Value, hLs: Vector[(Double, Int)]): HVFCandidate = ???
   }
 
-  case class HVFunnel(startInd: Int, endInd: Int, high: Double, low: Double, axis: Double)
-  case class HVFImpulse(high: (Double, Int), low: (Double, Int), low2: (Double, Int), amplitude: Double, angles: (Double, Double, Double))
-  case class HVFTrade(entry: Double, target: Double, stoploss: Double) {
-    lazy val rrr: Double = ???
-    def qty(acceptableLoss: Double): Double = ???
+  def resize1st(xs: Seq[Candle], v0: (Boolean, Candle), v1: (Boolean, Candle), v2: (Boolean, Candle)): (Boolean, Candle) = {
+    val (isHigh, new1st) = if (v0._1)
+      (true, xs.takeWhile(_.period < v1._2.period).reverse.dropWhile(_.high < v2._2.high).head)
+    else
+      (false, xs.takeWhile(_.period < v1._2.period).reverse.dropWhile(_.low > v2._2.low).head)
+    (isHigh, new1st)
   }
-  case class HVFCandidate(dir: Dir.Value, impulses: (HVFImpulse, HVFImpulse, HVFImpulse), funnel: HVFunnel) {
-    lazy val impulseTrade: HVFTrade = ???
-    lazy val funnelTrade: HVFTrade = ???
-    lazy val impulseCheck: Boolean = ???
-    lazy val funnelCheck: Boolean = ???
+}
+
+case class HVFunnel(startInd: Int, endInd: Int, high: Double, low: Double, axis: Double)
+case class HVFImpulse(v1: (Boolean, Candle), v2: (Boolean, Candle), v3: (Boolean, Candle)) {
+  lazy val amplitude: Double = if (v1._1)
+    // short
+    v3._2.high - v2._2.low
+  else
+    // long
+    v2._2.high - v3._2.low
+
+  lazy val width: Double = v3._2.period - v1._2.period
+
+  lazy val rectRatio: Double = amplitude / width
+}
+case class HVFTrade(dir: Dir.Value, entry: Double, target1: Double, target2: Double, target3: Double, stoploss: Double)
+case class HVFCandidate(dir: Dir.Value, impulse1: HVFImpulse, impulse2: HVFImpulse, impulse3: HVFImpulse, funnel: HVFunnel) {
+  lazy val boundary = if (dir == LongDir)
+    ((impulse1.v2._2.high, impulse1.v2._2.period), (impulse3.v3._2.low, impulse3.v3._2.period))
+  else
+    ((impulse1.v2._2.low, impulse1.v2._2.period), (impulse3.v3._2.high, impulse3.v3._2.period))
+
+  lazy val trade: HVFTrade = {
+    val rh1 = impulse1.v2._2.high
+    val lh1 = impulse1.v3._2.low
+    val rh2 = impulse2.v2._2.high
+    val lh2 = impulse2.v3._2.low
+    val rh3 = impulse3.v2._2.high
+    val lh3 = impulse3.v3._2.low
+    val axis = (rh3 + lh3) / 2
+    HVFTrade(dir = dir, entry = rh3, target1 = axis + (rh3 - lh3), target2 = axis + (rh2 - lh2), target3 = axis + (rh1 - lh1), stoploss = lh3)
   }
 
+  override def toString: String = s"HVFCandidate: boundary: ${impulse1.v2._2}, ${impulse3.v3._2}, recRatios: ${impulse1.rectRatio}, ${impulse2.rectRatio}, ${impulse3.rectRatio}, amplitudes: ${impulse1.amplitude}, ${impulse2.amplitude}, ${impulse3.amplitude}"
+
+  // considering funnel entries?
+  // lazy val funnelTrade: HVFTrade = ???
+  // lazy val funnelCheck: Boolean = ???
 }

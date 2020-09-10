@@ -1,6 +1,7 @@
 package moon
 
 import moon.DataFreq._
+import play.api.libs.json.Json
 
 object Rollups {
   def apply(maxHours: Int): Rollups =
@@ -53,16 +54,20 @@ case class RollupBuckets(
 
   lazy val forecast: RollupBuckets = promote(false).prune
 
+  lazy val asCandles: Vector[Candle] = period.zipWithIndex.map {
+    case (p, i) => Candle(high=high(i), low=low(i), open=open(i), close=close(i), vwap=vwap(i), volume=volume(i), period=p)
+  }
+
   private def promote(useLatestVol: Boolean): RollupBuckets =
     if (currentVolume <= 0)  // FIXME: hack, suggests there's an entry present
       this
     else
       copy(
-        high          = high :+ currentHigh,
-        low           = low :+ currentLow,
-        open          = open :+ currentOpen,
-        close         = close :+ currentClose,
-        vwap          = vwap :+ currentWeightedTotals / currentVolume,
+        high          = high   :+ currentHigh,
+        low           = low    :+ currentLow,
+        open          = open   :+ currentOpen,
+        close         = close  :+ currentClose,
+        vwap          = vwap   :+ currentWeightedTotals / currentVolume,
         volume        = volume :+ (if (useLatestVol) currentVolume else volume.lastOption.getOrElse(currentVolume)),
         period        = period :+ currentPeriod,
         currentHigh   = 0,
@@ -83,11 +88,11 @@ case class RollupBuckets(
           this
         else
           copy(
-            high          = high ++ Vector.fill(fillCnt)(high.last),
-            low           = low ++ Vector.fill(fillCnt)(low.last),
-            open          = open ++ Vector.fill(fillCnt)(open.last),
-            close         = close ++ Vector.fill(fillCnt)(close.last),
-            vwap          = vwap ++ Vector.fill(fillCnt)(vwap.last),
+            high          = high   ++ Vector.fill(fillCnt)(high.last),
+            low           = low    ++ Vector.fill(fillCnt)(low.last),
+            open          = open   ++ Vector.fill(fillCnt)(open.last),
+            close         = close  ++ Vector.fill(fillCnt)(close.last),
+            vwap          = vwap   ++ Vector.fill(fillCnt)(vwap.last),
             volume        = volume ++ Vector.fill(fillCnt)(0.0),
             period        = period ++ (lastPeriod+1 to toPeriod-1),
             currentHigh   = 0,
@@ -109,7 +114,7 @@ case class RollupBuckets(
         low           = low.takeRight(maxBuckets),
         open          = open.takeRight(maxBuckets),
         close         = close.takeRight(maxBuckets),
-        vwap = vwap.takeRight(maxBuckets),
+        vwap          = vwap.takeRight(maxBuckets),
         volume        = volume.takeRight(maxBuckets),
         period        = period.takeRight(maxBuckets),
       )
@@ -130,4 +135,9 @@ case class RollupBuckets(
       // bucket out of order, noop
       this
   }
+}
+
+
+case class Candle(high: Double, low: Double, open: Double, close: Double, vwap: Double, volume: Double, period: Long) {
+  lazy val sentiment: Sentiment.Value = if (open < close) Sentiment.Bull else Sentiment.Bear
 }

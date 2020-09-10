@@ -38,6 +38,7 @@ libraryDependencies ++= {
     "com.github.nscala-time" %% "nscala-time"     % "2.24.0",
     "org.ta4j" % "ta4j-core" % "0.13",
     "com.codahale.metrics" % "metrics-graphite"   % "3.0.2", // note: not using codahale's: "com.codahale.metrics" % "metrics-core"       % "3.0.2",
+    // "com.asprise.ocr" % "java-ocr-api" % "[15,)"
     // If testkit used, explicitly declare dependency on akka-streams-testkit in same version as akka-actor
     "org.scalatest"     %% "scalatest"            % scalaTestVsn % Test,
     "com.typesafe.akka" %% "akka-http-testkit"    % akkaHttpVsn  % Test,
