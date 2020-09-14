@@ -189,4 +189,16 @@ class TalibSpec extends FlatSpec with Matchers with Inside {
     // combos of positive and negative
     indecreasingSlope(Vector(1.04, 1.06, -1.1, -1.15, -1.2, -1.35, -1.5, -1.7, -2.0, -2.5)) shouldBe None
   }
+
+  it should "work with atr" in {
+    val high  = Seq(10.0,100.0,20.0,30.0,50.0,60.0)
+    val low   = Seq(8.0,80.0,18.0,28.0,38.0,48.0)
+    val close = Seq(9.0,90.0,19.0,29.0,39.0,49.0)
+
+    atr(high=high, low=low, close=close, timeperiod=1) shouldBe Some(21.0)
+    atr(high=high, low=low, close=close, timeperiod=2) shouldBe Some(27.3125)
+    atr(high=high, low=low, close=close, timeperiod=3) shouldBe Some(37.44444444444444)
+    atr(high=high, low=low, close=close, timeperiod=4) shouldBe Some(41.8125)
+    atr(high=high, low=low, close=close, timeperiod=5) shouldBe Some(43.2)
+  }
 }

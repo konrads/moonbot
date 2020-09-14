@@ -17,10 +17,13 @@ object TrainingApp extends App {
   val log = Logger("TrainingApp")
 
   // global params
+  val backtestDataDir         = null: String  //"data/training"
+  val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/ETHUSD/20190101-20200825/10S.csv"
+
   val minTradeCnt             = 6  // Note, roundtrip = 2 trades!
-  val takeProfitMargins       = 20 to 20 by 5
-  val stoplossMargins         = 15 to 15 by 5
-  val openWithMarkets         = Seq(false)
+  val takeProfitMargins       = 20 to 30 by 5
+  val stoplossMargins         = 10 to 20 by 5
+  val openWithMarkets         = Seq(true)
   val useTrailingStoplosses   = Seq(false, true)
   // rsi
   val rsiWindows              = 10 to 100 by 5
@@ -32,10 +35,10 @@ object TrainingApp extends App {
   val indecreasingMinAbsSlope = Seq(1.5, 1.6, 1.7)
   val indecreasingMaxAbsSlope = Seq(3.8, 4.0)
   // macd
-  val macdResamplePeriods     = 8*1000 to 8*1000 by 1*1000
   val slowWindows             = 23 to 25 by 1         // typically 26
-  val fastWindows             = 9 to 11 by 1         // typically 12
+  val fastWindows             = 10 to 13 by 1         // typically 12
   val signalWindows           = 9 to 9 by 1          // typically 9
+  val trendWindows            = 200 to 200 by 100    // typically 200
 
   // bbands
   val bbandsWindows           = 6 to 10 by 1
@@ -43,7 +46,7 @@ object TrainingApp extends App {
   val bbandsDevUps            = Seq(2.3, 2.4, 2.5)
 
 
-  def bruteForceRun(desc: String, backtestDataDir: String="data/training", tradeQty: Int=100, strategies: Iterator[Strategy]): (Double, Strategy) = {
+  def bruteForceRun(desc: String, tradeQty: Int=100, strategies: Iterator[Strategy]): (Double, Strategy) = {
     var winningStrategy: Strategy = null
     var winningPandl: Double = Double.MinValue
     var winningCtx: Ctx = null
@@ -57,14 +60,15 @@ object TrainingApp extends App {
       useTrailingStoploss <- useTrailingStoplosses
     } {
       val sim = new ExchangeSim(
-        dataDir = backtestDataDir,
+        eventDataDir = backtestDataDir,
+        candleFile = backtestCandleFile,
         strategy = strategy,
         tradeQty = tradeQty,
         takeProfitMargin = takeProfitMargin, stoplossMargin = stoplossMargin,
         metrics = None,
         openWithMarket = openWithMarket,
         useTrailingStoploss = useTrailingStoploss,
-        useSynthetics = false)
+        useSynthetics = backtestCandleFile != null)
       val (ctx, eCtx) = sim.run()
       val pandl = ctx.ledger.ledgerMetrics.runningPandl
       val price = (ctx.ledger.bidPrice + ctx.ledger.askPrice) / 2
@@ -127,13 +131,12 @@ object TrainingApp extends App {
 
   def trainMacd: (Double, Strategy) = {
     val strategies = for {
-      resamplePeriodMs <- macdResamplePeriods
       slowWindow       <- slowWindows
       fastWindow       <- fastWindows
       signalWindow     <- signalWindows
     } yield {
       val conf = ConfigFactory.parseString(
-        s"""|resamplePeriodMs = $resamplePeriodMs
+        s"""|dataFreq         = 4h
             |slowWindow       = $slowWindow
             |fastWindow       = $fastWindow
             |signalWindow     = $signalWindow
@@ -141,6 +144,25 @@ object TrainingApp extends App {
       new MACDStrategy(conf)
     }
     bruteForceRun(desc="MACD", strategies=strategies.iterator)
+  }
+
+  def trainMacdOverMa: (Double, Strategy) = {
+    val strategies = for {
+      slowWindow       <- slowWindows
+      fastWindow       <- fastWindows
+      signalWindow     <- signalWindows
+      trendWindow      <- trendWindows
+    } yield {
+      val conf = ConfigFactory.parseString(
+        s"""|dataFreq         = 4h
+            |slowWindow       = $slowWindow
+            |fastWindow       = $fastWindow
+            |signalWindow     = $signalWindow
+            |trendWindow      = $trendWindow
+            |""".stripMargin)
+      new MACDOverMAStrategy(conf)
+    }
+    bruteForceRun(desc="MACDoverMA", strategies=strategies.iterator)
   }
 
   def trainBbands: (Double, Strategy) = {
@@ -167,12 +189,14 @@ object TrainingApp extends App {
       case "rsi"          => trainRsi
       case "indecreasing" => trainIndecreasing
       case "macd"         => trainMacd
+      case "macdoverma"   => trainMacdOverMa
       case "bbands"       => trainBbands
       case "all"          =>
         val allReses = Map(
           // "RSI"          -> trainRsi,
           // "INDECREASING" -> trainIndecreasing,
-          "MACD"         -> trainMacd,
+          // "MACD"         -> trainMacd,
+          "MACDOVERMA"   -> trainMacdOverMa,
           // "BBANDS"       -> trainBbands,
         )
         val (desc, (pandl, strategy)) = allReses.toSeq.maxBy(_._2._1)

@@ -38,7 +38,8 @@ object BotApp extends App {
   val stoplossMargin         = conf.getDouble("bot.stoplossMargin")
   val openWithMarket         = conf.optBoolean("bot.openWithMarket").getOrElse(false)
   val useTrailingStoploss    = conf.optBoolean("bot.useTrailingStoploss").getOrElse(false)
-  val backtestDataDir        = conf.optString("bot.backtestDataDir")
+  val backtestEventDataDir   = conf.optString("bot.backtestEventDataDir")
+  val backtestCandleFile     = conf.optString("bot.backtestCandleFile")
   val useSynthetics          = conf.optBoolean("bot.useSynthetics").getOrElse(false)
   val runType                = conf.optString("bot.runType").map(_.toLowerCase) match {
     case Some("live")     => Live
@@ -47,7 +48,7 @@ object BotApp extends App {
     case Some(other)      => throw new Exception(s"Invalid bot.runType: $other")
     case None             => Live
   }
-  assert(runType != RunType.Backtest || backtestDataDir.isDefined)
+  assert(runType != RunType.Backtest || backtestEventDataDir.isDefined || backtestCandleFile.isDefined)
 
   val strategyName = conf.getString("strategy.selection")
 
@@ -104,7 +105,8 @@ object BotApp extends App {
       |• stoplossMargin:       $stoplossMargin
       |• openWithMarket:       $openWithMarket
       |• runType:              $runType
-      |• backtestDataDir:      $backtestDataDir
+      |• backtestEventDataDir: $backtestEventDataDir
+      |• backtestCandleFile:   $backtestCandleFile
       |• useSynthetics:        $useSynthetics
       |""".stripMargin)
 
@@ -112,9 +114,10 @@ object BotApp extends App {
   val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig, parentConfig = conf.getObject(s"strategy").toConfig)
 
   if (runType == Backtest) {
-    log.info(s"Instantiating Backtest on $backtestDataDir...")
+    log.info(s"Instantiating Backtest on $backtestEventDataDir or $backtestCandleFile...")
     val sim = new ExchangeSim(
-      dataDir = backtestDataDir.get,
+      eventDataDir = backtestEventDataDir.orNull,
+      candleFile = backtestCandleFile.orNull,
       strategy = strategy,
       tradeQty = tradeQty,
       takeProfitMargin = takeProfitMargin, stoplossMargin = stoplossMargin,

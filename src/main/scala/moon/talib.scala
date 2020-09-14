@@ -68,6 +68,22 @@ object talib {
     }
   }
 
+  // as per: https://en.wikipedia.org/wiki/Average_true_range#:~:text=The%20true%20range%20is%20the,low%20minus%20the%20previous%20close
+  def atr(high: Seq[Double], low: Seq[Double], close: Seq[Double], timeperiod: Int): Option[Double] = {
+    assert(high.size == low.size && low.size == close.size)
+    if (high.size < timeperiod + 1)
+      None
+    else {
+      val h = high.drop(1)
+      val l = low.drop(1)
+      val pc = close.dropRight(1)
+      val trs = (h zip l zip pc) map { case ((h2:Double, l2:Double), pc2:Double) => Seq(h2 - l2, math.abs(h2 - pc2), math.abs(l2 - pc2)).max }
+      val atr0 = trs.take(timeperiod).sum / timeperiod
+      val res = trs.drop(timeperiod).foldLeft(atr0) { case (prevATR, tr) => (prevATR * (timeperiod-1) + tr) / timeperiod }
+      Some(res)
+    }
+  }
+
   /**
    * Given a MACD histogram graph:
    *

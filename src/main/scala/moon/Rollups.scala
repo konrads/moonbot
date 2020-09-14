@@ -1,5 +1,6 @@
 package moon
 
+import scala.io.Source
 import moon.DataFreq._
 import play.api.libs.json.Json
 
@@ -9,6 +10,7 @@ object Rollups {
       `10s` -> RollupBuckets(window = 10*1000, maxBuckets = 60*6*(maxHours+1)),
       `1m`  -> RollupBuckets(window = 60*1000, maxBuckets = 60*(maxHours+1)),
       `1h`  -> RollupBuckets(window = 60*60*1000, maxBuckets = maxHours),
+      `4h`  -> RollupBuckets(window = 4*60*60*1000, maxBuckets = maxHours/4),
     ))
 }
 
@@ -140,4 +142,20 @@ case class RollupBuckets(
 
 case class Candle(high: Double, low: Double, open: Double, close: Double, vwap: Double, volume: Double, period: Long) {
   lazy val sentiment: Sentiment.Value = if (open < close) Sentiment.Bull else Sentiment.Bear
+}
+
+object Candle {
+  def fromFile(filename: String): Iterator[Candle] = {
+    val source = Source.fromFile(filename)
+    try {
+      val iter = source.getLines
+      val headers = iter.next
+      val headerMap = headers.split(",").map(_.trim).zipWithIndex.map { case (h, ind) => ind -> h }.toMap
+      (for (line <- iter) yield {
+        val rowMap = line.split(",").map(_.trim).zipWithIndex.map { case (v, ind) => headerMap(ind) -> v }.toMap
+        Candle(high = rowMap("high").toDouble, low = rowMap("low").toDouble, open = rowMap("open").toDouble, close = rowMap("close").toDouble, vwap = rowMap("vwap").toDouble, volume = rowMap("volume").toDouble, period = rowMap("period").toLong)
+      }).toVector.toIterator
+    } finally
+      source.close()
+  }
 }
