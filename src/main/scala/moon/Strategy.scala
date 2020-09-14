@@ -171,41 +171,42 @@ class MACDStrategy(val config: Config) extends Strategy {
 
 
 class MACDOverMAStrategy(val config: Config) extends Strategy {
-  val trendWindow = config.optInt("trendWindow").getOrElse(200)
-  val trendMaType = config.optString("maType").map(MA.withName).getOrElse(SMA)
-  val slowWindow = config.optInt("slowWindow").getOrElse(26)
-  val fastWindow = config.optInt("fastWindow").getOrElse(12)
-  val signalWindow = config.optInt("signalWindow").getOrElse(9)
+  val maType = config.optString("maType").map(MA.withName).getOrElse(SMA)
+  val trendWindow = config.optInt("trendWindow").getOrElse(290)
+  val slowWindow = config.optInt("slowWindow").getOrElse(3*26)
+  val fastWindow = config.optInt("fastWindow").getOrElse(3*12)
+  val signalWindow = config.optInt("signalWindow").getOrElse(3*9)
   val dataFreq = config.optString("dataFreq").map(DataFreq.withName).getOrElse(`1h`)
-  val minUpper = config.optDouble("minUpper").getOrElse(0.9)
-  val minLower = config.optDouble("minLower").getOrElse(-0.9)
+  val minUpper = config.optDouble("minUpper").getOrElse(0.95)
+  val minLower = config.optDouble("minLower").getOrElse(-0.95)
   val capFun = capProportionalExtremes()
-  assert(fastWindow < slowWindow)
-  log.info(s"Strategy ${this.getClass.getSimpleName}: slowWindow: $slowWindow, fastWindow: $fastWindow, signalWindow: $signalWindow, dataFreq: $dataFreq, minUpper: $minUpper, minLower: $minLower, trendWindow:  $trendWindow, trendMaType: $trendMaType")
+  assert(fastWindow < slowWindow && slowWindow < trendWindow)
+  log.info(s"Strategy ${this.getClass.getSimpleName}: slowWindow: $slowWindow, fastWindow: $fastWindow, signalWindow: $signalWindow, dataFreq: $dataFreq, minUpper: $minUpper, minLower: $minLower, trendWindow: $trendWindow, maType: $maType")
   override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
     val data = ledger.tradeRollups.forBucket(dataFreq)
     val prices = data.vwap.takeRight(slowWindow + signalWindow + 2)
-    val maVal = ma(prices, trendWindow, trendMaType)
-    val (sentiment, macdVal, macdSignal, macdHistogram, macdCapScore, pricetTrendDelta) = macd(prices, slowWindow, fastWindow, signalWindow) match {
+    val currMa = ma(prices, trendWindow, maType)
+    val (sentiment, macdVal, macdSignal, macdHistogram, macdCapScore) = macd(prices, slowWindow, fastWindow, signalWindow, maType) match {
       case Some((macd, signal, histogram)) =>
         val capScore = capFun(histogram)
-        val priceTrendDelta = prices.last - maVal
-        val sentiment = if (capScore > minUpper && priceTrendDelta > 0)
+        val sentiment = if (capScore > minUpper && prices.last > currMa)
           Bull
-        else if (capScore < minLower && priceTrendDelta < 0)
+        else if (capScore < minLower && prices.last < currMa)
           Bear
         else
           Neutral
-        (sentiment, Some(macd), Some(signal), Some(histogram), Some(capScore), Some(priceTrendDelta))
+        (sentiment, Some(macd), Some(signal), Some(histogram), Some(capScore))
       case _ =>
-        (Neutral, None, None, None, None, None)
+        (Neutral, None, None, None, None)
     }
+    val exitLong  = for { s <- macdSignal; h <- macdHistogram } yield s < h
+    val exitShort = for { s <- macdSignal; h <- macdHistogram } yield s > h
     StrategyResult(
       sentiment = sentiment,
       // note: keeping macd's sentiment as a separate metric to show indicator specific sentiment
-      metrics = (Vector[(String, Double)]("data.macdoverma.macdsentiment" -> sentiment.id) ++ macdVal.map("data.macdoverma.macd" -> _).toVector ++ macdSignal.map("data.macdoverma.signal" -> _).toVector ++ macdHistogram.map("data.macdoverma.histogram" -> _).toVector ++ macdCapScore.map("data.macdoverma.cap" -> _).toVector ++ pricetTrendDelta.map("data.macdoverma.pricetrendelta" -> _).toVector).toMap,
-      exitLong  = for { s <- macdSignal; h <- macdHistogram } yield s < h,
-      exitShort = for { s <- macdSignal; h <- macdHistogram } yield s > h
+      metrics = (Vector[(String, Double)]("data.macd2.sentiment" -> sentiment.id) ++ macdVal.map("data.macd2.macd" -> _).toVector ++ macdSignal.map("data.macd2.signal" -> _).toVector ++ macdHistogram.map("data.macd2.histogram" -> _).toVector ++ macdCapScore.map("data.macd2.cap" -> _).toVector).toMap,
+      exitLong  = exitLong,
+      exitShort = exitShort
     )
   }
 }
