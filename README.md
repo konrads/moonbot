@@ -47,7 +47,7 @@ Design
 Bot communicates with `Bitmex` via [WsGateway](src/main/scala/moon/WsGateway.scala) for listening of websocket events (order lifecycle notifications, trade notifications, orderbook notifications, etc)
 and [RestGateway](src/main/scala/moon/RestGateway.scala) for Rest requests (issue order, cancel, amend, etc). 
 
-[Orchestrator](src/main/scala/moon/Orchestrator.scala) is the **BIG** FSM that handles both websocket notifications and async REST responses. It divides main states into:
+[Orchestrator](src/main/scala/moon/MoonOrchestrator.scala) is the **BIG** FSM that handles both websocket notifications and async REST responses. It divides main states into:
 - init - wait till enough info is captured to start trading
 - idle - wait till decision is made to go long or short
 - opening long - issue long limit order, amending price if moves in the expected direction, flip to idle if price moves in the opposite direction

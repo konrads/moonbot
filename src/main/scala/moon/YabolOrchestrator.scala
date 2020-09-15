@@ -49,6 +49,7 @@ object YabolOrchestrator {
           case RestEvent(Success(x))         => (ledger.record(x), false)
           case WsEvent(o:UpsertOrder)        => (ledger.record(o), o.containsClOrdIDs(clOrdID))
           case WsEvent(x)                    => (ledger.record(x), false)
+          case _                             => ???
         }
         if (clOrdIDMatch) {
           val order = ledger2.ledgerOrdersByClOrdID(clOrdID)
@@ -82,6 +83,7 @@ object YabolOrchestrator {
         val ledger2 = e match {
           case RestEvent(Success(x)) => ledger.record(x)
           case WsEvent(x)            => ledger.record(x)
+          case _                     => ???
         }
         val strategyRes = strategy.strategize(ledger2)
         if (dir == LongDir && strategyRes.shouldExitLong) {
@@ -105,6 +107,7 @@ object YabolOrchestrator {
           case RestEvent(Success(x))         => (ledger.record(x), false)
           case WsEvent(o:UpsertOrder)        => (ledger.record(o), o.containsClOrdIDs(clOrdID))
           case WsEvent(x)                    => (ledger.record(x), false)
+          case _                             => ???
         }
         if (clOrdIDMatch) {
           val order = ledger2.ledgerOrdersByClOrdID(clOrdID)
@@ -121,8 +124,6 @@ object YabolOrchestrator {
 
       // catchalls
       case (ctx, WsEvent(data)) =>
-        (ctx.withLedger(ctx.ledger.record(data)), None)
-      case (ctx, RestEvent(Success(data))) =>
         (ctx.withLedger(ctx.ledger.record(data)), None)
       case (ctx, RestEvent(Success(data))) =>
         (ctx.withLedger(ctx.ledger.record(data)), None)

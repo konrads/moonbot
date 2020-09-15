@@ -1,8 +1,8 @@
 package moon
 
 import com.typesafe.config.Config
+import moon.Behaviour.{ExchangeCtx, ExchangeOrder, maybeFill, paperExchangeSideEffectHandler}
 import moon.ModelsSpec._
-import moon.Orchestrator.{ExchangeCtx, ExchangeOrder, paperExchangeSideEffectHandler}
 import moon.OrderSide._
 import moon.OrderStatus._
 import moon.OrderType._
@@ -27,7 +27,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   }
 
   def runSim(strategy: TestStrategy, openWithMarket: Boolean, useTrailingStoploss: Boolean, sentimentsAndEvents: (Sentiment.Value, String)*): (Ctx, ExchangeCtx) = {
-    val behaviorDsl = Orchestrator.asDsl(
+    val behaviorDsl = MoonOrchestrator.asDsl(
       strategy,
       100,
       10, 5,
@@ -176,26 +176,26 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   it should "maybeFill Market" in {
     var order: ExchangeOrder = null
     order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Market, status = New, price = None, trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
-    Orchestrator.maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(15), status = Filled))
+    maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(15), status = Filled))
     order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Market, status = New, price = None, trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
-    Orchestrator.maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(10), status = Filled))
+    maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(10), status = Filled))
   }
 
   it should "maybeFill Limit" in {
     var order: ExchangeOrder = null
     order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Limit, status = New, price = Some(9), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
-    Orchestrator.maybeFill(order, bid = 10, ask = 15) shouldBe None
+    maybeFill(order, bid = 10, ask = 15) shouldBe None
     order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Limit, status = New, price = Some(12), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
-    Orchestrator.maybeFill(order, bid = 10, ask = 15) shouldBe None
+    maybeFill(order, bid = 10, ask = 15) shouldBe None
     order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Limit, status = New, price = Some(16), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
-    Orchestrator.maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(16), status = Filled))
+    maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(16), status = Filled))
 
     order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Limit, status = New, price = Some(9), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
-    Orchestrator.maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(9), status = Filled))
+    maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(9), status = Filled))
     order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Limit, status = New, price = Some(12), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
-    Orchestrator.maybeFill(order, bid = 10, ask = 15) shouldBe None
+    maybeFill(order, bid = 10, ask = 15) shouldBe None
     order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Limit, status = New, price = Some(16), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
-    Orchestrator.maybeFill(order, bid = 10, ask = 15) shouldBe None
+    maybeFill(order, bid = 10, ask = 15) shouldBe None
   }
 
   it should "maybeFill vanilla Stop" in {

@@ -2,7 +2,7 @@ package moon
 
 import java.io.File
 
-import moon.Orchestrator._
+import moon.Behaviour._
 import moon.RunType._
 import org.joda.time.DateTime
 import play.api.libs.json.{JsError, JsSuccess}
@@ -11,16 +11,16 @@ import scala.io.Source
 
 
 class ExchangeSim(
-    runType: RunType.Value = Backtest,
-    eventDataDir: String=null,
-    candleFile: String=null,
-    metrics: Option[Metrics],
-    strategy: Strategy,
-    tradeQty: Int,
-    takeProfitMargin: Double, stoplossMargin: Double,
-    openWithMarket: Boolean = false,
-    useTrailingStoploss: Boolean = false,
-    useSynthetics: Boolean = false) {
+  runType: RunType.Value = BacktestMoon,
+  eventDataDir: String=null,
+  candleFile: String=null,
+  metrics: Option[Metrics],
+  strategy: Strategy,
+  tradeQty: Int,
+  takeProfitMargin: Double, stoplossMargin: Double,
+  openWithMarket: Boolean = false,
+  useTrailingStoploss: Boolean = false,
+  useSynthetics: Boolean = false) {
 
   assert((eventDataDir != null && candleFile == null) || (eventDataDir == null && candleFile != null))
 
@@ -29,8 +29,8 @@ class ExchangeSim(
   def run(): (LedgerAwareCtx, ExchangeCtx) = {
     val eventIter: Iterator[WsModel] = if (eventDataDir != null) eventsFromDataDir(eventDataDir) else eventsFromCandleFile(candleFile)
 
-    if (runType == Backtest) {
-      val behaviorDsl = Orchestrator.asDsl(
+    if (runType == BacktestMoon) {
+      val behaviorDsl = MoonOrchestrator.asDsl(
         strategy,
         tradeQty,
         takeProfitMargin, stoplossMargin,

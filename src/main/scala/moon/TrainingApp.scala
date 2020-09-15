@@ -37,11 +37,11 @@ object TrainingApp extends App {
   val indecreasingMinAbsSlope = Seq(1.5, 1.6, 1.7)
   val indecreasingMaxAbsSlope = Seq(3.8, 4.0)
   // macd
-  val slowWindows             = 23 to 25 by 1         // typically 26
-  val fastWindows             = 10 to 13 by 1         // typically 12
+  val slowWindows             = 23 to 25 by 1        // typically 26
+  val fastWindows             = 10 to 13 by 1        // typically 12
   val signalWindows           = 9 to 9 by 1          // typically 9
   val trendWindows            = 200 to 200 by 100    // typically 200
-  val maType                  = Seq(SMA, EMA)        // typically SMA
+  val maTypes                 = Seq(SMA, EMA)        // typically SMA
 
   // bbands
   val bbandsWindows           = 6 to 10 by 1
@@ -158,6 +158,7 @@ object TrainingApp extends App {
       fastWindow       <- fastWindows
       signalWindow     <- signalWindows
       trendWindow      <- trendWindows
+      maType           <- maTypes
     } yield {
       val conf = ConfigFactory.parseString(
         s"""|dataFreq         = 4h

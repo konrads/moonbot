@@ -42,27 +42,31 @@ object BotApp extends App {
   val backtestCandleFile     = conf.optString("bot.backtestCandleFile")
   val useSynthetics          = conf.optBoolean("bot.useSynthetics").getOrElse(false)
   val runType                = conf.optString("bot.runType").map(_.toLowerCase) match {
-    case Some("live")           => Live
+    case Some("live-moon")      => LiveMoon
     case Some("live-yabol")     => LiveYabol
-    case Some("dry")            => Dry
+    case Some("dry-moon")       => DryMoon
     case Some("dry-yabol")      => DryYabol
-    case Some("backtest")       => Backtest
+    case Some("backtest-moon")  => BacktestMoon
     case Some("backtest-yabol") => BacktestYabol
     case Some(other)            => throw new Exception(s"Invalid bot.runType: $other")
-    case None                   => Live
+    case None                   => LiveMoon
   }
-  assert(runType != RunType.Backtest || backtestEventDataDir.isDefined || backtestCandleFile.isDefined)
+  assert(runType != RunType.BacktestMoon || backtestEventDataDir.isDefined || backtestCandleFile.isDefined)
 
   val strategyName = conf.getString("strategy.selection")
 
   val notLiveWarning = runType match {
-    case Live => ""
+    case LiveMoon =>
+      """|
+         |                    -=-=- MOON -=-=-
+         |
+         |""".stripMargin
     case LiveYabol =>
       """|
          |                    -=-=- YABOL -=-=-
          |
          |""".stripMargin
-    case Dry =>
+    case DryMoon =>
       s"""
          |                            ██
          |                          ██  ██
@@ -86,7 +90,7 @@ object BotApp extends App {
          |                     ████████████████
          |
          |""".stripMargin
-    case Backtest =>
+    case BacktestMoon =>
       s"""
          |                            ██
          |                          ██  ██
@@ -145,8 +149,8 @@ object BotApp extends App {
   val metrics = Metrics(graphiteHost, graphitePort, namespace)
   val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig, parentConfig = conf.getObject(s"strategy").toConfig)
 
-  if (runType == Backtest) {
-    log.info(s"Instantiating Backtest on $backtestEventDataDir or $backtestCandleFile...")
+  if (runType == BacktestMoon || runType == BacktestYabol) {
+    log.info(s"Instantiating $runType on $backtestEventDataDir or $backtestCandleFile...")
     val sim = new ExchangeSim(
       runType = runType,
       eventDataDir = backtestEventDataDir.orNull,
@@ -162,7 +166,7 @@ object BotApp extends App {
   } else {
     implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
     val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
-    val behaviorDsl=Orchestrator.asDsl(
+    val behaviorDsl=MoonOrchestrator.asDsl(
       strategy=strategy,
       tradeQty=tradeQty,
       takeProfitMargin=takeProfitMargin,
@@ -173,9 +177,9 @@ object BotApp extends App {
       strategy=strategy,
       tradeQty=tradeQty)
 
-    val orchestrator = if (runType == Live) {
+    val orchestrator = if (runType == LiveMoon) {
       log.info(s"Instantiating Live Run...")
-      Orchestrator.asLiveBehavior(
+      Behaviour.asLiveBehavior(
         restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
         metrics=Some(metrics),
         flushSessionOnRestart=flushSessionOnRestart,
@@ -183,21 +187,21 @@ object BotApp extends App {
         initCtx=InitCtx(Ledger()))
     } else if (runType == LiveYabol) {
       log.info(s"Instantiating Live Yabol Run...")
-      Orchestrator.asLiveBehavior(
+      Behaviour.asLiveBehavior(
         restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
         metrics=Some(metrics),
         flushSessionOnRestart=flushSessionOnRestart,
         behaviorDsl=yabolBehaviorDsl,
         initCtx=YabolIdleCtx(Ledger()))
-    } else if (runType == Dry) {
+    } else if (runType == DryMoon) {
       log.info(s"Instantiating Dry Run...")
-      Orchestrator.asDryBehavior(
+      Behaviour.asDryBehavior(
         metrics=Some(metrics),
         behaviorDsl=behaviorDsl,
         initCtx=InitCtx(Ledger()))
     } else if (runType == DryYabol) {
       log.info(s"Instantiating Dry Yabol Run...")
-      Orchestrator.asDryBehavior(
+      Behaviour.asDryBehavior(
         metrics=Some(metrics),
         behaviorDsl=yabolBehaviorDsl,
         initCtx=YabolIdleCtx(Ledger()))
