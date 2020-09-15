@@ -2,6 +2,8 @@ package moon
 
 import moon.OrderStatus._
 import moon.OrderType._
+import moon.RunType._
+import moon.talib.MA._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 
@@ -39,17 +41,20 @@ object TrainingApp extends App {
   val fastWindows             = 10 to 13 by 1         // typically 12
   val signalWindows           = 9 to 9 by 1          // typically 9
   val trendWindows            = 200 to 200 by 100    // typically 200
+  val maType                  = Seq(SMA, EMA)        // typically SMA
 
   // bbands
   val bbandsWindows           = 6 to 10 by 1
   val bbandsDevDowns          = Seq(1.9, 2.0, 2.1)
   val bbandsDevUps            = Seq(2.3, 2.4, 2.5)
 
+  val runType                 = BacktestYabol
+
 
   def bruteForceRun(desc: String, tradeQty: Int=100, strategies: Iterator[Strategy]): (Double, Strategy) = {
     var winningStrategy: Strategy = null
     var winningPandl: Double = Double.MinValue
-    var winningCtx: Ctx = null
+    var winningCtx: LedgerAwareCtx = null
     var winningParams: ListMap[String, Any] = ListMap.empty
 
     for {
@@ -60,6 +65,7 @@ object TrainingApp extends App {
       useTrailingStoploss <- useTrailingStoplosses
     } {
       val sim = new ExchangeSim(
+        runType = runType,
         eventDataDir = backtestDataDir,
         candleFile = backtestCandleFile,
         strategy = strategy,
@@ -159,6 +165,7 @@ object TrainingApp extends App {
             |fastWindow       = $fastWindow
             |signalWindow     = $signalWindow
             |trendWindow      = $trendWindow
+            |maType           = $maType
             |""".stripMargin)
       new MACDOverMAStrategy(conf)
     }

@@ -3,6 +3,7 @@ package moon
 import java.io.File
 
 import moon.Orchestrator._
+import moon.RunType._
 import org.joda.time.DateTime
 import play.api.libs.json.{JsError, JsSuccess}
 
@@ -10,6 +11,7 @@ import scala.io.Source
 
 
 class ExchangeSim(
+    runType: RunType.Value = Backtest,
     eventDataDir: String=null,
     candleFile: String=null,
     metrics: Option[Metrics],
@@ -24,21 +26,31 @@ class ExchangeSim(
 
   val log = org.slf4j.LoggerFactory.getLogger(classOf[ExchangeSim])
 
-  def run(): (Ctx, ExchangeCtx) = {
+  def run(): (LedgerAwareCtx, ExchangeCtx) = {
     val eventIter: Iterator[WsModel] = if (eventDataDir != null) eventsFromDataDir(eventDataDir) else eventsFromCandleFile(candleFile)
 
-    val behaviorDsl = Orchestrator.asDsl(
-      strategy,
-      tradeQty,
-      takeProfitMargin, stoplossMargin,
-      openWithMarket,
-      useTrailingStoploss,
-      true)
-
-    val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((InitCtx(Ledger()):Ctx, ExchangeCtx())) {
-      case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, WsEvent(event))
-    }
-    (finalCtx, finalExchangeCtx)
+    if (runType == Backtest) {
+      val behaviorDsl = Orchestrator.asDsl(
+        strategy,
+        tradeQty,
+        takeProfitMargin, stoplossMargin,
+        openWithMarket,
+        useTrailingStoploss,
+        true)
+      val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((InitCtx(Ledger()): Ctx, ExchangeCtx())) {
+        case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, WsEvent(event))
+      }
+      (finalCtx.asInstanceOf[LedgerAwareCtx], finalExchangeCtx)
+    } else if (runType == BacktestYabol) {
+      val behaviorDsl = YabolOrchestrator.asDsl(
+        strategy,
+        tradeQty)
+      val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((YabolIdleCtx(Ledger()): YabolCtx, ExchangeCtx())) {
+        case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, WsEvent(event))
+      }
+      (finalCtx.asInstanceOf[LedgerAwareCtx], finalExchangeCtx)
+    } else
+      throw new Exception(s"Invalid dslType: $runType")
   }
 
   def eventsFromDataDir(eventDataDir: String): Iterator[WsModel] = {

@@ -47,7 +47,7 @@ package object moon {
 
   object RunType extends Enumeration {
     type RunType = Value
-    val Live, Dry, Backtest = Value
+    val Live, LiveYabol, Dry, DryYabol, Backtest, BacktestYabol = Value
   }
 
   object Dir extends Enumeration {

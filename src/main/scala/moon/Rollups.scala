@@ -11,12 +11,13 @@ object Rollups {
       `1m`  -> RollupBuckets(window = 60*1000, maxBuckets = 60*(maxHours+1)),
       `1h`  -> RollupBuckets(window = 60*60*1000, maxBuckets = maxHours),
       `4h`  -> RollupBuckets(window = 4*60*60*1000, maxBuckets = maxHours/4),
-    ))
+    ),
+    -1)
 }
 
 
-case class Rollups(_buckets: Map[DataFreq.Value, RollupBuckets]) {
-  def add(tsMs: Long, price: Double, vol: Double): Rollups = copy(_buckets.map { case (k, v) => k -> v.add(tsMs, price, vol) })
+case class Rollups(_buckets: Map[DataFreq.Value, RollupBuckets], latestPrice: Double) {
+  def add(tsMs: Long, price: Double, vol: Double): Rollups = copy(_buckets.map { case (k, v) => k -> v.add(tsMs, price, vol) }, price)
 
   def forBucket(id: DataFreq.Value): RollupBuckets = _buckets(id).forecast
 

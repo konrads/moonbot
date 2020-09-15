@@ -130,7 +130,7 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
     val strategyRes = strategy.strategize(this)
     val (s, m) = (strategyRes.sentiment, strategyRes.metrics)
     val metricsVals = Map(
-      "data.price"           -> (bidPrice + askPrice) / 2,
+      "data.price"           -> tradeRollups.latestPrice,
       "data.volume"          -> volume,
       "data.sentiment"       -> s.id,
       "data.myTradeCnt"      -> myTrades.size,

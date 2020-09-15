@@ -356,7 +356,7 @@ object Orchestrator {
     tick
   }
 
-  def asLiveBehavior(restGateway: IRestGateway, metrics: Option[Metrics]=None, flushSessionOnRestart: Boolean=true, behaviorDsl: (Ctx, ActorEvent, org.slf4j.Logger) => (Ctx, Option[SideEffect]))(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
+  def asLiveBehavior[T <: LedgerAwareCtx](restGateway: IRestGateway, metrics: Option[Metrics]=None, flushSessionOnRestart: Boolean=true, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
     Behaviors.withTimers { timers =>
       timers.startTimerAtFixedRate(SendMetrics(None), 1.minute)
 
@@ -369,7 +369,7 @@ object Orchestrator {
           } yield ()
         }
 
-        def loop(ctx: Ctx): Behavior[ActorEvent] =
+        def loop(ctx: T): Behavior[ActorEvent] =
           Behaviors.receiveMessage { event =>
             val (ctx2, effect) = behaviorDsl(ctx, event, actorCtx.log)
             effect.foreach {
@@ -400,23 +400,23 @@ object Orchestrator {
             }
             loop(ctx2)
           }
-        loop(InitCtx(Ledger()))
+        loop(initCtx)
       }
     }
   }
 
-  def asDryBehavior(behaviorDsl: (Ctx, ActorEvent, org.slf4j.Logger) => (Ctx, Option[SideEffect]), metrics: Option[Metrics]=None): Behavior[ActorEvent] = {
+  def asDryBehavior[T <: LedgerAwareCtx](metrics: Option[Metrics]=None, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T): Behavior[ActorEvent] = {
     Behaviors.withTimers { timers =>
       timers.startTimerAtFixedRate(SendMetrics(None), 1.minute)
 
       Behaviors.setup { actorCtx =>
-        def loop(ctx: Ctx, exchangeCtx: ExchangeCtx): Behavior[ActorEvent] =
+        def loop(ctx: T, exchangeCtx: ExchangeCtx): Behavior[ActorEvent] =
           Behaviors.receiveMessage { event =>
             val (ctx2, exchangeCtx2) = paperExchangeSideEffectHandler(behaviorDsl, ctx, exchangeCtx, metrics, actorCtx.log, false, event)
             loop(ctx2, exchangeCtx2)
           }
 
-        loop(InitCtx(Ledger()), ExchangeCtx())
+        loop(initCtx, ExchangeCtx())
       }
     }
   }
@@ -427,7 +427,7 @@ object Orchestrator {
   }
   case class ExchangeCtx(orders: Map[String, ExchangeOrder]=Map.empty, bid: Double=0, ask: Double=0, nextMetricsTs: Long=0, lastTs: Long=0)
 
-  @tailrec def paperExchangeSideEffectHandler(behaviorDsl: (Ctx, ActorEvent, org.slf4j.Logger) => (Ctx, Option[SideEffect]), ctx: Ctx, exchangeCtx: ExchangeCtx, metrics: Option[Metrics], log: org.slf4j.Logger, triggerMetrics: Boolean, events: ActorEvent*): (Ctx, ExchangeCtx) = {
+  @tailrec def paperExchangeSideEffectHandler[T <: LedgerAwareCtx](behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), ctx: T, exchangeCtx: ExchangeCtx, metrics: Option[Metrics], log: org.slf4j.Logger, triggerMetrics: Boolean, events: ActorEvent*): (T, ExchangeCtx) = {
     val ev +: evs = events
     val (eCtx, preEvents) = paperExchangePreHandler(exchangeCtx, ev, log, triggerMetrics)
     if (preEvents.nonEmpty) log.debug(s"paperExch:: adding preEvents: ${preEvents.mkString(", ")}")

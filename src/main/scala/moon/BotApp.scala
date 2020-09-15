@@ -42,11 +42,14 @@ object BotApp extends App {
   val backtestCandleFile     = conf.optString("bot.backtestCandleFile")
   val useSynthetics          = conf.optBoolean("bot.useSynthetics").getOrElse(false)
   val runType                = conf.optString("bot.runType").map(_.toLowerCase) match {
-    case Some("live")     => Live
-    case Some("dry")      => Dry
-    case Some("backtest") => Backtest
-    case Some(other)      => throw new Exception(s"Invalid bot.runType: $other")
-    case None             => Live
+    case Some("live")           => Live
+    case Some("live-yabol")     => LiveYabol
+    case Some("dry")            => Dry
+    case Some("dry-yabol")      => DryYabol
+    case Some("backtest")       => Backtest
+    case Some("backtest-yabol") => BacktestYabol
+    case Some(other)            => throw new Exception(s"Invalid bot.runType: $other")
+    case None                   => Live
   }
   assert(runType != RunType.Backtest || backtestEventDataDir.isDefined || backtestCandleFile.isDefined)
 
@@ -54,6 +57,11 @@ object BotApp extends App {
 
   val notLiveWarning = runType match {
     case Live => ""
+    case LiveYabol =>
+      """|
+         |                    -=-=- YABOL -=-=-
+         |
+         |""".stripMargin
     case Dry =>
       s"""
          |                            ██
@@ -61,6 +69,18 @@ object BotApp extends App {
          |                        ██      ██
          |                       ██  DRY   ██
          |                      ██          ██
+         |                     ██    RUN!    ██
+         |                    ██              ██
+         |                     ████████████████
+         |
+         |""".stripMargin
+    case DryYabol =>
+      s"""
+         |                            ██
+         |                          ██  ██
+         |                        ██      ██
+         |                       ██  YABOL ██
+         |                      ██   DRY    ██
          |                     ██    RUN!    ██
          |                    ██              ██
          |                     ████████████████
@@ -75,6 +95,18 @@ object BotApp extends App {
          |                      ██   TEST   ██
          |                     ██    RUN!    ██
          |                    ██              ██
+         |                     ████████████████
+         |
+         |""".stripMargin
+    case BacktestYabol =>
+      s"""
+         |                            ██
+         |                          ██  ██
+         |                        ██      ██
+         |                       ██  YABOL ██
+         |                      ██   BACK   ██
+         |                     ██    TEST    ██
+         |                    ██     RUN!     ██
          |                     ████████████████
          |
          |""".stripMargin
@@ -116,6 +148,7 @@ object BotApp extends App {
   if (runType == Backtest) {
     log.info(s"Instantiating Backtest on $backtestEventDataDir or $backtestCandleFile...")
     val sim = new ExchangeSim(
+      runType = runType,
       eventDataDir = backtestEventDataDir.orNull,
       candleFile = backtestCandleFile.orNull,
       strategy = strategy,
@@ -136,6 +169,9 @@ object BotApp extends App {
       stoplossMargin=stoplossMargin,
       openWithMarket=openWithMarket,
       useTrailingStoploss=useTrailingStoploss)
+    val yabolBehaviorDsl=YabolOrchestrator.asDsl(
+      strategy=strategy,
+      tradeQty=tradeQty)
 
     val orchestrator = if (runType == Live) {
       log.info(s"Instantiating Live Run...")
@@ -143,12 +179,28 @@ object BotApp extends App {
         restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
         metrics=Some(metrics),
         flushSessionOnRestart=flushSessionOnRestart,
-        behaviorDsl=behaviorDsl)
+        behaviorDsl=behaviorDsl,
+        initCtx=InitCtx(Ledger()))
+    } else if (runType == LiveYabol) {
+      log.info(s"Instantiating Live Yabol Run...")
+      Orchestrator.asLiveBehavior(
+        restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
+        metrics=Some(metrics),
+        flushSessionOnRestart=flushSessionOnRestart,
+        behaviorDsl=yabolBehaviorDsl,
+        initCtx=YabolIdleCtx(Ledger()))
     } else if (runType == Dry) {
       log.info(s"Instantiating Dry Run...")
       Orchestrator.asDryBehavior(
         metrics=Some(metrics),
-        behaviorDsl=behaviorDsl)
+        behaviorDsl=behaviorDsl,
+        initCtx=InitCtx(Ledger()))
+    } else if (runType == DryYabol) {
+      log.info(s"Instantiating Dry Yabol Run...")
+      Orchestrator.asDryBehavior(
+        metrics=Some(metrics),
+        behaviorDsl=yabolBehaviorDsl,
+        initCtx=YabolIdleCtx(Ledger()))
     } else
       ???
 

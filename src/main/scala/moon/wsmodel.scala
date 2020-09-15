@@ -44,6 +44,7 @@ case class FundingData(symbol: String, fundingInterval: String, fundingRate: Dou
 object FundingData { implicit val aReads: Reads[FundingData] = Json.reads[FundingData] }
 
 case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel {
+  def containsClOrdIDs(clOrdIDs: String*): Boolean = data.exists(o => o.clOrdID.exists(clOrdIDs.contains))
   def containsOrderIDs(orderIDs: String*): Boolean = data.exists(o => orderIDs.contains(o.orderID))
   def containsAmendedOrderIDs(orderIDs: String*): Boolean = data.exists(o => orderIDs.contains(o.orderID) && o.amended.contains(true))
 }
