@@ -30,8 +30,8 @@ sealed trait YabolCtx extends LedgerAwareCtx {
 
 case class YabolIdleCtx(ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
 case class YabolOpenPositionCtx(dir: Dir.Value, clOrdID: String, qty: Double, ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
-case class YabolWaitingCtx(dir: Dir.Value, qty: Double, ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
-case class YabolClosePositionCtx(dir: Dir.Value, clOrdID: String, ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
+case class YabolWaitingCtx(dir: Dir.Value, qty: Double, openPrice: Double, ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
+case class YabolClosePositionCtx(dir: Dir.Value, qty: Double, openPrice: Double, clOrdID: String, ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
 
 
 // External side effect, ie. communication with grafana/RestGateway

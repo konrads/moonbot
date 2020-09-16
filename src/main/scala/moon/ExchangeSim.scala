@@ -44,7 +44,8 @@ class ExchangeSim(
     } else if (runType == BacktestYabol) {
       val behaviorDsl = YabolOrchestrator.asDsl(
         strategy,
-        tradeQty)
+        tradeQty,
+        true)
       val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((YabolIdleCtx(Ledger()): YabolCtx, ExchangeCtx())) {
         case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, WsEvent(event))
       }

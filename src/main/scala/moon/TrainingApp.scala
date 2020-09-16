@@ -20,7 +20,7 @@ object TrainingApp extends App {
 
   // global params
   val backtestDataDir         = null: String  //"data/training"
-  val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/ETHUSD/20190101-20200825/10S.csv"
+  val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/ETHUSD/20190101-20200825/1M.csv"
 
   val minTradeCnt             = 6  // Note, roundtrip = 2 trades!
   val takeProfitMargins       = 20 to 30 by 5
@@ -159,14 +159,18 @@ object TrainingApp extends App {
       signalWindow     <- signalWindows
       trendWindow      <- trendWindows
       maType           <- maTypes
+      signalMaType     <- maTypes
+      trendMaType      <- maTypes
     } yield {
       val conf = ConfigFactory.parseString(
-        s"""|dataFreq         = 4h
+        s"""|dataFreq         = 1h
             |slowWindow       = $slowWindow
             |fastWindow       = $fastWindow
             |signalWindow     = $signalWindow
             |trendWindow      = $trendWindow
             |maType           = $maType
+            |signalMaType     = $signalMaType
+            |trendMaType      = $trendMaType
             |""".stripMargin)
       new MACDOverMAStrategy(conf)
     }

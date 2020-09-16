@@ -53,7 +53,7 @@ object talib {
   }
 
   // https://stackoverflow.com/questions/34427530/macd-function-returning-incorrect-values/34453997#34453997
-  def macd(xs: Seq[Double], slow: Int=26, fast: Int=12, signal: Int=9, maType: MA.Value=MA.EMA): Option[(Double /* macd */, Double /* signal */, Double /* histogram */)] = {  // note - ignoring signal (default = 9)
+  def macd(xs: Seq[Double], slow: Int=26, fast: Int=12, signal: Int=9, maType: MA.Value=MA.EMA, signalMaType: Option[MA.Value]=None): Option[(Double /* macd */, Double /* signal */, Double /* histogram */)] = {  // note - ignoring signal (default = 9)
     if (xs.size < (slow + signal) - 1)
       None
     else {
@@ -62,7 +62,7 @@ object talib {
       val fastMas = for(i <- 0 to xs2.size) yield ma(xs2.take(i), fast, maType)
       val macds = (fastMas zip slowMas).map { case (f, s) => f - s }
       val macds2 = macds.drop(slow - fast + 1)
-      val signal_ = ma(macds2, signal, maType)
+      val signal_ = ma(macds2, signal, signalMaType.getOrElse(maType))
       val histogram = macds.last - signal_
       Some((macds.last, signal_, histogram))
     }
