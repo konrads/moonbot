@@ -26,17 +26,17 @@ object YabolOrchestrator {
 
       // idle state
       case (YabolIdleCtx(ledger), WsEvent(data)) =>
-        if (log.isDebugEnabled) log.debug(s"idle: WsEvent: $data")
+        if (log.isDebugEnabled) log.debug(s"Idle: WsEvent: $data")
         val ledger2 = ledger.record(data)
         val strategyRes = strategy.strategize(ledger2)
-        if (log.isDebugEnabled) log.debug(s"idle: Sentiment is ${strategyRes.sentiment}")
+        if (log.isDebugEnabled) log.debug(s"Idle: Sentiment is ${strategyRes.sentiment}")
         if (strategyRes.sentiment == Bull) {
           val effect = OpenInitOrder(Buy, Market, uuid, tradeQty)
-          log.info(s"idle: starting afresh with $LongDir order: ${effect.clOrdID} @~ ${ledger.tradeRollups.latestPrice}...")
+          log.info(s"Idle: starting afresh with $LongDir order: ${effect.clOrdID} @~ ${ledger2.tradeRollups.latestPrice}...")
           (YabolOpenPositionCtx(dir = LongDir, ledger = ledger2, qty = tradeQty, clOrdID = effect.clOrdID), Some(effect))
         } else if (strategyRes.sentiment == Bear) {
           val effect = OpenInitOrder(Sell, Market, uuid, tradeQty)
-          log.info(s"idle: starting afresh with $ShortDir order: ${effect.clOrdID} @~ ${ledger.tradeRollups.latestPrice}...")
+          log.info(s"Idle: starting afresh with $ShortDir order: ${effect.clOrdID} @~ ${ledger2.tradeRollups.latestPrice}...")
           (YabolOpenPositionCtx(dir = ShortDir, ledger = ledger2, qty = tradeQty, clOrdID = effect.clOrdID), Some(effect))
         } else
           (ctx.withLedger(ledger2), None)
@@ -87,12 +87,12 @@ object YabolOrchestrator {
         }
         val strategyRes = strategy.strategize(ledger2)
         if (dir == LongDir && strategyRes.shouldExitLong) {
-          log.info(s"Closing $dir: $qty @ ${ledger2.tradeRollups.latestPrice}")
+          log.info(s".Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice}")
           val effect = OpenInitOrder(Sell, Market, uuid, qty)
           val ctx3 = YabolClosePositionCtx(dir, qty, openPrice, effect.clOrdID, ledger2)
           (ctx3, Some(effect))
         } else if (dir == ShortDir && strategyRes.shouldExitShort) {
-          log.info(s"Closing $dir: $qty @ ${ledger2.tradeRollups.latestPrice}")
+          log.info(s".Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice}")
           val effect = OpenInitOrder(Buy, Market, uuid, qty)
           val ctx3 = YabolClosePositionCtx(dir, qty, openPrice, effect.clOrdID, ledger2)
           (ctx3, Some(effect))

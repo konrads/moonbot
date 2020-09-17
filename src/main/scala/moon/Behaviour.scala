@@ -93,9 +93,9 @@ object Behaviour {
     if (log.isDebugEnabled) log.debug(s"paperExch:: handling event $ev, result ctx2: ${ctx2.getClass.getSimpleName}")
     if (effects.nonEmpty) log.debug(s"paperExch:: adding effects: ${effects.mkString(", ")}")
     val (eCtx2, postEvents) = effects.foldLeft((eCtx, Seq.empty[ActorEvent])) {
-      case ((eCtx, pEvs), eff) =>
-        val (eCtx2, evs) = paperExchangePostHandler(eCtx, eff, metrics, log)
-        (eCtx2, pEvs ++ evs)
+      case ((eCtx3, pEvs), eff) =>
+        val (eCtx4, evs) = paperExchangePostHandler(eCtx3, eff, metrics, log)
+        (eCtx4, pEvs ++ evs)
     }
     if (postEvents.nonEmpty) log.debug(s"paperExch:: adding postEvents: ${postEvents.mkString(", ")}")
     val events2 =  evs ++ preEvents ++ postEvents
@@ -120,10 +120,7 @@ object Behaviour {
     val (exchangeCtx2, tsEvents) = timestampMsOpt match {
       case Some(ts) =>
         if (triggerMetrics && ts > exchangeCtx.nextMetricsTs) {
-          val currMetricsTs = if (exchangeCtx.nextMetricsTs > 0)
-            exchangeCtx.nextMetricsTs
-          else
-            ts
+          val currMetricsTs = math.max(ts/60000 * 60000, exchangeCtx.nextMetricsTs)
           (exchangeCtx.copy(nextMetricsTs = currMetricsTs + 60000, lastTs = ts), Seq(SendMetrics(Some(currMetricsTs))))
         } else
           (exchangeCtx.copy(lastTs=ts), Nil)
@@ -135,6 +132,7 @@ object Behaviour {
     val (askOpt, bidOpt) = event match {
       case WsEvent(x:OrderBookSummary) => (Some(x.ask), Some(x.bid))
       case WsEvent(x:OrderBook)        => (Some(x.summary.ask), Some(x.summary.bid))
+      /* FIXME: ok for yabol, but will not work for moon, which expects bid != ask */ case WsEvent(x:Trade)            => (Some(x.data.head.price), Some(x.data.head.price))
       case _                           => (None, None)
     }
     // update trailing highs/lows

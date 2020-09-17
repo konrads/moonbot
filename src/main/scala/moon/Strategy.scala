@@ -18,7 +18,7 @@ case class StrategyResult(sentiment: Sentiment.Value, metrics: Map[String, Doubl
 trait Strategy {
   val log = Logger[Strategy]
   val config: Config
-  val MIN_EMA_WINDOW = 200  // from experiments, EMA is unlikely to change once window > 200
+  val MIN_EMA_WINDOW = 300  // from experiments, EMA is unlikely to change once window > 200
 
 // eliminating caching till I resolve how to pass on the latest ledger
 //  var cacheKey: Any = _
@@ -72,7 +72,7 @@ class BBandsStrategy(val config: Config) extends Strategy {
     val (sentiment, bbandsScore, upper, middle, lower) = if (prices.size == window)
       bbands(prices, devUp = devUp, devDown = devDown) match {
         case Some((upper, middle, lower)) => // make sure we have a full window, otherwise go neutral
-          val currPrice = (ledger.askPrice + ledger.bidPrice) / 2
+          val currPrice = ledger.tradeRollups.latestPrice
           val score: Double = if (currPrice > upper)
             currPrice - upper
           else if (currPrice < lower)
@@ -176,26 +176,25 @@ class MACDOverMAStrategy(val config: Config) extends Strategy {
   val signalWindow = config.optInt("signalWindow").getOrElse(3*9)
   val trendWindow = config.optInt("trendWindow").getOrElse(290)
   val dataFreq = config.optString("dataFreq").map(DataFreq.withName).getOrElse(`1h`)
-  val minUpper = config.optDouble("minUpper").getOrElse(0.95)
-  val minLower = config.optDouble("minLower").getOrElse(-0.95)
+  val minUpper = config.optDouble("minUpper").getOrElse(0.99)
+  val minLower = config.optDouble("minLower").getOrElse(-0.99)
   val maType = config.optString("maType").map(MA.withName).getOrElse(SMA)
   val signalMaType = config.optString("signalMaType").map(MA.withName).getOrElse(SMA)
   val trendMaType = config.optString("trendMaType").map(MA.withName).getOrElse(SMA)
   val capFun = capProportionalExtremes()
   val maxWindow = math.max(trendWindow, slowWindow + signalWindow) + 2
   assert(fastWindow < slowWindow && slowWindow < trendWindow)
-  log.info(s"Strategy ${this.getClass.getSimpleName}: slowWindow: $slowWindow, fastWindow: $fastWindow, signalWindow: $signalWindow, dataFreq: $dataFreq, minUpper: $minUpper, minLower: $minLower, trendWindow: $trendWindow, maType: $maType")
+  log.info(s"Strategy ${this.getClass.getSimpleName}: slowWindow: $slowWindow, fastWindow: $fastWindow, signalWindow: $signalWindow, dataFreq: $dataFreq, minUpper: $minUpper, minLower: $minLower, trendWindow: $trendWindow, maType: $maType, signalMaType: $signalMaType, trendMaType: $trendMaType")
   override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
-    val data = ledger.tradeRollups.forBucket(dataFreq)
-    val prices = data.close.takeRight(maxWindow)
+    val prices = ledger.tradeRollups.forBucket(dataFreq).close.takeRight(maxWindow)
     val trendMa = ma(prices, trendWindow, trendMaType)
     val priceMaDelta = prices.last - trendMa
-    val (sentiment, macdVal, macdSignal, macdHistogram, macdCapScore) = macd(prices, slowWindow, fastWindow, signalWindow, maType) match {
+    val (sentiment, macdVal, macdSignal, macdHistogram, macdCapScore) = macd(prices, slowWindow, fastWindow, signalWindow, maType, Some(signalMaType)) match {
       case Some((macd, signal, histogram)) =>
         val capScore = capFun(histogram)
-        val sentiment = if (prices.length >= maxWindow && capScore > minUpper && priceMaDelta > 0)
+        val sentiment = if (prices.length >= maxWindow && capScore >= minUpper && priceMaDelta > 0)
           Bull
-        else if (prices.length >= maxWindow && capScore < minLower && priceMaDelta < 0)
+        else if (prices.length >= maxWindow && capScore <= minLower && priceMaDelta < 0)
           Bear
         else
           Neutral
@@ -259,7 +258,7 @@ class MAStrategy(val config: Config) extends Strategy {
   override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
     val prices = ledger.tradeRollups.forBucket(dataFreq).vwap.takeRight(window+1)
     val currMa = ma(prices, window, maType)
-    val currPrice = (ledger.askPrice + ledger.bidPrice) / 2
+    val currPrice = ledger.tradeRollups.latestPrice
     val delta = currPrice - currMa
     val score = capFun(delta)
     val sentiment = if (score > upper && delta > upperDelta)

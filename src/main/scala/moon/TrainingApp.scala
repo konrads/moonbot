@@ -20,13 +20,14 @@ object TrainingApp extends App {
 
   // global params
   val backtestDataDir         = null: String  //"data/training"
-  val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/ETHUSD/20190101-20200825/1M.csv"
+  val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/ETHUSD/20190101-20200825/1H.csv"
+  // val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/ETHUSD/20200101-20200825/1H.csv"
 
   val minTradeCnt             = 6  // Note, roundtrip = 2 trades!
-  val takeProfitMargins       = 20 to 30 by 5
-  val stoplossMargins         = 10 to 20 by 5
+  val takeProfitMargins       = 20 to 20 by 5
+  val stoplossMargins         = 10 to 10 by 5
   val openWithMarkets         = Seq(true)
-  val useTrailingStoplosses   = Seq(false, true)
+  val useTrailingStoplosses   = Seq(true)
   // rsi
   val rsiWindows              = 10 to 100 by 5
   val rsiLower                = 50 to 65 by 5
@@ -37,11 +38,13 @@ object TrainingApp extends App {
   val indecreasingMinAbsSlope = Seq(1.5, 1.6, 1.7)
   val indecreasingMaxAbsSlope = Seq(3.8, 4.0)
   // macd
-  val slowWindows             = 23 to 25 by 1        // typically 26
-  val fastWindows             = 10 to 13 by 1        // typically 12
-  val signalWindows           = 9 to 9 by 1          // typically 9
-  val trendWindows            = 200 to 200 by 100    // typically 200
-  val maTypes                 = Seq(SMA, EMA)        // typically SMA
+  val slowWindows             = 24 to 24 by 2        // typically 26
+  val fastWindows             = 14 to 14 by 1        // typically 12
+  val signalWindows           = 7 to 7 by 1          // typically 9
+  val trendWindows            = 85 to 85 by 5    // typically 200
+  val maTypes                 = Seq(SMA)        // typically SMA
+  val signalMaTypes           = Seq(EMA)        // typically SMA
+  val trendMaTypes            = Seq(EMA)        // typically SMA
 
   // bbands
   val bbandsWindows           = 6 to 10 by 1
@@ -49,6 +52,7 @@ object TrainingApp extends App {
   val bbandsDevUps            = Seq(2.3, 2.4, 2.5)
 
   val runType                 = BacktestYabol
+  val useSynthetics           = false
 
 
   def bruteForceRun(desc: String, tradeQty: Int=100, strategies: Iterator[Strategy]): (Double, Strategy) = {
@@ -74,10 +78,10 @@ object TrainingApp extends App {
         metrics = None,
         openWithMarket = openWithMarket,
         useTrailingStoploss = useTrailingStoploss,
-        useSynthetics = backtestCandleFile != null)
+        useSynthetics = useSynthetics)
       val (ctx, eCtx) = sim.run()
       val pandl = ctx.ledger.ledgerMetrics.runningPandl
-      val price = (ctx.ledger.bidPrice + ctx.ledger.askPrice) / 2
+      val price = ctx.ledger.tradeRollups.latestPrice
       val pandlUSD = pandl * price
       val trades = ctx.ledger.myTrades
       val tradesCnt = ctx.ledger.myTrades.size
@@ -93,7 +97,7 @@ object TrainingApp extends App {
         log.warn(f"$desc: running pandl: $pandl / $pandlUSD (${limitTrades.size} / $tradesCnt), strategy conf: ${strategy.config}, ${params.map{case (k,v) => s"$k: $v"}.mkString(", ")}$RESET")
     }
 
-    val winningPrice = (winningCtx.ledger.bidPrice + winningCtx.ledger.askPrice) / 2
+    val winningPrice = winningCtx.ledger.tradeRollups.latestPrice
     val winningPandlUSD = winningPandl * winningPrice
     val winningTrades = winningCtx.ledger.myOrders.filter(_.ordStatus == Filled)
     val winningLimitTrades = winningTrades.filter(_.ordType == Limit)
@@ -159,8 +163,8 @@ object TrainingApp extends App {
       signalWindow     <- signalWindows
       trendWindow      <- trendWindows
       maType           <- maTypes
-      signalMaType     <- maTypes
-      trendMaType      <- maTypes
+      signalMaType     <- signalMaTypes
+      trendMaType      <- trendMaTypes
     } yield {
       val conf = ConfigFactory.parseString(
         s"""|dataFreq         = 1h

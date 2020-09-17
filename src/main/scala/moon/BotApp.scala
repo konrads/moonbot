@@ -162,7 +162,7 @@ object BotApp extends App {
       openWithMarket = openWithMarket,
       useSynthetics = useSynthetics)
     val (finalCtx, finalExchangeCtx) = sim.run()
-    log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl}")
+    log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} over ${finalCtx.ledger.myTrades.size} trades")
   } else {
     implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
     val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
