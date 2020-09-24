@@ -32,6 +32,7 @@ case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: 
     if (gauges2.nonEmpty) {
       val now = nowMs.getOrElse(System.currentTimeMillis) / 1000
       // allow for connectivity issues
+      /* FIXME: attempt to re-initialize the socket to avoid data loss */ // if (graphite != null) { graphite.close(); graphite = null }
       if (graphite == null)
         graphite = try {
           val g = new Graphite(new InetSocketAddress(host, port))
@@ -46,6 +47,8 @@ case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: 
       else {
         try {
           for { (k, v) <- gauges2 } graphite.send(s"$prefix.$k", v.toString, now)
+          if (graphite.getFailures > 0)
+            log.warn(s"Failed to send to graphite: ${graphite.getFailures}")
           log.debug(s"Metrics:\n${gauges2.map { case (k, v) => s"- $prefix.$k $v $now" }.mkString("\n")}")
         }
         catch {

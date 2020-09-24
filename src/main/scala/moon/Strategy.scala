@@ -8,12 +8,7 @@ import moon.talib.{macd, _}
 import moon.talib.MA._
 
 
-case class StrategyResult(sentiment: Sentiment.Value, metrics: Map[String, Double], exitLong: Option[Boolean]=None, exitShort: Option[Boolean]=None, longTrailingStoploss: Option[Double]=None, shortTrailingStoploss: Option[Double]=None) {
-  lazy val shouldEnterLong  = sentiment == Bull
-  lazy val shouldEnterShort = sentiment == Bear
-  lazy val shouldExitLong   = exitLong.getOrElse(sentiment != Bull)
-  lazy val shouldExitShort  = exitShort.getOrElse(sentiment != Bull)
-}
+case class StrategyResult(sentiment: Sentiment.Value, metrics: Map[String, Double], exitLong: Option[Boolean]=None, exitShort: Option[Boolean]=None, longTrailingStoploss: Option[Double]=None, shortTrailingStoploss: Option[Double]=None)
 
 trait Strategy {
   val log = Logger[Strategy]
@@ -40,6 +35,7 @@ object Strategy {
     case "rsi"           => new RSIStrategy(config)
     case "macd"          => new MACDStrategy(config)
     case "macdoverma"    => new MACDOverMAStrategy(config)
+    case "macdoverma2"   => new MACDOverMAStrategy2(config)
     case "ma"            => new MAStrategy(config)
     case "alternating"   => new AlternatingStrategy(config)  // test strategy
     case "weighted"      => new WeightedStrategy(config, parentConfig)
@@ -185,16 +181,16 @@ class MACDOverMAStrategy(val config: Config) extends Strategy {
   val maxWindow = math.max(trendWindow, slowWindow + signalWindow) + 2
   assert(fastWindow < slowWindow && slowWindow < trendWindow)
   log.info(s"Strategy ${this.getClass.getSimpleName}: slowWindow: $slowWindow, fastWindow: $fastWindow, signalWindow: $signalWindow, dataFreq: $dataFreq, minUpper: $minUpper, minLower: $minLower, trendWindow: $trendWindow, maType: $maType, signalMaType: $signalMaType, trendMaType: $trendMaType")
+  var prevSentiment = Neutral
   override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
     val prices = ledger.tradeRollups.forBucket(dataFreq).close.takeRight(maxWindow)
     val trendMa = ma(prices, trendWindow, trendMaType)
-    val priceMaDelta = prices.last - trendMa
     val (sentiment, macdVal, macdSignal, macdHistogram, macdCapScore) = macd(prices, slowWindow, fastWindow, signalWindow, maType, Some(signalMaType)) match {
       case Some((macd, signal, histogram)) =>
         val capScore = capFun(histogram)
-        val sentiment = if (prices.length >= maxWindow && capScore >= minUpper && priceMaDelta > 0)
+        val sentiment = if ((prices.length >= maxWindow && capScore >= minUpper && prices.last > trendMa) || (prevSentiment == Bull && macd > signal))
           Bull
-        else if (prices.length >= maxWindow && capScore <= minLower && priceMaDelta < 0)
+        else if ((prices.length >= maxWindow && capScore <= minLower && prices.last < trendMa) || (prevSentiment == Bear && macd < signal))
           Bear
         else
           Neutral
@@ -202,14 +198,76 @@ class MACDOverMAStrategy(val config: Config) extends Strategy {
       case _ =>
         (Neutral, None, None, None, None)
     }
-    val exitLong  = for { m <- macdVal; s <- macdSignal } yield m < s
-    val exitShort = for { m <- macdVal; s <- macdSignal } yield m > s
+    prevSentiment = sentiment
     StrategyResult(
       sentiment = sentiment,
       // note: keeping macd's sentiment as a separate metric to show indicator specific sentiment
-      metrics   = (Vector[(String, Double)]("data.macdoverma.sentiment" -> sentiment.id, "data.macdoverma.priceMaDelta" -> priceMaDelta) ++ macdVal.map("data.macdoverma.macd" -> _).toVector ++ macdSignal.map("data.macdoverma.signal" -> _).toVector ++ macdHistogram.map("data.macdoverma.histogram" -> _).toVector ++ macdCapScore.map("data.macdoverma.cap" -> _).toVector).toMap,
-      exitLong  = exitLong,
-      exitShort = exitShort
+      metrics = (Vector[(String, Double)]("data.macdoverma.sentiment" -> sentiment.id, "data.macdoverma.trendMa" -> trendMa) ++ macdVal.map("data.macdoverma.macd" -> _).toVector ++ macdSignal.map("data.macdoverma.signal" -> _).toVector ++ macdHistogram.map("data.macdoverma.histogram" -> _).toVector ++ macdCapScore.map("data.macdoverma.cap" -> _).toVector).toMap)
+  }
+}
+
+
+class MACDOverMAStrategy2(val config: Config) extends Strategy {
+  // duplicating pinescript:
+  // macd_bull = crossover(macd, signal)
+  // macd_bear = crossunder(macd, signal)
+  // bool is_long = false
+  // is_long := macd_bull and src > trend_ma ? true : macd_bear ? false : is_long[1]
+  // bool is_short = false
+  // is_short := macd_bear and src < trend_ma ? true : macd_bull ? false : is_short[1]
+
+  val slowWindow = config.optInt("slowWindow").getOrElse(3*26)
+  val fastWindow = config.optInt("fastWindow").getOrElse(3*12)
+  val signalWindow = config.optInt("signalWindow").getOrElse(3*9)
+  val trendWindow = config.optInt("trendWindow").getOrElse(290)
+  val dataFreq = config.optString("dataFreq").map(DataFreq.withName).getOrElse(`1h`)
+  val minUpper = config.optDouble("minUpper").getOrElse(0.99)
+  val minLower = config.optDouble("minLower").getOrElse(-0.99)
+  val maType = config.optString("maType").map(MA.withName).getOrElse(SMA)
+  val signalMaType = config.optString("signalMaType").map(MA.withName).getOrElse(SMA)
+  val trendMaType = config.optString("trendMaType").map(MA.withName).getOrElse(SMA)
+
+  var prevMacdSignalDelta: Option[Double] = None
+  var prevIsLong = false
+  var prevIsShort = false
+
+  //val capFun = capProportionalExtremes()
+  val maxWindow = math.max(trendWindow, slowWindow + signalWindow) + 2
+  assert(fastWindow < slowWindow && slowWindow < trendWindow)
+  log.info(s"Strategy ${this.getClass.getSimpleName}: slowWindow: $slowWindow, fastWindow: $fastWindow, signalWindow: $signalWindow, dataFreq: $dataFreq, minUpper: $minUpper, minLower: $minLower, trendWindow: $trendWindow, maType: $maType, signalMaType: $signalMaType, trendMaType: $trendMaType")
+  override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
+    val prices = ledger.tradeRollups.forBucket(dataFreq).close.takeRight(maxWindow)
+    val trendMa = ma(prices, trendWindow, trendMaType)
+    val priceMaDelta = prices.last - trendMa
+    val (sentiment, macdVal, macdSignal, macdHistogram, isLong, isShort) = macd(prices, slowWindow, fastWindow, signalWindow, maType, Some(signalMaType)) match {
+      case Some((macd, signal, histogram)) =>
+        val macdSignalDelta = macd - signal
+        val (crossover, crossunder) = prevMacdSignalDelta match {
+          case Some(prev) if prev <= 0 && macdSignalDelta > 0 => (true, false)
+          case Some(prev) if prev >= 0 && macdSignalDelta < 0 => (false, true)
+          case _                                              => (false, false)
+        }
+        prevMacdSignalDelta = Some(macdSignalDelta)
+        val isLong = (crossover && priceMaDelta > 0) || (if (crossunder) false else prevIsLong)
+        prevIsLong = isLong
+        val isShort = (crossunder && priceMaDelta < 0) || (if (crossover) false else prevIsShort)
+        prevIsShort = isShort
+        val sentiment = if (prices.length >= maxWindow && isLong)
+          Bull
+        else if (prices.length >= maxWindow && isShort)
+          Bear
+        else
+          Neutral
+        (sentiment, Some(macd), Some(signal), Some(histogram), Some(isLong), Some(isShort))
+      case _ =>
+        (Neutral, None, None, None, None, None)
+    }
+    StrategyResult(
+      sentiment = sentiment,
+      // note: keeping macd's sentiment as a separate metric to show indicator specific sentiment
+      metrics   = (Vector[(String, Double)]("data.macdoverma.sentiment" -> sentiment.id, "data.macdoverma.priceMaDelta" -> priceMaDelta) ++ macdVal.map("data.macdoverma.macd" -> _).toVector ++ macdSignal.map("data.macdoverma.signal" -> _).toVector ++ macdHistogram.map("data.macdoverma.histogram" -> _).toVector).toMap,
+      exitLong  = isLong.map(!_),
+      exitShort = isShort.map(!_)
     )
   }
 }

@@ -10,13 +10,13 @@ import scala.util.{Failure, Success}
 
 
 object YabolOrchestrator {
-  def asDsl(strategy: Strategy, tradeQty: Int, consoleDriven: Boolean = false): (YabolCtx, ActorEvent, org.slf4j.Logger) => (YabolCtx, Option[SideEffect]) = {
+  def asDsl(strategy: Strategy, tradeQty: Int, takerFee: Double = .00075, consoleDriven: Boolean = false): (YabolCtx, ActorEvent, org.slf4j.Logger) => (YabolCtx, Option[SideEffect]) = {
 
     def tick(ctx: YabolCtx, event: ActorEvent, log: org.slf4j.Logger): (YabolCtx, Option[SideEffect]) = (ctx, event) match {
       // Common states/events
       case (_, SendMetrics(nowMs)) =>
         if (ctx.ledger.isMinimallyFilled) {
-          val ledger2 = ctx.ledger.withMetrics(strategy = strategy)
+          val ledger2 = ctx.ledger.withMetrics(strategy = strategy, takerFee = takerFee)
           val effect = PublishMetrics(ledger2.ledgerMetrics.metrics, nowMs)
           (ctx.withLedger(ledger2), Some(effect))
         } else
@@ -55,16 +55,16 @@ object YabolOrchestrator {
           val order = ledger2.ledgerOrdersByClOrdID(clOrdID)
           order.ordStatus match {
             case Filled =>
-              log.info(s"Open $dir: filled orderID: ${order.fullOrdID} @ ${order.price}")
+              log.info(s"Open $dir: filled orderID: ${order.fullOrdID} @ ${order.price} :: ${order.timestamp}")
               // wait for strategy to signal exit
               val strategyRes = strategy.strategize(ledger2)
-              if (dir == LongDir && strategyRes.shouldExitLong) {
-                log.info(s"Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice}")
+              if (dir == LongDir && strategyRes.sentiment != Bull) {
+                log.info(s"Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice} :: ${order.timestamp}")
                 val effect = OpenInitOrder(Sell, Market, uuid, qty)
                 val ctx3 = YabolClosePositionCtx(dir, qty, order.price, effect.clOrdID, ledger2)
                 (ctx3, Some(effect))
-              } else if (dir == ShortDir && strategyRes.shouldExitShort) {
-                log.info(s"Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice}")
+              } else if (dir == ShortDir && strategyRes.sentiment != Bear) {
+                log.info(s"Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice} :: ${order.timestamp}")
                 val effect = OpenInitOrder(Buy, Market, uuid, qty)
                 val ctx3 = YabolClosePositionCtx(dir, qty, order.price, effect.clOrdID, ledger2)
                 (ctx3, Some(effect))
@@ -86,12 +86,12 @@ object YabolOrchestrator {
           case _                     => ???
         }
         val strategyRes = strategy.strategize(ledger2)
-        if (dir == LongDir && strategyRes.shouldExitLong) {
+        if (dir == LongDir && strategyRes.sentiment != Bull) {
           log.info(s".Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice}")
           val effect = OpenInitOrder(Sell, Market, uuid, qty)
           val ctx3 = YabolClosePositionCtx(dir, qty, openPrice, effect.clOrdID, ledger2)
           (ctx3, Some(effect))
-        } else if (dir == ShortDir && strategyRes.shouldExitShort) {
+        } else if (dir == ShortDir && strategyRes.sentiment != Bear) {
           log.info(s".Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice}")
           val effect = OpenInitOrder(Buy, Market, uuid, qty)
           val ctx3 = YabolClosePositionCtx(dir, qty, openPrice, effect.clOrdID, ledger2)
@@ -115,9 +115,9 @@ object YabolOrchestrator {
             case Filled =>
               val priceDelta = if (dir == LongDir) order.price - openPrice else openPrice - order.price
               if ((dir == LongDir && openPrice < order.price) || (dir == ShortDir && openPrice > order.price))
-                log.info(pretty(s"Close $dir: ✔✔✔ filled with price delta: $openPrice => ${order.price} ... $priceDelta ✔✔✔", Bull, consoleDriven))
+                log.info(pretty(s"Close $dir: ✔✔✔ filled with price delta: $openPrice => ${order.price} ... $priceDelta ✔✔✔ :: ${order.timestamp}", Bull, consoleDriven))
               else
-                log.info(pretty(s"Close $dir: ✗✗✗ filled with price delta: $openPrice => ${order.price} ... $priceDelta ✗✗✗", Bear, consoleDriven))
+                log.info(pretty(s"Close $dir: ✗✗✗ filled with price delta: $openPrice => ${order.price} ... $priceDelta ✗✗✗ :: ${order.timestamp}", Bear, consoleDriven))
               (YabolIdleCtx(ledger2), None)
             case _ =>
               if (log.isDebugEnabled) log.debug(s"Open $dir: catchall: ${order.ordStatus}, order: $order")

@@ -17,6 +17,7 @@ class ExchangeSim(
   metrics: Option[Metrics],
   strategy: Strategy,
   tradeQty: Int,
+  takerFee: Double,
   takeProfitMargin: Double, stoplossMargin: Double,
   openWithMarket: Boolean = false,
   useTrailingStoploss: Boolean = false,
@@ -45,6 +46,7 @@ class ExchangeSim(
       val behaviorDsl = YabolOrchestrator.asDsl(
         strategy,
         tradeQty,
+        takerFee,
         true)
       val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((YabolIdleCtx(Ledger()): YabolCtx, ExchangeCtx())) {
         case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, WsEvent(event))

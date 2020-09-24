@@ -41,6 +41,9 @@ object BotApp extends App {
   val backtestEventDataDir   = conf.optString("bot.backtestEventDataDir")
   val backtestCandleFile     = conf.optString("bot.backtestCandleFile")
   val useSynthetics          = conf.optBoolean("bot.useSynthetics").getOrElse(false)
+  val takerFee               = conf.optDouble("bot.takerFee").getOrElse(.00075)
+
+
   val runType                = conf.optString("bot.runType").map(_.toLowerCase) match {
     case Some("live-moon")      => LiveMoon
     case Some("live-yabol")     => LiveYabol
@@ -136,6 +139,7 @@ object BotApp extends App {
       |• graphitePort:         $graphitePort
       |• namespace:            $namespace
       |• tradeQty:             $tradeQty
+      |• takerFee:             $takerFee
       |• restSyncTimeoutMs:    $restSyncTimeoutMs
       |• takeProfitMargin:     $takeProfitMargin
       |• stoplossMargin:       $stoplossMargin
@@ -157,12 +161,13 @@ object BotApp extends App {
       candleFile = backtestCandleFile.orNull,
       strategy = strategy,
       tradeQty = tradeQty,
+      takerFee = takerFee,
       takeProfitMargin = takeProfitMargin, stoplossMargin = stoplossMargin,
       metrics = Some(metrics),
       openWithMarket = openWithMarket,
       useSynthetics = useSynthetics)
     val (finalCtx, finalExchangeCtx) = sim.run()
-    log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} over ${finalCtx.ledger.myTrades.size} trades")
+    log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} ($$${finalCtx.ledger.ledgerMetrics.runningPandl * finalCtx.ledger.tradeRollups.latestPrice}) over ${finalCtx.ledger.myTrades.size} trades")
   } else {
     implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
     val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
