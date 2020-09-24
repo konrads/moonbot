@@ -3,3 +3,5 @@ COPY *.png *.jpg /opt/grafana/public/img/
 COPY *.css /opt/grafana/public/build/
 COPY *.ttf /opt/grafana/public/fonts/
 COPY storage-schemas.conf /opt/graphite/conf/
+COPY carbon.conf /etc/graphite-statsd/conf/opt/graphite/conf/
+COPY carbon.conf /opt/graphite/conf/
