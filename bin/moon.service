@@ -1,0 +1,23 @@
+# Save as e.g. /etc/systemd/system/moon.service
+# sudo systemctl start moon
+# systemctl enable docker
+# systemctl enable moon
+
+[Unit]
+Description=Moon
+Requires=docker.service
+After=docker.service
+
+[Service]
+Restart=always
+User=ubuntu
+Group=docker
+# Shutdown container (if running) when unit is stopped
+ExecStartPre=/usr/bin/docker-compose -f /home/ubuntu/src/moon/bin/docker/docker-compose.yaml down -v
+# Start container when unit is started
+ExecStart=/usr/bin/docker-compose -f /home/ubuntu/src/moon/bin/docker/docker-compose.yaml up
+# Stop container when unit is stopped
+ExecStop=/usr/bin/docker-compose -f /home/ubuntu/src/moon/bin/docker/docker-compose.yaml down -v
+
+[Install]
+WantedBy=multi-user.target
