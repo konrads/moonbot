@@ -39,7 +39,9 @@ case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: 
           g.connect()
           g
         } catch {
-          case _: IOException => null
+          case exc: IOException =>
+            log.warn(s"Failed to connect to graphite at $host:$port due to ${exc.getClass.getSimpleName}: ${exc.getMessage}")
+            null
         }
 
       if (graphite == null)
@@ -52,8 +54,9 @@ case class Metrics(host: String, port: Int=2003, prefix: String, addJvmMetrics: 
           log.debug(s"Metrics:\n${gauges2.map { case (k, v) => s"- $prefix.$k $v $now" }.mkString("\n")}")
         }
         catch {
-          case _:IOException =>
-            log.warn(s"**UNSENT** metrics:\n${gauges2.map { case (k, v) => s"- $prefix.$k $v $now" }.mkString("\n")}")
+          case exc:IOException =>
+            log.warn(s"**UNSENT** metrics:\n${gauges2.map { case (k, v) => s"- $prefix.$k $v $now" }.mkString("\n")} due to ${exc.getClass.getSimpleName}: ${exc.getMessage}")
+            graphite = null
         }
       }
     }

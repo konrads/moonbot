@@ -220,6 +220,8 @@ object BotApp extends App {
     val orchestratorActor = ActorSystem(
       Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
       "orchestrator-actor")
+    orchestratorActor.scheduler.scheduleAtFixedRate(tillEOM, 1.minute)(() => orchestratorActor ! On1m(None))
+    orchestratorActor.scheduler.scheduleAtFixedRate(tillEOH, 1.hour)  (() => orchestratorActor ! On1h(None))
     // feed the WS events from actual exchange
     class CachedConsumer {
       var cache: OrderBookSummary = null

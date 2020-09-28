@@ -1,5 +1,6 @@
 
 import java.io.{File, PrintWriter}
+import java.util.concurrent.TimeUnit
 
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import javax.crypto.Mac
@@ -10,6 +11,7 @@ import org.joda.time.{DateTime, DateTimeZone}
 import play.api.libs.json.{Json, Reads}
 
 import scala.Console.{GREEN, RED, RESET}
+import scala.concurrent.duration.FiniteDuration
 
 
 package object moon {
@@ -194,6 +196,12 @@ package object moon {
       head
     }
   }
+
+  def tillEOM: FiniteDuration =
+    FiniteDuration(60000 - System.currentTimeMillis % 60000, TimeUnit.MILLISECONDS)
+
+  def tillEOH: FiniteDuration =
+    FiniteDuration(3600000 - System.currentTimeMillis % 3600000, TimeUnit.MILLISECONDS)
 
   def pretty(s: => String, sentiment: Sentiment.Value=Sentiment.Neutral, shouldColour: Boolean=false): String = (sentiment, shouldColour) match {
     case (_, false) | (Sentiment.Neutral, _) => s

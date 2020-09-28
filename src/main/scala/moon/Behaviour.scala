@@ -16,8 +16,9 @@ import scala.util.Success
 object Behaviour {
   def asLiveBehavior[T <: LedgerAwareCtx](restGateway: IRestGateway, metrics: Option[Metrics]=None, flushSessionOnRestart: Boolean=true, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
     Behaviors.withTimers { timers =>
-      timers.startTimerAtFixedRate(On1m(None), 1.minute)
-      timers.startTimerAtFixedRate(On1h(None), 1.hour)
+      // NOTE: setting up timers externally, to ensure delay starts from start of minute/hour
+      // timers.startTimerAtFixedRate(On1m(None), 1.minute)
+      // timers.startTimerAtFixedRate(On1h(None), 1.hour)
 
       Behaviors.setup { actorCtx =>
         if (flushSessionOnRestart) {
@@ -66,8 +67,9 @@ object Behaviour {
 
   def asDryBehavior[T <: LedgerAwareCtx](metrics: Option[Metrics]=None, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T, askBidFromTrades: Boolean): Behavior[ActorEvent] = {
     Behaviors.withTimers { timers =>
-      timers.startTimerAtFixedRate(On1m(None), 1.minute)
-      timers.startTimerAtFixedRate(On1h(None), 1.hour)
+      // NOTE: setting up timers externally, to ensure delay starts from start of minute/hour
+      // timers.startTimerAtFixedRate(On1m(None), 1.minute)
+      // timers.startTimerAtFixedRate(On1h(None), 1.hour)
 
       Behaviors.setup { actorCtx =>
         def loop(ctx: T, exchangeCtx: ExchangeCtx): Behavior[ActorEvent] =

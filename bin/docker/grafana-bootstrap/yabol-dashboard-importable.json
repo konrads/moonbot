@@ -592,7 +592,7 @@
           {
             "hide": true,
             "refId": "H",
-            "target": "aliasByMetric(moon.xbtusd.data.macdoverma.priceMaDelta)",
+            "target": "aliasByMetric(moon.__pair__.data.macdoverma.priceMaDelta)",
             "textEditor": true
           }
         ],
@@ -1071,7 +1071,7 @@
       "list": []
     },
     "time": {
-      "from": "now-15M",
+      "from": "now-30d",
       "to": "now"
     },
     "timepicker": {
@@ -1101,7 +1101,7 @@
     },
     "timezone": "browser",
     "title": "yabol.__pair__",
-    "uid": "yabol",
+    "uid": "yabol___pair__",
     "version": 1
   }
 }
