@@ -9,6 +9,8 @@ object Rollups {
     Rollups(Map(
       `10s` -> RollupBuckets(window = 10*1000, maxBuckets = 60*6*(maxHours+1)),
       `1m`  -> RollupBuckets(window = 60*1000, maxBuckets = 60*(maxHours+1)),
+      `15m` -> RollupBuckets(window = 15*60*1000, maxBuckets = 4*(maxHours+1)),
+      `30m` -> RollupBuckets(window = 30*60*1000, maxBuckets = 2*(maxHours+1)),
       `1h`  -> RollupBuckets(window = 60*60*1000, maxBuckets = maxHours),
       `4h`  -> RollupBuckets(window = 4*60*60*1000, maxBuckets = maxHours/4),
     ),

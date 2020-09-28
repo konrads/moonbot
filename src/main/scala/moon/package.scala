@@ -60,7 +60,7 @@ package object moon {
 
   object DataFreq extends Enumeration {
     type DataFreq = Value
-    val `10s`, `1m`, `1h`, `4h` = Value
+    val `10s`, `1m`, `15m`, `30m`, `1h`, `4h` = Value
   }
 
   // adding "value" as per:

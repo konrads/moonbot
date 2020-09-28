@@ -1,5 +1,6 @@
 package moon
 
+import moon.DataFreq._
 import moon.OrderStatus._
 import moon.OrderType._
 import moon.RunType._
@@ -20,9 +21,9 @@ object TrainingApp extends App {
 
   // global params
   val backtestDataDir         = null: String  //"data/training"
-  val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/XBTUSD/20190101-20200825/1H.csv"
+  // val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/XBTUSD/20190101-20200825/1H.csv"
   // val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/XBTUSD/20200625-20200825/1H.csv"
-  // val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/ETHUSD/20190101-20200825/1M.csv"
+  val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/ETHUSD/20190101-20200825/15M.csv"
   // val backtestCandleFile      = "/Users/konrad/MyDocuments/bitmex/stage/rollup/ETHUSD/20200101-20200825/1H.csv"
 
   val takerFees               = Seq(.001)
@@ -42,10 +43,18 @@ object TrainingApp extends App {
   val indecreasingMinAbsSlope = Seq(1.5, 1.6, 1.7)
   val indecreasingMaxAbsSlope = Seq(3.8, 4.0)
   // macd
-  val slowWindows             = 28 to 28 by 1        // typically 26
-  val fastWindows             = 16 to 16 by 1        // typically 12
-  val signalWindows           = 5 to 5 by 1          // typically 9
-  val trendWindows            = 110 to 110 by 1    // typically 200
+  val dataFreqs               = Seq(`1h`)
+  val slowWindows             = 26 to 26 by 1        // typically 26
+  val fastWindows             = 14 to 14 by 1        // typically 12
+  val signalWindows           = 6 to 6 by 1          // typically 9
+  val trendWindows            = 145 to 145 by 1    // typically 200
+  val minUppers               = Seq(.5, .55, .6)
+  val minLowers               = Seq(-.9)
+//  val dataFreqs               = Seq(`30m`)
+//  val slowWindows             = 48 to 56 by 2        // typically 26
+//  val fastWindows             = 24 to 32 by 2        // typically 12
+//  val signalWindows           = 8 to 16 by 2          // typically 9
+//  val trendWindows            = 285 to 285 by 5    // typically 200
   val maTypes                 = Seq(SMA)        // typically SMA
   val signalMaTypes           = Seq(EMA)        // typically SMA
   val trendMaTypes            = Seq(SMA)        // typically SMA
@@ -164,6 +173,7 @@ object TrainingApp extends App {
 
   def trainMacdOverMa: (Double, Strategy) = {
     val strategies = for {
+      dataFreq         <- dataFreqs
       slowWindow       <- slowWindows
       fastWindow       <- fastWindows
       signalWindow     <- signalWindows
@@ -173,7 +183,7 @@ object TrainingApp extends App {
       trendMaType      <- trendMaTypes
     } yield {
       val conf = ConfigFactory.parseString(
-        s"""|dataFreq         = 1h
+        s"""|dataFreq         = $dataFreq
             |slowWindow       = $slowWindow
             |fastWindow       = $fastWindow
             |signalWindow     = $signalWindow
