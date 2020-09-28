@@ -75,48 +75,48 @@ class RollupSpec extends FlatSpec with Matchers with Inside {
 
   it should "respect m and h" in {
     val r = Rollups(3)
-    r.forBucket(`1m`).forecast.high.isEmpty shouldBe true
-    r.forBucket(`1h`).forecast.high.isEmpty shouldBe true
+    r.withForecast(`1m`).forecast.high.isEmpty shouldBe true
+    r.withForecast(`1h`).forecast.high.isEmpty shouldBe true
 
     val r2 = Seq((10, 1.0, 10.0), (71, 2.0, 20.0), (131, 3.0, 30.0), (200, 4.0, 40.0)).foldLeft(r) {
       case (soFar, (ts, price, volume)) => soFar.add(ts*60_000, price, volume)
     }
-    r2.forBucket(`1m`).forecast.high.toSet shouldBe Set(1.0, 2.0, 3.0, 4.0)
-    r2.forBucket(`1m`).forecast.high.size shouldBe 191
-    r2.forBucket(`1m`).forecast.low.size shouldBe 191
-    r2.forBucket(`1m`).forecast.open.size shouldBe 191
-    r2.forBucket(`1m`).forecast.close.size shouldBe 191
-    r2.forBucket(`1m`).forecast.vwap.size shouldBe 191
-    r2.forBucket(`1m`).forecast.volume.size shouldBe 191
-    r2.forBucket(`1m`).forecast.period.size shouldBe 191
+    r2.withForecast(`1m`).forecast.high.toSet shouldBe Set(1.0, 2.0, 3.0, 4.0)
+    r2.withForecast(`1m`).forecast.high.size shouldBe 191
+    r2.withForecast(`1m`).forecast.low.size shouldBe 191
+    r2.withForecast(`1m`).forecast.open.size shouldBe 191
+    r2.withForecast(`1m`).forecast.close.size shouldBe 191
+    r2.withForecast(`1m`).forecast.vwap.size shouldBe 191
+    r2.withForecast(`1m`).forecast.volume.size shouldBe 191
+    r2.withForecast(`1m`).forecast.period.size shouldBe 191
 
-    r2.forBucket(`1h`).forecast.high.toSet shouldBe Set(2.0, 3.0, 4.0)
-    r2.forBucket(`1h`).forecast.high.size shouldBe 3
-    r2.forBucket(`1h`).forecast.low.size shouldBe 3
-    r2.forBucket(`1h`).forecast.open.size shouldBe 3
-    r2.forBucket(`1h`).forecast.close.size shouldBe 3
-    r2.forBucket(`1h`).forecast.vwap.size shouldBe 3
-    r2.forBucket(`1h`).forecast.volume.size shouldBe 3
-    r2.forBucket(`1h`).forecast.period.size shouldBe 3
+    r2.withForecast(`1h`).forecast.high.toSet shouldBe Set(2.0, 3.0, 4.0)
+    r2.withForecast(`1h`).forecast.high.size shouldBe 3
+    r2.withForecast(`1h`).forecast.low.size shouldBe 3
+    r2.withForecast(`1h`).forecast.open.size shouldBe 3
+    r2.withForecast(`1h`).forecast.close.size shouldBe 3
+    r2.withForecast(`1h`).forecast.vwap.size shouldBe 3
+    r2.withForecast(`1h`).forecast.volume.size shouldBe 3
+    r2.withForecast(`1h`).forecast.period.size shouldBe 3
 
     val r3 = r2.add(260*60_000, 5.0, 50.0)
-    r3.forBucket(`1m`).forecast.high.toSet shouldBe Set(1.0, 2.0, 3.0, 4.0, 5.0)
-    r3.forBucket(`1m`).forecast.high.size shouldBe 240
-    r3.forBucket(`1m`).forecast.low.size shouldBe 240
-    r3.forBucket(`1m`).forecast.open.size shouldBe 240
-    r3.forBucket(`1m`).forecast.close.size shouldBe 240
-    r3.forBucket(`1m`).forecast.vwap.size shouldBe 240
-    r3.forBucket(`1m`).forecast.volume.size shouldBe 240
-    r3.forBucket(`1m`).forecast.period.size shouldBe 240
+    r3.withForecast(`1m`).forecast.high.toSet shouldBe Set(1.0, 2.0, 3.0, 4.0, 5.0)
+    r3.withForecast(`1m`).forecast.high.size shouldBe 240
+    r3.withForecast(`1m`).forecast.low.size shouldBe 240
+    r3.withForecast(`1m`).forecast.open.size shouldBe 240
+    r3.withForecast(`1m`).forecast.close.size shouldBe 240
+    r3.withForecast(`1m`).forecast.vwap.size shouldBe 240
+    r3.withForecast(`1m`).forecast.volume.size shouldBe 240
+    r3.withForecast(`1m`).forecast.period.size shouldBe 240
 
-    r3.forBucket(`1h`).forecast.high.toSet shouldBe Set(3.0, 4.0, 5.0)
-    r3.forBucket(`1h`).forecast.high.size shouldBe 3
-    r3.forBucket(`1h`).forecast.low.size shouldBe 3
-    r3.forBucket(`1h`).forecast.open.size shouldBe 3
-    r3.forBucket(`1h`).forecast.close.size shouldBe 3
-    r3.forBucket(`1h`).forecast.vwap.size shouldBe 3
-    r3.forBucket(`1h`).forecast.volume.size shouldBe 3
-    r3.forBucket(`1h`).forecast.period.size shouldBe 3
+    r3.withForecast(`1h`).forecast.high.toSet shouldBe Set(3.0, 4.0, 5.0)
+    r3.withForecast(`1h`).forecast.high.size shouldBe 3
+    r3.withForecast(`1h`).forecast.low.size shouldBe 3
+    r3.withForecast(`1h`).forecast.open.size shouldBe 3
+    r3.withForecast(`1h`).forecast.close.size shouldBe 3
+    r3.withForecast(`1h`).forecast.vwap.size shouldBe 3
+    r3.withForecast(`1h`).forecast.volume.size shouldBe 3
+    r3.withForecast(`1h`).forecast.period.size shouldBe 3
   }
 
   it should "perform quickly" in {

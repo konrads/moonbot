@@ -27,8 +27,8 @@ object BotApp extends App {
   val bitmexApiKey      = conf.getString("bitmex.apiKey")
   val bitmexApiSecret   = conf.getString("bitmex.apiSecret")
 
-  val graphiteHost      = conf.getString("graphite.host")
-  val graphitePort      = conf.getInt("graphite.port")
+  val graphiteHost      = conf.optString("graphite.host")
+  val graphitePort      = conf.optInt("graphite.port")
 
   val namespace              = conf.getString("bot.namespace")
   val flushSessionOnRestart  = conf.getBoolean("bot.flushSessionOnRestart")
@@ -39,10 +39,10 @@ object BotApp extends App {
   val openWithMarket         = conf.optBoolean("bot.openWithMarket").getOrElse(false)
   val useTrailingStoploss    = conf.optBoolean("bot.useTrailingStoploss").getOrElse(false)
   val backtestEventDataDir   = conf.optString("bot.backtestEventDataDir")
+  val backtestCsvDir         = conf.optString("bot.backtestCsvDir")
   val backtestCandleFile     = conf.optString("bot.backtestCandleFile")
   val useSynthetics          = conf.optBoolean("bot.useSynthetics").getOrElse(false)
   val takerFee               = conf.optDouble("bot.takerFee").getOrElse(.00075)
-
 
   val runType                = conf.optString("bot.runType").map(_.toLowerCase) match {
     case Some("live-moon")      => LiveMoon
@@ -54,7 +54,7 @@ object BotApp extends App {
     case Some(other)            => throw new Exception(s"Invalid bot.runType: $other")
     case None                   => LiveMoon
   }
-  assert(runType != RunType.BacktestMoon || backtestEventDataDir.isDefined || backtestCandleFile.isDefined)
+  assert(runType != RunType.BacktestMoon || backtestEventDataDir.isDefined || backtestCsvDir.isDefined || backtestCandleFile.isDefined)
 
   val strategyName = conf.getString("strategy.selection")
 
@@ -146,11 +146,12 @@ object BotApp extends App {
       |• openWithMarket:       $openWithMarket
       |• runType:              $runType
       |• backtestEventDataDir: $backtestEventDataDir
+      |• backtestCsvDir:       $backtestCsvDir
       |• backtestCandleFile:   $backtestCandleFile
       |• useSynthetics:        $useSynthetics
       |""".stripMargin)
 
-  val metrics = Metrics(graphiteHost, graphitePort, namespace)
+  val metrics = for { h <- graphiteHost; p <- graphitePort } yield Metrics(h, p, namespace)
   val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig, parentConfig = conf.getObject(s"strategy").toConfig)
 
   if (runType == BacktestMoon || runType == BacktestYabol) {
@@ -158,12 +159,13 @@ object BotApp extends App {
     val sim = new ExchangeSim(
       runType = runType,
       eventDataDir = backtestEventDataDir.orNull,
+      eventCsvDir = backtestCsvDir.orNull,
       candleFile = backtestCandleFile.orNull,
       strategy = strategy,
       tradeQty = tradeQty,
       takerFee = takerFee,
       takeProfitMargin = takeProfitMargin, stoplossMargin = stoplossMargin,
-      metrics = Some(metrics),
+      metrics = metrics,
       openWithMarket = openWithMarket,
       useSynthetics = useSynthetics)
     val (finalCtx, finalExchangeCtx) = sim.run()
@@ -186,7 +188,7 @@ object BotApp extends App {
       log.info(s"Instantiating Live Run...")
       Behaviour.asLiveBehavior(
         restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
-        metrics=Some(metrics),
+        metrics=metrics,
         flushSessionOnRestart=flushSessionOnRestart,
         behaviorDsl=behaviorDsl,
         initCtx=InitCtx(Ledger()))
@@ -194,22 +196,24 @@ object BotApp extends App {
       log.info(s"Instantiating Live Yabol Run...")
       Behaviour.asLiveBehavior(
         restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
-        metrics=Some(metrics),
+        metrics=metrics,
         flushSessionOnRestart=flushSessionOnRestart,
         behaviorDsl=yabolBehaviorDsl,
         initCtx=YabolIdleCtx(Ledger()))
     } else if (runType == DryMoon) {
       log.info(s"Instantiating Dry Run...")
       Behaviour.asDryBehavior(
-        metrics=Some(metrics),
+        metrics=metrics,
         behaviorDsl=behaviorDsl,
-        initCtx=InitCtx(Ledger()))
+        initCtx=InitCtx(Ledger()),
+        askBidFromTrades=false)
     } else if (runType == DryYabol) {
       log.info(s"Instantiating Dry Yabol Run...")
       Behaviour.asDryBehavior(
-        metrics=Some(metrics),
+        metrics=metrics,
         behaviorDsl=yabolBehaviorDsl,
-        initCtx=YabolIdleCtx(Ledger()))
+        initCtx=YabolIdleCtx(Ledger()),
+        askBidFromTrades=true)
     } else
       ???
 

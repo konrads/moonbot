@@ -20,6 +20,11 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
                   ledgerOrdersByClOrdID: ListMap[String, LedgerOrder]=ListMap.empty,
                   ledgerMetrics: LedgerMetrics=LedgerMetrics()) {
 
+  lazy val `_10s` = tradeRollups.withForecast(`10s`)
+  lazy val `_1m`  = tradeRollups.withForecast(`1m`)
+  lazy val `_1h`  = tradeRollups.withForecast(`1h`)
+  lazy val `_4h`  = tradeRollups.withForecast(`4h`)
+
   @deprecated lazy val ledgerOrders = ledgerOrdersByID.values
 
   // rest
@@ -126,7 +131,7 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
   @deprecated lazy val askPrice: Double = orderBookSummary.ask
 
   def withMetrics(makerRebate: Double=.00025, takerFee: Double=.00075, strategy: Strategy): Ledger = {
-    val volume = tradeRollups.forBucket(`1m`).forecast.volume.lastOption.getOrElse(0)
+    val volume = tradeRollups.withForecast(`1m`).forecast.volume.lastOption.getOrElse(0)
     val strategyRes = strategy.strategize(this)
     val (s, m) = (strategyRes.sentiment, strategyRes.metrics)
     val metricsVals = Map(

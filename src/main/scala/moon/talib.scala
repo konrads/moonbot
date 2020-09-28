@@ -84,6 +84,18 @@ object talib {
     }
   }
 
+  def capProportionalExtremes(): Double => Double = {
+    var high: Double = 0
+    var low: Double = 0
+    def cap(x: Double): Double = {
+      val (res, h, l) = capProportionalExtremes_stateless(x, low, high)
+      high = h
+      low = l
+      res
+    }
+    cap
+  }
+
   /**
    * Given a MACD histogram graph:
    *
@@ -100,30 +112,17 @@ object talib {
    *
    *  Where upper and lower are some static boundaries.
    */
-  def capProportionalExtremes(): Double => Double = {
-    var high: Double = 0
-    var low: Double = 0
-    def cap(x: Double): Double =
-      if (x > 0 && x > high) {
-        low = 0
-        high = x
-        1.0
-      } else if (x > 0) {
-        low = 0
-        x / high
-      } else if (x < 0 && x < low) {
-        high = 0
-        low = x
-        -1.0
-      } else if (x < 0) {
-        high = 0
-        -x / low
-      } else {  // between minUpper and minLower
-        low = 0
-        high = 0
-        0
-      }
-    cap
+  def capProportionalExtremes_stateless(x: Double, low: Double, high: Double): (Double, Double, Double) = {
+    if (x > 0 && x > high)
+      (1, 0, x)
+    else if (x > 0)
+      (x/high, 0, high)
+    else if (x < 0 && x < low)
+      (-1, x, 0)
+    else if (x < 0)
+      (-x/low, low, 0)
+    else
+      (0, 0, 0)
   }
 
   def capPeakTrough(): Double => Double = {

@@ -17,7 +17,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
 
   class TestStrategy(var sentiment: Sentiment.Value) extends Strategy {
     override val config: Config = null
-    override def strategize(ledger: Ledger): StrategyResult =
+    override def strategize(ledger: Ledger, mustPreserveState: Boolean=false): StrategyResult =
       StrategyResult(sentiment, Map.empty)
   }
 
@@ -34,11 +34,18 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       openWithMarket,
       useTrailingStoploss)
 
+    /* FIXME: for debug only, should remove!!! */
+    def behaviorDsl_dbg(ctx: Ctx, event: ActorEvent, log: org.slf4j.Logger): (Ctx, Option[SideEffect]) = {
+      val (resCtx, resEffect) = behaviorDsl(ctx, event, log)
+      println(s"##### init_ctx: ${ctx.getClass.getSimpleName}, event: $event =>\n#####  res_ctx: ${resCtx.getClass.getSimpleName}, effect: $resEffect\n")
+      (resCtx, resEffect)
+    }
+
     val (finalCtx, finalExchangeCtx) = sentimentsAndEvents.iterator.foldLeft((InitCtx(Ledger()): Ctx, ExchangeCtx())) {
       case ((ctx2, exchangeCtx2), (sentiment, eventStr)) =>
         val event = WsEvent(WsModel.asModel(eventStr).get)
         strategy.sentiment = sentiment
-        paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, None, log, true, event)
+        paperExchangeSideEffectHandler(behaviorDsl_dbg, ctx2, exchangeCtx2, None, log, true, false, event)
     }
     (finalCtx, finalExchangeCtx)
   }
@@ -60,7 +67,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
     val (ctx, eCtx) = runSim(new TestStrategy(Bear), true, false,
       (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
       (Bear, wsTrade(120, 10, timestampL = startMs + minMs)),
-      (Bear, wsOrderBook10(110, 10, 115, 15, timestampL = startMs + 2 * minMs)),
+      (Neutral, wsOrderBook10(110, 10, 115, 15, timestampL = startMs + 2 * minMs)),
     )
     ctx.getClass shouldBe classOf[IdleCtx]
     ctx.ledger.ledgerOrdersByID.size shouldBe 3
@@ -74,7 +81,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bull, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
       (Bull, wsTrade(101, 10, timestampL = startMs + minMs)),
       (Bull, wsOrderBook10(95, 10, 100, 15, timestampL = startMs + 2 * minMs)), // trigger buy, sets stoploss at...
-      (Bear, wsOrderBook10(94, 10, 99,  15, timestampL = startMs + 3 * minMs)), // trigger stoploss @ 95 (100-5)
+      (Neutral, wsOrderBook10(94, 10, 99,  15, timestampL = startMs + 3 * minMs)), // trigger stoploss @ 95 (100-5)
     )
     ctx.getClass shouldBe classOf[IdleCtx]
     ctx.ledger.ledgerOrdersByID.size shouldBe 3
@@ -88,7 +95,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
       (Bear, wsTrade(99, 10, timestampL = startMs + minMs)),
       (Bear, wsOrderBook10(105, 10, 115, 15, timestampL = startMs + 2 * minMs)), // trigger buy, sets stoploss at...
-      (Bull, wsOrderBook10(106, 10, 116, 15, timestampL = startMs + 3 * minMs)), // trigger stoploss @ 105 (100+5)
+      (Neutral, wsOrderBook10(106, 10, 116, 15, timestampL = startMs + 3 * minMs)), // trigger stoploss @ 105 (100+5)
     )
     ctx.getClass shouldBe classOf[IdleCtx]
     ctx.ledger.ledgerOrdersByID.size shouldBe 3
@@ -105,7 +112,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bear, wsOrderBook10(104, 10, 109, 15, timestampL = startMs + 3 * minMs)),
       (Bear, wsOrderBook10(106, 10, 111, 15, timestampL = startMs + 4 * minMs)),
       (Bear, wsOrderBook10(102, 10, 107, 15, timestampL = startMs + 5 * minMs)),
-      (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs + 7 * minMs)), // trigger stoploss @ 101 (106-5)
+      (Neutral, wsOrderBook10(100, 10, 105, 15, timestampL = startMs + 7 * minMs)), // trigger stoploss @ 101 (106-5)
     )
     ctx.getClass shouldBe classOf[IdleCtx]
     ctx.ledger.ledgerOrdersByID.size shouldBe 3
@@ -122,7 +129,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       (Bull, wsOrderBook10(96, 10, 101, 15, timestampL = startMs + 3 * minMs)),
       (Bull, wsOrderBook10(94, 10, 99, 15, timestampL = startMs + 4 * minMs)),
       (Bull, wsOrderBook10(98, 10, 103, 15, timestampL = startMs + 5 * minMs)),
-      (Bull, wsOrderBook10(100, 10, 105, 15, timestampL = startMs + 7 * minMs)), // trigger stoploss @ 99 (94+5)
+      (Neutral, wsOrderBook10(100, 10, 105, 15, timestampL = startMs + 7 * minMs)), // trigger stoploss @ 99 (94+5)
     )
     ctx.getClass shouldBe classOf[IdleCtx]
     ctx.ledger.ledgerOrdersByID.size shouldBe 3

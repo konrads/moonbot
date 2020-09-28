@@ -20,8 +20,11 @@ case class Rollups(_buckets: Map[DataFreq.Value, RollupBuckets], latestPrice: Do
   def add(tsMs: Long, price: Double, vol: Double): Rollups =
     copy(_buckets.map { case (k, v) => k -> v.add(tsMs, price, vol) }, price)
 
-  def forBucket(id: DataFreq.Value): RollupBuckets =
+  def withForecast(id: DataFreq.Value): RollupBuckets =
     _buckets(id).forecast
+
+  def withoutForecast(id: DataFreq.Value): RollupBuckets =
+    _buckets(id)
 
   def isEmpty: Boolean =  {
     val b = _buckets(`1m`)

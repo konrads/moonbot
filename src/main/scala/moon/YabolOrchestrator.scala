@@ -14,7 +14,7 @@ object YabolOrchestrator {
 
     def tick(ctx: YabolCtx, event: ActorEvent, log: org.slf4j.Logger): (YabolCtx, Option[SideEffect]) = (ctx, event) match {
       // Common states/events
-      case (_, SendMetrics(nowMs)) =>
+      case (_, On1m(nowMs)) =>
         if (ctx.ledger.isMinimallyFilled) {
           val ledger2 = ctx.ledger.withMetrics(strategy = strategy, takerFee = takerFee)
           val effect = PublishMetrics(ledger2.ledgerMetrics.metrics, nowMs)
@@ -28,18 +28,21 @@ object YabolOrchestrator {
       case (YabolIdleCtx(ledger), WsEvent(data)) =>
         if (log.isDebugEnabled) log.debug(s"Idle: WsEvent: $data")
         val ledger2 = ledger.record(data)
-        val strategyRes = strategy.strategize(ledger2)
+        (ctx.withLedger(ledger2), None)
+
+      case (YabolIdleCtx(ledger), On1h(_ts)) =>
+        val strategyRes = strategy.strategize(ledger, true)
         if (log.isDebugEnabled) log.debug(s"Idle: Sentiment is ${strategyRes.sentiment}")
         if (strategyRes.sentiment == Bull) {
           val effect = OpenInitOrder(Buy, Market, uuid, tradeQty)
-          log.info(s"Idle: starting afresh with $LongDir order: ${effect.clOrdID} @~ ${ledger2.tradeRollups.latestPrice}...")
-          (YabolOpenPositionCtx(dir = LongDir, ledger = ledger2, qty = tradeQty, clOrdID = effect.clOrdID), Some(effect))
+          log.info(s"Idle: starting afresh with $LongDir order: ${effect.clOrdID} @~ ${ledger.tradeRollups.latestPrice}...")
+          (YabolOpenPositionCtx(dir = LongDir, ledger = ledger, qty = tradeQty, clOrdID = effect.clOrdID), Some(effect))
         } else if (strategyRes.sentiment == Bear) {
           val effect = OpenInitOrder(Sell, Market, uuid, tradeQty)
-          log.info(s"Idle: starting afresh with $ShortDir order: ${effect.clOrdID} @~ ${ledger2.tradeRollups.latestPrice}...")
-          (YabolOpenPositionCtx(dir = ShortDir, ledger = ledger2, qty = tradeQty, clOrdID = effect.clOrdID), Some(effect))
+          log.info(s"Idle: starting afresh with $ShortDir order: ${effect.clOrdID} @~ ${ledger.tradeRollups.latestPrice}...")
+          (YabolOpenPositionCtx(dir = ShortDir, ledger = ledger, qty = tradeQty, clOrdID = effect.clOrdID), Some(effect))
         } else
-          (ctx.withLedger(ledger2), None)
+          (ctx, None)
 
       // in position
       case (ctx2@YabolOpenPositionCtx(dir, clOrdID, qty, ledger), e@(RestEvent(Success(_)) | WsEvent(_))) =>
@@ -56,21 +59,21 @@ object YabolOrchestrator {
           order.ordStatus match {
             case Filled =>
               log.info(s"Open $dir: filled orderID: ${order.fullOrdID} @ ${order.price} :: ${order.timestamp}")
-              // wait for strategy to signal exit
-              val strategyRes = strategy.strategize(ledger2)
-              if (dir == LongDir && strategyRes.sentiment != Bull) {
-                log.info(s"Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice} :: ${order.timestamp}")
-                val effect = OpenInitOrder(Sell, Market, uuid, qty)
-                val ctx3 = YabolClosePositionCtx(dir, qty, order.price, effect.clOrdID, ledger2)
-                (ctx3, Some(effect))
-              } else if (dir == ShortDir && strategyRes.sentiment != Bear) {
-                log.info(s"Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice} :: ${order.timestamp}")
-                val effect = OpenInitOrder(Buy, Market, uuid, qty)
-                val ctx3 = YabolClosePositionCtx(dir, qty, order.price, effect.clOrdID, ledger2)
-                (ctx3, Some(effect))
-              } else {
-                (YabolWaitingCtx(dir = dir, qty = qty, openPrice = order.price, ledger = ledger2), None)
-              }
+              (YabolWaitingCtx(dir = dir, qty = qty, openPrice = order.price, ledger = ledger2), None)
+//              // wait for strategy to signal exit
+//              val strategyRes = strategy.strategize(ledger2)
+//              if (dir == LongDir && strategyRes.sentiment != Bull) {
+//                log.info(s"...Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice} :: ${order.timestamp}")
+//                val effect = OpenInitOrder(Sell, Market, uuid, qty)
+//                val ctx3 = YabolClosePositionCtx(dir, qty, order.price, effect.clOrdID, ledger2)
+//                (ctx3, Some(effect))
+//              } else if (dir == ShortDir && strategyRes.sentiment != Bear) {
+//                log.info(s"...Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice} :: ${order.timestamp}")
+//                val effect = OpenInitOrder(Buy, Market, uuid, qty)
+//                val ctx3 = YabolClosePositionCtx(dir, qty, order.price, effect.clOrdID, ledger2)
+//                (ctx3, Some(effect))
+//              } else
+//                (YabolWaitingCtx(dir = dir, qty = qty, openPrice = order.price, ledger = ledger2), None)
             case _ =>
               if (log.isDebugEnabled) log.debug(s"Open $dir: catchall: ${order.ordStatus}, order: $order")
               (ctx2.copy(ledger = ledger2), None)
@@ -79,25 +82,28 @@ object YabolOrchestrator {
           (ctx2.copy(ledger = ledger2), None)
 
       // waiting for change in strategy
-      case (ctx2@YabolWaitingCtx(dir, qty, openPrice, ledger), e@(RestEvent(Success(_)) | WsEvent(_))) =>
+      case (ctx2@YabolWaitingCtx(_, _, _, ledger), e@(RestEvent(Success(_)) | WsEvent(_))) =>
         val ledger2 = e match {
           case RestEvent(Success(x)) => ledger.record(x)
           case WsEvent(x)            => ledger.record(x)
           case _                     => ???
         }
-        val strategyRes = strategy.strategize(ledger2)
+        (ctx2.copy(ledger = ledger2), None)
+
+      case (ctx2@YabolWaitingCtx(dir, qty, openPrice, ledger), On1h(_ts)) =>
+        val strategyRes = strategy.strategize(ledger, true)
         if (dir == LongDir && strategyRes.sentiment != Bull) {
-          log.info(s".Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice}")
+          log.info(s"Closing $dir: $qty @~ ${ledger.tradeRollups.latestPrice}")
           val effect = OpenInitOrder(Sell, Market, uuid, qty)
-          val ctx3 = YabolClosePositionCtx(dir, qty, openPrice, effect.clOrdID, ledger2)
+          val ctx3 = YabolClosePositionCtx(dir, qty, openPrice, effect.clOrdID, ledger)
           (ctx3, Some(effect))
         } else if (dir == ShortDir && strategyRes.sentiment != Bear) {
-          log.info(s".Closing $dir: $qty @~ ${ledger2.tradeRollups.latestPrice}")
+          log.info(s"Closing $dir: $qty @~ ${ledger.tradeRollups.latestPrice}")
           val effect = OpenInitOrder(Buy, Market, uuid, qty)
-          val ctx3 = YabolClosePositionCtx(dir, qty, openPrice, effect.clOrdID, ledger2)
+          val ctx3 = YabolClosePositionCtx(dir, qty, openPrice, effect.clOrdID, ledger)
           (ctx3, Some(effect))
         } else {
-          (ctx2.copy(ledger = ledger2), None)
+          (ctx2.copy(ledger = ledger), None)
         }
 
       case (ctx2@YabolClosePositionCtx(dir, qty, openPrice, clOrdID, ledger), e@(RestEvent(Success(_)) | WsEvent(_))) =>
@@ -113,6 +119,7 @@ object YabolOrchestrator {
           val order = ledger2.ledgerOrdersByClOrdID(clOrdID)
           order.ordStatus match {
             case Filled =>
+              // FIXME: consider flipping if sentiment reverses, not just going to idle
               val priceDelta = if (dir == LongDir) order.price - openPrice else openPrice - order.price
               if ((dir == LongDir && openPrice < order.price) || (dir == ShortDir && openPrice > order.price))
                 log.info(pretty(s"Close $dir: ✔✔✔ filled with price delta: $openPrice => ${order.price} ... $priceDelta ✔✔✔ :: ${order.timestamp}", Bull, consoleDriven))
@@ -127,6 +134,8 @@ object YabolOrchestrator {
           (ctx2.copy(ledger = ledger2), None)
 
       // catchalls
+      case (ctx, On1h(_)) =>
+        (ctx, None)
       case (ctx, WsEvent(data)) =>
         (ctx.withLedger(ctx.ledger.record(data)), None)
       case (ctx, RestEvent(Success(data))) =>

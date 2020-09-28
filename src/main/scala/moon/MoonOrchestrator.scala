@@ -56,7 +56,8 @@ object MoonOrchestrator {
 
     def tick(ctx: Ctx, event: ActorEvent, log: org.slf4j.Logger): (Ctx, Option[SideEffect]) = (ctx, event) match {
       // Common states/events
-      case (_, SendMetrics(nowMs)) =>
+      case (_, On1h(_)) => (ctx, None)  // ignore in moon
+      case (_, On1m(nowMs)) =>
         if (ctx.ledger.isMinimallyFilled) {
           val ledger2 = ctx.ledger.withMetrics(strategy = strategy)
           val effect = PublishMetrics(ledger2.ledgerMetrics.metrics, nowMs)
@@ -189,8 +190,7 @@ object MoonOrchestrator {
         }
       case (ctx2@OpenPositionCtx(dir, lifecycle, clOrdID, ledger), WsEvent(data)) =>
         val clOrdIDMatch = data match {
-          case o: Order => Some(o.clOrdID.contains(clOrdID))
-          case os: Orders => Some(os.containsClOrdIDs(clOrdID))
+          case o: UpsertOrder => Some(o.containsClOrdIDs(clOrdID))
           case _ => None
         }
         val ledger2 = ledger.record(data)
