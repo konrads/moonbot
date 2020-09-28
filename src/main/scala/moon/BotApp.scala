@@ -7,6 +7,7 @@ import akka.actor.typed.{ActorSystem, SupervisorStrategy}
 import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
 import moon.RunType._
+import org.rogach.scallop.ScallopConf
 import play.api.libs.json._
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -16,8 +17,13 @@ import scala.concurrent.duration._
 object BotApp extends App {
   val log = Logger("BotApp")
 
-  val conf = ConfigFactory.load()
-    .withFallback(ConfigFactory.parseResources("application.conf"))
+  class CliConf extends ScallopConf(args) {
+    val config = opt[String](default = Some("application.conf"))
+    verify()
+  }
+  val cliConf = new CliConf()
+
+  val conf = ConfigFactory.load(cliConf.config())
     .withFallback(ConfigFactory.parseFile(new File("application.private.conf")))
     .withFallback(ConfigFactory.parseResources("application.private.conf"))
     .resolve()
@@ -31,11 +37,12 @@ object BotApp extends App {
   val graphitePort      = conf.optInt("graphite.port")
 
   val namespace              = conf.getString("bot.namespace")
+  val wssSubscriptions       = conf.getString("bot.wssSubscriptions").split(",").map(_.trim)
   val flushSessionOnRestart  = conf.getBoolean("bot.flushSessionOnRestart")
   val tradeQty               = conf.getInt("bot.tradeQty")
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
-  val takeProfitMargin       = conf.getDouble("bot.takeProfitMargin")
-  val stoplossMargin         = conf.getDouble("bot.stoplossMargin")
+  val takeProfitMargin       = conf.optDouble("bot.takeProfitMargin").getOrElse(20.0)
+  val stoplossMargin         = conf.optDouble("bot.stoplossMargin").getOrElse(10.0)
   val openWithMarket         = conf.optBoolean("bot.openWithMarket").getOrElse(false)
   val useTrailingStoploss    = conf.optBoolean("bot.useTrailingStoploss").getOrElse(false)
   val backtestEventDataDir   = conf.optString("bot.backtestEventDataDir")
@@ -135,6 +142,7 @@ object BotApp extends App {
       |Initialized with params...
       |• bitmexUrl:            $bitmexUrl
       |• bitmexWsUrl:          $bitmexWsUrl
+      |• wssSubscriptions:     ${wssSubscriptions.mkString(",")}
       |• graphiteHost:         $graphiteHost
       |• graphitePort:         $graphitePort
       |• namespace:            $namespace
@@ -172,7 +180,7 @@ object BotApp extends App {
     log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} ($$${finalCtx.ledger.ledgerMetrics.runningPandl * finalCtx.ledger.tradeRollups.latestPrice}) over ${finalCtx.ledger.myTrades.size} trades")
   } else {
     implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
-    val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret)
+    val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, wssSubscriptions=wssSubscriptions)
     val behaviorDsl=MoonOrchestrator.asDsl(
       strategy=strategy,
       tradeQty=tradeQty,

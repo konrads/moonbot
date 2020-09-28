@@ -14,7 +14,7 @@ import scala.concurrent.{Future, Promise}
 import scala.util.{Failure, Success}
 
 // thanks to: https://doc.akka.io/docs/akka-http/10.0.2/scala/http/client-side/websocket-support.html#websocketclientlayer
-class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, minSleepInMs: Option[Long] = Some(3000))(implicit val system: ActorSystem) {
+class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, wssSubscriptions: Seq[String], minSleepInMs: Option[Long] = Some(3000))(implicit val system: ActorSystem) {
   private val log = Logger[WsGateway]
 
   private var endOfLivePromise: Promise[Option[Message]] = null // for the purpose of killing the WS connection
@@ -64,8 +64,8 @@ class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, mi
     val outgoing = {
       val nonce = System.currentTimeMillis()
       val authMessage = TextMessage(buildOpJson("authKey", apiKey, nonce, getBitmexApiSignature(s"GET/realtime$nonce", apiSecret)))
-      val subscribeOrderMessage = TextMessage(buildOpJson("subscribe", "order:XBTUSD"))
-      Source(List(authMessage, subscribeOrderMessage))
+      val subscribeMessages = wssSubscriptions.map(x => TextMessage(buildOpJson("subscribe", x)))
+      Source(authMessage +: subscribeMessages)
     }
 
     // determining when server closed connection:

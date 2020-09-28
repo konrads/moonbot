@@ -65,8 +65,8 @@ object Ignorable { implicit val aReads: Reads[Ignorable] = Json.reads[Ignorable]
 object WsModel {
   private val log = Logger("WsModel")
   implicit val aReads: Reads[WsModel] = (json: JsValue) => {
-    if (! (json \ "table").asOpt[String].exists(_.startsWith("orderBook")))
-      log.debug(s"### ws json: $json")
+    // if (! (json \ "table").asOpt[String].exists(_.startsWith("orderBook")))
+    //   log.debug(s"### ws json: $json")
     val res = ((json \ "table").asOpt[String], (json \ "action").asOpt[String]) match {
       case (Some(table), Some("partial")) if Vector("order", "trade", "instrument", "funding").contains(table) => JsSuccess(Ignorable(json))
       case (Some(table), _@Some(_)) if table.startsWith("orderBook") => json.validate[OrderBook]
