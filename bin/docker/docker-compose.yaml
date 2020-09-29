@@ -49,7 +49,7 @@ services:
       options:
         max-size: '10m'
         max-file: '20'
-    command: --config application-yabol-xbtusd.conf
+    entrypoint: sleep 30 && cd /src && java -jar ./target/scala-2.13/MoonBot-assembly-0.1.jar --config application-yabol-xbtusd.conf
 
   ethusd-bot:
     image: moon-bot
@@ -70,4 +70,4 @@ services:
       options:
         max-size: '10m'
         max-file: '20'
-    command: --config application-yabol-ethusd.conf
+    entrypoint: sleep 30 && cd /src && java -jar ./target/scala-2.13/MoonBot-assembly-0.1.jar --config application-yabol-ethusd.conf
