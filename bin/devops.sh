@@ -239,7 +239,7 @@ case "$trail_arg" in
     sudo bin/devops.sh grafana-bootstrap-build
     sudo bin/devops.sh moon-build
     log_bold "...moon docker-compose service"
-    sudo cp ~/src/moon/bin/moon.service /etc/systemd/system/moon.service
+    sudo cp ~/src/moonbot/bin/moon.service /etc/systemd/system/moon.service
     sudo systemctl start moon
     sudo systemctl enable docker
     sudo systemctl enable moon
