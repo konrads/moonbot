@@ -13,7 +13,7 @@
     <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
       <level>INFO</level>
     </filter>
-    <file>moon.log</file>
+    <file>/var/log/moon/moon.log</file>
     <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
       <fileNamePattern>moon.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
       <maxFileSize>100MB</maxFileSize>
@@ -26,7 +26,7 @@
   </appender>
 
   <appender name="file.dbg" class="ch.qos.logback.core.rolling.RollingFileAppender">
-    <file>moon.dbg.log</file>
+    <file>/var/log/moon/moon.dbg.log</file>
     <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
       <fileNamePattern>moon.dbg.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
       <maxFileSize>100MB</maxFileSize>

@@ -11,8 +11,8 @@ services:
       - "3000:3000"
     volumes:
       - .:/host
-      - /var/log/grafana:/var/log
-      - /var/log/graphite:/var/log
+      - /var/log/grafana:/var/log/grafana
+      - /var/log/graphite:/var/log/graphite
       - /opt/graphite/storage:/opt/graphite/storage
     # limit rotating log file sizes, expect them in: /var/lib/docker/containers/[container-id]/[container-id]-json.log, as described in https://stackoverflow.com/questions/35414495/save-docker-compose-logs-to-a-file
     logging:
