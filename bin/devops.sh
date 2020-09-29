@@ -204,7 +204,7 @@ case "$trail_arg" in
     echo "  bitmex.apiKey = \"xxxxx\""
     echo "  bitmex.apiSecret = \"yyyyy\""
     echo
-    echo "# if need to resize whisper files (grafana db) from 1 week to 1 year:"
+    echo "# if need to resize whisper files (grafana db) from 1 week to 3 years:"
     echo "sudo apt-get install pip"
     echo "pip install whisper"
     echo "sudo find /opt/graphite/storage/whisper/moon -type f -name '*.wsp' -exec /home/ubuntu/.local/bin/whisper-resize.py --nobackup {} 50s:3y \;"
