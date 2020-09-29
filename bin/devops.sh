@@ -157,17 +157,17 @@ case "$trail_arg" in
     # curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-moon-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
     pair=xbtusd
     log_green "Deploying dashboard $curr_dir/stage/$pair-yabol-dashboard-importable.json..."
-    cat $curr_dir/yabol-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-yabol-dashboard-importable.json
-    curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-yabol-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
+    cat $curr_dir/macdoverma-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-macdoverma-dashboard-importable.json
+    curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-macdoverma-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
     pair=ethusd
     log_green "Deploying dashboard $curr_dir/stage/$pair-yabol-dashboard-importable.json..."
-    cat $curr_dir/yabol-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-yabol-dashboard-importable.json
-    curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-yabol-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
+    cat $curr_dir/macdoverma-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-macdoverma-dashboard-importable.json
+    curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-macdoverma-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
     ;;
   "grafana-bootstrap-build")
     log_green "Diffing dev and prod dashboards, they need to be the same! If not: cp $curr_dir/moon-dashboard-importable.json $curr_dir/docker/grafana-bootstrap"
     diff $curr_dir/moon-dashboard-importable.json $curr_dir/docker/grafana-bootstrap
-    diff $curr_dir/yabol-dashboard-importable.json $curr_dir/docker/grafana-bootstrap
+    diff $curr_dir/macdoverma-dashboard-importable.json $curr_dir/docker/grafana-bootstrap
     # not copying as often need to do this via sudo: cp $curr_dir/*-dashboard-importable.json $curr_dir/docker/grafana-bootstrap
     log_green "Fetching and building grafana-bootstrap docker image..."
     cd $curr_dir/docker/grafana-bootstrap

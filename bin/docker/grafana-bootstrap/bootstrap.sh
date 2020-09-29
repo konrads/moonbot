@@ -46,9 +46,9 @@ mkdir -p $curr_dir/stage
 # curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-moon-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
 pair=xbtusd
 log_green "Deploying dashboard $curr_dir/stage/$pair-yabol-dashboard-importable.json..."
-cat $curr_dir/yabol-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-yabol-dashboard-importable.json
-curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-yabol-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
+cat $curr_dir/macdoverma-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-macdoverma-dashboard-importable.json
+curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-macdoverma-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
 pair=ethusd
 log_green "Deploying dashboard $curr_dir/stage/$pair-yabol-dashboard-importable.json..."
-cat $curr_dir/yabol-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-yabol-dashboard-importable.json
-curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-yabol-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
+cat $curr_dir/macdoverma-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-macdoverma-dashboard-importable.json
+curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-macdoverma-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import

@@ -46,7 +46,7 @@
     "links": [],
     "panels": [
       {
-        "content": "<div style=\"text-align:center; color:white; font-family: Andromeda; font-size: 800%\">yabol __pair__</div>",
+        "content": "<div style=\"text-align:center; color:white; font-family: Andromeda; font-size: 800%\">MACD/MA __pair__</div>",
         "gridPos": {
           "h": 5,
           "w": 24,
@@ -1100,8 +1100,8 @@
       ]
     },
     "timezone": "browser",
-    "title": "yabol.__pair__",
-    "uid": "yabol___pair__",
+    "title": "macdoverma.__pair__",
+    "uid": "macdoverma___pair__",
     "version": 1
   }
 }
