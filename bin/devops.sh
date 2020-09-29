@@ -195,7 +195,7 @@ case "$trail_arg" in
     echo "...from remote:"
     echo "mkdir ~/src"
     echo "cd ~/src"
-    echo "git clone https://bitbucket.org:ksosnowski/moonbot.git"
+    echo "git clone https://ksosnowski@bitbucket.org/ksosnowski/moonbot.git"
     echo "cd moonbot"
     echo "bin/devops.sh bootstrap-remote"
     echo "copied to ~/src/application.private.conf, with config:"
