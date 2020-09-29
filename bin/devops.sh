@@ -190,7 +190,7 @@ case "$trail_arg" in
   "bootstrap-remote")
     echo "# Expected this has already been done:"
     echo "# ...from local:"
-    echo "# ssh -i ~/.ssh/LightsailDefaultKey-ap-southeast-2.pem ubuntu@54.252.192.0"
+    echo "# ssh -i ~/.ssh/LightsailDefaultKey-ap-southeast-2.pem ubuntu@13.239.82.160"
     echo
     echo "...from remote:"
     echo "mkdir ~/src"
