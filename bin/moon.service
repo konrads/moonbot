@@ -13,11 +13,11 @@ Restart=always
 User=ubuntu
 Group=docker
 # Shutdown container (if running) when unit is stopped
-ExecStartPre=/usr/bin/docker-compose -f /home/ubuntu/src/moon/bin/docker/docker-compose.yaml down -v
+ExecStartPre=/usr/bin/docker-compose -f /home/ubuntu/src/moonbot/bin/docker/docker-compose.yaml down -v
 # Start container when unit is started
-ExecStart=/usr/bin/docker-compose -f /home/ubuntu/src/moon/bin/docker/docker-compose.yaml up
+ExecStart=/usr/bin/docker-compose -f /home/ubuntu/src/moonbot/bin/docker/docker-compose.yaml up
 # Stop container when unit is stopped
-ExecStop=/usr/bin/docker-compose -f /home/ubuntu/src/moon/bin/docker/docker-compose.yaml down -v
+ExecStop=/usr/bin/docker-compose -f /home/ubuntu/src/moonbot/bin/docker/docker-compose.yaml down -v
 
 [Install]
 WantedBy=multi-user.target
