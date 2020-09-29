@@ -195,19 +195,24 @@ case "$trail_arg" in
     echo "...from remote:"
     echo "mkdir ~/src"
     echo "cd ~/src"
-    echo "git clone https://bitbucket.org/ksosnowski/rcb.git"
-    echo "cd rcb"
+    echo "git clone https://bitbucket.org:ksosnowski/moonbot.git"
+    echo "cd moonbot"
     echo "bin/devops.sh bootstrap-remote"
+    echo "copied to ~/src/application.private.conf, with config:"
+    echo "  bitmex.url = \"https://www.bitmex.com\""
+    echo "  bitmex.wsUrl = \"wss://www.bitmex.com/realtime\""
+    echo "  bitmex.apiKey = \"xxxxx\""
+    echo "  bitmex.apiSecret = \"yyyyy\""
     echo
     echo "# if need to resize whisper files (grafana db) from 1 week to 1 year:"
     echo "sudo apt-get install pip"
     echo "pip install whisper"
-    echo "sudo find /opt/graphite/storage/whisper/moon -type f -name '*.wsp' -exec /home/ubuntu/.local/bin/whisper-resize.py --nobackup {} 50s:1y \;"
+    echo "sudo find /opt/graphite/storage/whisper/moon -type f -name '*.wsp' -exec /home/ubuntu/.local/bin/whisper-resize.py --nobackup {} 50s:3y \;"
     echo
     echo "to debug journal (stdout/stderr)"
     echo 'sudo journalctl -u moon --since "5 minutes ago"'
-    if [[ ! -f ~/.catalyst/data/exchanges/binance/auth.json ]]; then
-      log_red "~/.catalyst/data/exchanges/binance/auth.json not found!"
+    if [[ ! -f ~/src/moonbot/application.private.conf ]]; then
+      log_red "~/src/moonbot/application.private.conf not found!"
       exit 2
     fi
     log_bold "...install docker"
