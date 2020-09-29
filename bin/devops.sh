@@ -143,6 +143,7 @@ case "$trail_arg" in
     ;;
   "grafana-bootstrap-run")
     log_green "Changing grafana admin/admin -> $grafana_user/xxx..."
+    curl -u admin:admin -d "{\"name\":\"Guest\",\"login\":\"be\",\"password\":\"my guest\",\"email\":\"guest@local\""} -H "Content-Type: application/json" -X POST $grafana_url/api/admin/users
     curl -u admin:admin -d "{\"login\":\"$grafana_user\",\"email\":\"moon@local\""} -H "Content-Type: application/json" -X PUT $grafana_url/api/users/1
     curl -u $grafana_user:admin -d "{\"password\":\"$grafana_pwd\"}" -H "Content-Type: application/json" -X PUT $grafana_url/api/admin/users/1/password
     curl -u $grafana_user:$grafana_pwd -d "{\"theme\": \"$grafana_theme\"}" -H "Content-Type: application/json" -X PUT $grafana_url/api/org/preferences
