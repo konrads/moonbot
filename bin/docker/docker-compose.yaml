@@ -56,7 +56,7 @@ services:
     restart: on-failure
     volumes:
       - .:/host
-      - /var/log/moon-xbtusd:/var/log/moon
+      - /var/log/moon-ethusd:/var/log/moon
     links:
       - grafana
     environment:
