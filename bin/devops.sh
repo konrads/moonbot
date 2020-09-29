@@ -224,11 +224,13 @@ case "$trail_arg" in
     sudo docker container prune -f
     sudo docker image prune -f
     log_bold "...setup system dirs"
-    sudo mkdir -p /var/log/moon
+    sudo mkdir -p /var/log/moon-xbtusd
+    sudo mkdir -p /var/log/moon-ethusd
     sudo mkdir -p /var/log/grafana
     sudo mkdir -p /var/log/graphite
     sudo mkdir -p /opt/graphite/storage
-    sudo chmod +rwx /var/log/moon
+    sudo chmod +rwx /var/log/moon-xbtusd
+    sudo chmod +rwx /var/log/moon-ethusd
     sudo chmod +rwx /var/log/grafana
     sudo chmod +rwx /var/log/graphite
     sudo chmod +rwx /opt/graphite/storage
