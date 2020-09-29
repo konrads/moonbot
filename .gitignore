@@ -8,3 +8,4 @@ project/project
 *.log
 data
 bin/stage
+bin/docker/moon/stage

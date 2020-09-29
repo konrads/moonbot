@@ -33,7 +33,8 @@ object BotApp extends App {
   val bitmexApiKey      = conf.getString("bitmex.apiKey")
   val bitmexApiSecret   = conf.getString("bitmex.apiSecret")
 
-  val graphiteHost      = conf.optString("graphite.host")
+  // for deployment purposes, allow env var to overwrite "graphite_host" config param
+  val graphiteHost      = sys.env.get("graphite_host").orElse(conf.optString("graphite.host"))
   val graphitePort      = conf.optInt("graphite.port")
 
   val namespace              = conf.getString("bot.namespace")

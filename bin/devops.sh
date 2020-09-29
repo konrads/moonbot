@@ -96,39 +96,26 @@ set -e
 case "$trail_arg" in
   "moon-build")
     log_green "Staging minimal version of this repo..."
-    rm -rf $curr_dir/docker/moon/stage/src/moon
-    mkdir -p $curr_dir/docker/moon/stage/src/moon/moon
-    mkdir -p $curr_dir/docker/moon/stage/src/moon/tests
-    cp -r $curr_dir/../*.py $curr_dir/../*.yaml $curr_dir/../*.json $curr_dir/../*.txt $curr_dir/../Makefile $curr_dir/docker/moon/stage/src/moon
-    cp -r $curr_dir/../moon/*.py $curr_dir/../moon/*.pyx $curr_dir/docker/moon/stage/src/moon/moon
-    cp -r $curr_dir/../moon/pattern $curr_dir/docker/moon/stage/src/moon/moon
-    cp -r $curr_dir/../tests/* $curr_dir/docker/moon/stage/src/moon/tests
+    rm -rf $curr_dir/docker/moon/stage/src $curr_dir/docker/moon/stage/project
+    mkdir -p $curr_dir/docker/moon/stage/src
+    mkdir -p $curr_dir/docker/moon/stage/project
+    cp -r $curr_dir/../src $curr_dir/../project $curr_dir/../build.sbt $curr_dir/../*conf $curr_dir/docker/moon/stage
     cd $curr_dir/docker/moon
-    log_green "Setup auth jsons..."
-    authenticated_exchanges=( bittrex bitfinex poloniex binance )
-    for e in "${authenticated_exchanges[@]}"
-    do
-      if [[ -f ~/.catalyst/data/exchanges/$e/auth.json ]]; then
-        mkdir -p $curr_dir/docker/moon/stage/.catalyst/data/exchanges/$e
-        cp ~/.catalyst/data/exchanges/$e/auth.json $curr_dir/docker/moon/stage/.catalyst/data/exchanges/$e
-      fi
-    done
-    find stage
     log_green "Building moon docker image..."
-    docker build -t moon-algo .
+    docker build -t moon-bot .
     ;;
   "moon-run")
     log_green "Starting moon..."
-    docker run --rm -v $curr_dir:/host -it moon-algo
+    docker run --rm -v $curr_dir:/host -it moon-bot
     ;;
   "moon-debug")
-    container_id=`docker ps -a | grep moon-algo | grep "Up .* minutes" | awk '{ print $1 }'`
+    container_id=`docker ps -a | grep moon-bot | grep "Up .* minutes" | awk '{ print $1 }'`
     log_green "Attaching to running moon $container_id..."
     if [[ $container_id == "" ]]; then
-      log_red "No moon-algo container found!"
+      log_red "No moon-bot container found!"
       exit 2
     else
-      log_bold "...found moon-algo container: $container_id"
+      log_bold "...found moon-bot container: $container_id"
       docker exec -it $container_id bash
     fi
     ;;
@@ -164,9 +151,9 @@ case "$trail_arg" in
     curl -u $grafana_user:$grafana_pwd -d "{\"name\": \"Local Graphite\", \"type\": \"graphite\", \"url\": \"http://localhost:8080\", \"access\": \"proxy\", \"isDefault\": true}" -H "Content-Type: application/json" -X POST $grafana_url/api/datasources
     echo
     mkdir -p $curr_dir/stage
-    log_green "Deploying dashboard $curr_dir/stage/$pair-moon-dashboard-importable.json..."
-    cat $curr_dir/moon-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-moon-dashboard-importable.json
-    curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-moon-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
+    # log_green "Deploying dashboard $curr_dir/stage/$pair-moon-dashboard-importable.json..."
+    # cat $curr_dir/moon-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-moon-dashboard-importable.json
+    # curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-moon-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
     pair=xbtusd
     log_green "Deploying dashboard $curr_dir/stage/$pair-yabol-dashboard-importable.json..."
     cat $curr_dir/yabol-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-yabol-dashboard-importable.json

@@ -30,8 +30,8 @@ services:
     depends_on:
       - grafana
 
-  algo:
-    image: moon-algo
+  xbtusd-bot:
+    image: moon-bot
     restart: on-failure
     volumes:
       - .:/host
@@ -40,8 +40,6 @@ services:
       - grafana
     environment:
       graphite_host: grafana
-      CATALYST_LOG_LEVEL: 12  # NOTICE level
-      MOON_LOG_LEVEL: 9      # TRACE level
     depends_on:
       - grafana
       - grafana-bootstrap
@@ -51,4 +49,25 @@ services:
       options:
         max-size: '10m'
         max-file: '20'
-    # entrypoint: bash -c "sleep 20 && cd /src/moon && /opt/moon/bin/algo --trade-mode paper config.release.yaml opts-btc-usdt.release.json"
+    command: --config application-yabol-xbtusd.conf
+
+  ethusd-bot:
+    image: moon-bot
+    restart: on-failure
+    volumes:
+      - .:/host
+      - /var/log/moon:/var/log/moon
+    links:
+      - grafana
+    environment:
+      graphite_host: grafana
+    depends_on:
+      - grafana
+      - grafana-bootstrap
+    # limit rotating log file sizes, expect them in: /var/lib/docker/containers/[container-id]/[container-id]-json.log, as described in https://stackoverflow.com/questions/35414495/save-docker-compose-logs-to-a-file
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '20'
+    command: --config application-yabol-ethusd.conf
