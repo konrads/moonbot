@@ -76,8 +76,12 @@ class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, ws
     endOfLivePromise = sourceClose
 
     sinkClose.onComplete {
-      case Success(_) => throw ServerConnectionError("Server Connection closed gracefully", null)
-      case Failure(e) => throw ServerConnectionError(s"Server Connection closed with an error", e)
+      case Success(_) =>
+        log.warn("Server Connection closed gracefully")
+        run(wsConsume)
+      case Failure(e) =>
+        log.error(s"Server Connection closed with an error", e)
+        run(wsConsume)
     }
 
     val connected = upgradeResponse.flatMap { upgrade =>
