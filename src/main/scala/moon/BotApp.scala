@@ -6,6 +6,7 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorSystem, SupervisorStrategy}
 import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
+import moon.StoplossType._
 import moon.RunType._
 import org.rogach.scallop.ScallopConf
 import play.api.libs.json._
@@ -51,6 +52,12 @@ object BotApp extends App {
   val backtestCandleFile     = conf.optString("bot.backtestCandleFile")
   val useSynthetics          = conf.optBoolean("bot.useSynthetics").getOrElse(false)
   val takerFee               = conf.optDouble("bot.takerFee").getOrElse(.00075)
+  val stoplossType           = conf.optString("bot.stoplossType").map(_.toLowerCase) match {
+    case Some("static")   => Some(Static)
+    case Some("trailing") => Some(Trailing)
+    case Some(other)      => throw new Exception(s"Invalid bot.stoploss: $other")
+    case None             => None
+  }
 
   val runType                = conf.optString("bot.runType").map(_.toLowerCase) match {
     case Some("live-moon")      => LiveMoon
@@ -154,6 +161,7 @@ object BotApp extends App {
       |• stoplossMargin:       $stoplossMargin
       |• openWithMarket:       $openWithMarket
       |• runType:              $runType
+      |• stoplossType:         $stoplossType
       |• backtestEventDataDir: $backtestEventDataDir
       |• backtestCsvDir:       $backtestCsvDir
       |• backtestCandleFile:   $backtestCandleFile
@@ -174,6 +182,7 @@ object BotApp extends App {
       tradeQty = tradeQty,
       takerFee = takerFee,
       takeProfitMargin = takeProfitMargin, stoplossMargin = stoplossMargin,
+      stoplossType = stoplossType,
       metrics = metrics,
       openWithMarket = openWithMarket,
       useSynthetics = useSynthetics)
@@ -191,7 +200,8 @@ object BotApp extends App {
       useTrailingStoploss=useTrailingStoploss)
     val yabolBehaviorDsl=YabolOrchestrator.asDsl(
       strategy=strategy,
-      tradeQty=tradeQty)
+      tradeQty=tradeQty,
+      stoplossType=stoplossType)
 
     val orchestrator = if (runType == LiveMoon) {
       log.info(s"Instantiating Live Run...")

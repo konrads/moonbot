@@ -63,6 +63,11 @@ package object moon {
     val `10s`, `1m`, `15m`, `30m`, `1h`, `4h` = Value
   }
 
+  object StoplossType extends Enumeration {
+    type StoplossType = Value
+    val Static, Trailing = Value
+  }
+
   // adding "value" as per:
   // https://stackoverflow.com/questions/42275983/scala-how-to-define-an-enum-with-extra-attributes
   object Sentiment extends Enumeration {

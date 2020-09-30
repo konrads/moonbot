@@ -5,12 +5,13 @@ import moon.OrderSide._
 import moon.OrderStatus._
 import moon.OrderType._
 import moon.Sentiment._
+import moon.StoplossType._
 
 import scala.util.{Failure, Success}
 
 
 object YabolOrchestrator {
-  def asDsl(strategy: Strategy, tradeQty: Int, takerFee: Double = .00075, consoleDriven: Boolean = false): (YabolCtx, ActorEvent, org.slf4j.Logger) => (YabolCtx, Option[SideEffect]) = {
+  def asDsl(strategy: Strategy, tradeQty: Int, takerFee: Double = .00075, stoplossType: Option[StoplossType.Value], consoleDriven: Boolean = false): (YabolCtx, ActorEvent, org.slf4j.Logger) => (YabolCtx, Option[SideEffect]) = {
 
     def tick(ctx: YabolCtx, event: ActorEvent, log: org.slf4j.Logger): (YabolCtx, Option[SideEffect]) = (ctx, event) match {
       // Common states/events
@@ -36,16 +37,16 @@ object YabolOrchestrator {
         if (strategyRes.sentiment == Bull) {
           val effect = OpenInitOrder(Buy, Market, uuid, tradeQty)
           log.info(s"Idle: starting afresh with $LongDir order: ${effect.clOrdID} @~ ${ledger.tradeRollups.latestPrice}...")
-          (YabolOpenPositionCtx(dir = LongDir, ledger = ledger, qty = tradeQty, clOrdID = effect.clOrdID), Some(effect))
+          (YabolOpenPositionCtx(dir = LongDir, ledger = ledger, qty = tradeQty, clOrdID = effect.clOrdID, stoplossDelta = strategyRes.stoplossDelta), Some(effect))
         } else if (strategyRes.sentiment == Bear) {
           val effect = OpenInitOrder(Sell, Market, uuid, tradeQty)
           log.info(s"Idle: starting afresh with $ShortDir order: ${effect.clOrdID} @~ ${ledger.tradeRollups.latestPrice}...")
-          (YabolOpenPositionCtx(dir = ShortDir, ledger = ledger, qty = tradeQty, clOrdID = effect.clOrdID), Some(effect))
+          (YabolOpenPositionCtx(dir = ShortDir, ledger = ledger, qty = tradeQty, clOrdID = effect.clOrdID, stoplossDelta = strategyRes.stoplossDelta), Some(effect))
         } else
           (ctx, None)
 
       // in position
-      case (ctx2@YabolOpenPositionCtx(dir, clOrdID, qty, ledger), e@(RestEvent(Success(_)) | WsEvent(_))) =>
+      case (ctx2@YabolOpenPositionCtx(dir, clOrdID, qty, stoplossDelta, ledger), e@(RestEvent(Success(_)) | WsEvent(_))) =>
         val (ledger2, clOrdIDMatch) = e match {
           case RestEvent(Success(o:Order))   => (ledger.record(o), o.clOrdID.contains(clOrdID))
           case RestEvent(Success(os:Orders)) => (ledger.record(os), os.containsClOrdIDs(clOrdID))
@@ -59,7 +60,7 @@ object YabolOrchestrator {
           order.ordStatus match {
             case Filled =>
               log.info(s"Open $dir: filled orderID: ${order.fullOrdID} @ ${order.price} :: ${order.timestamp}")
-              (YabolWaitingCtx(dir = dir, qty = qty, openPrice = order.price, ledger = ledger2), None)
+              (YabolWaitingCtx(dir = dir, qty = qty, openPrice = order.price, stoplossDelta = stoplossDelta, peak = order.price, ledger = ledger2), None)
 //              // wait for strategy to signal exit
 //              val strategyRes = strategy.strategize(ledger2)
 //              if (dir == LongDir && strategyRes.sentiment != Bull) {
@@ -82,7 +83,7 @@ object YabolOrchestrator {
           (ctx2.copy(ledger = ledger2), None)
 
       // waiting for change in strategy
-      case (ctx2@YabolWaitingCtx(_, _, _, ledger), e@(RestEvent(Success(_)) | WsEvent(_))) =>
+      case (ctx2@YabolWaitingCtx(_, _, _, _, _, ledger), e@(RestEvent(Success(_)) | WsEvent(_))) =>
         val ledger2 = e match {
           case RestEvent(Success(x)) => ledger.record(x)
           case WsEvent(x)            => ledger.record(x)
@@ -90,20 +91,35 @@ object YabolOrchestrator {
         }
         (ctx2.copy(ledger = ledger2), None)
 
-      case (ctx2@YabolWaitingCtx(dir, qty, openPrice, ledger), On1h(_ts)) =>
+      case (ctx2@YabolWaitingCtx(dir, qty, openPrice, stoplossDelta, peak, ledger), On1h(_ts)) =>
         val strategyRes = strategy.strategize(ledger, true)
-        if (dir == LongDir && strategyRes.sentiment != Bull) {
-          log.info(s"Closing $dir: $qty @~ ${ledger.tradeRollups.latestPrice}")
+        val latestPrice = ledger.tradeRollups.latestPrice
+        val peak2 = if (dir == LongDir && latestPrice > peak)
+          latestPrice
+        else if (dir == ShortDir && latestPrice < peak)
+          latestPrice
+        else
+          peak
+        val stoplossTriggered = (stoplossType, stoplossDelta, strategyRes.stoplossDelta, dir) match {
+          case (Some(Static), Some(openDelta), _, LongDir)      => latestPrice < openPrice - openDelta
+          case (Some(Static), Some(openDelta), _, ShortDir)     => latestPrice > openPrice + openDelta
+          case (Some(Trailing), _, Some(latestDelta), LongDir)  => latestPrice < peak2 - latestDelta
+          case (Some(Trailing), _, Some(latestDelta), ShortDir) => latestPrice > peak2 + latestDelta
+          case _                                                => false
+        }
+
+        if (dir == LongDir && (strategyRes.sentiment != Bull || stoplossTriggered)) {
+          log.info(s"Closing $dir: $qty @~ ${ledger.tradeRollups.latestPrice} ${if (stoplossTriggered) "due to stoploss" else ""}")
           val effect = OpenInitOrder(Sell, Market, uuid, qty)
           val ctx3 = YabolClosePositionCtx(dir, qty, openPrice, effect.clOrdID, ledger)
           (ctx3, Some(effect))
-        } else if (dir == ShortDir && strategyRes.sentiment != Bear) {
-          log.info(s"Closing $dir: $qty @~ ${ledger.tradeRollups.latestPrice}")
+        } else if (dir == ShortDir && (strategyRes.sentiment != Bear || stoplossTriggered)) {
+          log.info(s"Closing $dir: $qty @~ ${ledger.tradeRollups.latestPrice} ${if (stoplossTriggered) "due to stoploss" else ""}")
           val effect = OpenInitOrder(Buy, Market, uuid, qty)
           val ctx3 = YabolClosePositionCtx(dir, qty, openPrice, effect.clOrdID, ledger)
           (ctx3, Some(effect))
         } else {
-          (ctx2.copy(ledger = ledger), None)
+          (ctx2.copy(ledger = ledger, peak = peak2), None)
         }
 
       case (ctx2@YabolClosePositionCtx(dir, qty, openPrice, clOrdID, ledger), e@(RestEvent(Success(_)) | WsEvent(_))) =>

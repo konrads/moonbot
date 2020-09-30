@@ -20,6 +20,7 @@ class ExchangeSim(
   tradeQty: Int,
   takerFee: Double,
   takeProfitMargin: Double, stoplossMargin: Double,
+  stoplossType: Option[StoplossType.Value],
   openWithMarket: Boolean = false,
   useTrailingStoploss: Boolean = false,
   useSynthetics: Boolean = false) {
@@ -53,6 +54,7 @@ class ExchangeSim(
         strategy,
         tradeQty,
         takerFee,
+        stoplossType,
         true)
       val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((YabolIdleCtx(Ledger()): YabolCtx, ExchangeCtx())) {
         case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, true, WsEvent(event))

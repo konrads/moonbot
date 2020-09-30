@@ -30,8 +30,8 @@ sealed trait YabolCtx extends LedgerAwareCtx {
 }
 
 case class YabolIdleCtx(ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
-case class YabolOpenPositionCtx(dir: Dir.Value, clOrdID: String, qty: Double, ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
-case class YabolWaitingCtx(dir: Dir.Value, qty: Double, openPrice: Double, ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
+case class YabolOpenPositionCtx(dir: Dir.Value, clOrdID: String, qty: Double, stoplossDelta: Option[Double], ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
+case class YabolWaitingCtx(dir: Dir.Value, qty: Double, openPrice: Double, stoplossDelta: Option[Double]=None, peak: Double = 0.0, ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
 case class YabolClosePositionCtx(dir: Dir.Value, qty: Double, openPrice: Double, clOrdID: String, ledger: Ledger) extends YabolCtx { def withLedger(l: Ledger) = copy(ledger = l) }
 
 
