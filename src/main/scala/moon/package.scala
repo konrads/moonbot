@@ -208,6 +208,16 @@ package object moon {
   def tillEOH: FiniteDuration =
     FiniteDuration(3600000 - System.currentTimeMillis % 3600000, TimeUnit.MILLISECONDS)
 
+  def createBackoff: () => Int = {
+    val delays = (LazyList(250, 500, 1000, 2000, 4000, 8000) ++ LazyList.continually(16000)).iterator
+    def _backoff() = {
+      val sleep = delays.next()
+      Thread.sleep(sleep)
+      sleep
+    }
+    _backoff
+  }
+
   def pretty(s: => String, sentiment: Sentiment.Value=Sentiment.Neutral, shouldColour: Boolean=false): String = (sentiment, shouldColour) match {
     case (_, false) | (Sentiment.Neutral, _) => s
     case (Sentiment.Bull, true)              => s"$GREEN$s$RESET"

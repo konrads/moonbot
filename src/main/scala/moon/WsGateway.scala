@@ -17,6 +17,8 @@ import scala.util.{Failure, Success}
 class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, wssSubscriptions: Seq[String])(implicit val system: ActorSystem) {
   private val log = Logger[WsGateway]
 
+  private val backoff = createBackoff
+
   private var endOfLivePromise: Promise[Option[Message]] = null // for the purpose of killing the WS connection
 
   def run(wsConsume: PartialFunction[JsResult[WsModel], Unit]): Unit = {
@@ -77,10 +79,12 @@ class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, ws
 
     sinkClose.onComplete {
       case Success(_) =>
-        log.warn("Server Connection closed gracefully")
+        val backoffSleep = backoff()
+        log.warn(s"Server Connection closed gracefully, slept for ${backoffSleep}ms")
         run(wsConsume)
       case Failure(e) =>
-        log.error(s"Server Connection closed with an error", e)
+        val backoffSleep = backoff()
+        log.error(s"Server Connection closed with an error, slept for ${backoffSleep}ms", e)
         run(wsConsume)
     }
 
