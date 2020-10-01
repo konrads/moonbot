@@ -240,8 +240,7 @@ case "$trail_arg" in
     sudo bin/devops.sh moon-build
     log_bold "...moon docker-compose service"
     sudo cp ~/src/moonbot/bin/moon.service /etc/systemd/system/moon.service
-    sudo systemctl start moon
-    sudo systemctl enable docker
+    sudo systemctl restart moon
     sudo systemctl enable moon
    ;;
   *)
