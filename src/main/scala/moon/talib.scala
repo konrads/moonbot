@@ -196,8 +196,10 @@ object talib {
   def sma(xs: Seq[Double], period: Int): Double =
     if (xs.isEmpty)
       0
-    else
-      xs.takeRight(period).sum / period
+    else {
+      val xs2 = xs.takeRight(period)
+      xs2.sum / xs2.size
+    }
 
   // https://www.investopedia.com/ask/answers/122314/what-exponential-moving-average-ema-formula-and-how-ema-calculated.asp
   // https://www.investopedia.com/articles/trading/10/simple-exponential-moving-averages-compare.asp

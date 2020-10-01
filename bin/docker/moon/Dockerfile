@@ -4,7 +4,7 @@ RUN mkdir /var/log/moon
 RUN cd /src && sbt assembly
 ENTRYPOINT sleep 30 && cd /src && java -jar ./target/scala-2.13/MoonBot-assembly-0.1.jar
 # provide in command:
-# --config application-yabol-xbtusd.conf
+# --config application-macdoverma-xbtusd.conf
 # or
-# --config application-yabol-ethusd.conf
+# --config application-macdoverma-ethusd.conf
 

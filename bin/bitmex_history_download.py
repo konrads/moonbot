@@ -10,6 +10,7 @@ import pandas
 
 ROOT_URL = 'https://s3-eu-west-1.amazonaws.com/public.bitmex.com/data/trade'
 ROOT_DOWNLOAD_DIR = '%s/MyDocuments/bitmex' % os.environ['HOME']
+PERIODS = {'10S': 10, '1M': 60, '15M': 15 * 60, '30M': 30 * 60, '1H': 60 * 60, '4H': 4 * 60 * 60, '1D': 60 * 60 * 24}
 
 
 def download(start_date, end_date=None, download_target_dir=None):
@@ -78,7 +79,6 @@ if __name__ == '__main__':
                     print('...found no %s lines in %s' % (pair, in_filename))
     elif command == 'ROLLUP':
         # expecting headers: 'timestamp,symbol,side,size,price,tickDirection,trdMatchID,grossValue,homeNotional,foreignNotional
-        periods = {'5S': 5, '10S': 10, '1M': 60, '15M': 15 * 60, '30M': 30 * 60, '1H': 60 * 60, '4H': 4 * 60 * 60, '1D': 60 * 60 * 24}
         pair = sys.argv[2].upper()
         qf_exploded_dir = '%s/%s' % (download_exploded_dir, pair)
 
@@ -97,7 +97,7 @@ if __name__ == '__main__':
             df2 = df[df.symbol == pair][['timestamp', 'size', 'price']].copy()
             df2.index = pandas.to_datetime(df2['timestamp'], format='%Y-%m-%dD%H:%M:%S.%f')
             del df2['timestamp']
-            for period_name, period in periods.items():
+            for period_name, period in PERIODS.items():
                 df2['period'] = (df2.index.astype(int) / (period * 1000000000)).astype(int)
                 df_period = df2.groupby('period').agg({'size': 'sum', 'price': ['first', 'last', 'max', 'min', 'mean']})
                 df_period.columns = ['volume', 'open', 'close', 'high', 'low', 'vwap']

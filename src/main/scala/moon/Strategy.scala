@@ -221,7 +221,7 @@ class MACDOverMAStrategy(val config: Config) extends Strategy {
 }
 
 
-class MACDOverMAStrategy2(val config: Config) extends Strategy {
+@deprecated class MACDOverMAStrategy2(val config: Config) extends Strategy {
   // duplicating pinescript:
   // macd_bull = crossover(macd, signal)
   // macd_bear = crossunder(macd, signal)
