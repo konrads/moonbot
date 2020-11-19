@@ -10,7 +10,8 @@ import pandas
 
 ROOT_URL = 'https://s3-eu-west-1.amazonaws.com/public.bitmex.com/data/trade'
 ROOT_DOWNLOAD_DIR = '%s/MyDocuments/bitmex' % os.environ['HOME']
-PERIODS = {'10S': 10, '1M': 60, '15M': 15 * 60, '30M': 30 * 60, '1H': 60 * 60, '4H': 4 * 60 * 60, '1D': 60 * 60 * 24}
+# PERIODS = {'10S': 10, '1M': 60, '15M': 15 * 60, '30M': 30 * 60, '1H': 60 * 60, '4H': 60 * 60 * 4, '1D': 60 * 60 * 24}
+PERIODS = {'15M': 15 * 60, '30M': 30 * 60, '1H': 60 * 60, '4H': 60 * 60 * 4, '1D': 60 * 60 * 24}
 
 
 def download(start_date, end_date=None, download_target_dir=None):
@@ -22,16 +23,19 @@ def download(start_date, end_date=None, download_target_dir=None):
     while curr_date <= end_date:
         filename = '%s.csv.gz' % datetime.datetime.strftime(curr_date, '%Y%m%d')
         qf_filename = '%s/%s' % (download_target_dir, filename)
-        url = '%s/%s' % (ROOT_URL, filename)
         curr_date += delta
-        print('...fetching %s -> %s' % (url, qf_filename))
-        try:
-            resp = requests.get(url)
-            assert resp.status_code == 200, 'Unexpected status code: %s' % resp.status_code
-            with open(qf_filename, 'wb') as out_f:
-                out_f.write(resp.content)
-        except Exception as e:
-            print('Failed to download due to %s' % e)
+        if os.path.exists(qf_filename):
+          print('...skipping existing %s' % qf_filename)
+        else:
+          url = '%s/%s' % (ROOT_URL, filename)
+          print('...fetching %s -> %s' % (url, qf_filename))
+          try:
+              resp = requests.get(url)
+              assert resp.status_code == 200, 'Unexpected status code: %s' % resp.status_code
+              with open(qf_filename, 'wb') as out_f:
+                  out_f.write(resp.content)
+          except Exception as e:
+              print('Failed to download due to %s' % e)
 
 
 if __name__ == '__main__':
@@ -67,16 +71,19 @@ if __name__ == '__main__':
         qf_exploded_dir = '%s/%s' % (download_exploded_dir, pair)
         os.makedirs(qf_exploded_dir, exist_ok=True)
         for filename in sorted(os.listdir(download_dir)):
-            in_filename = '%s/%s' % (download_dir, filename)
             out_filename = '%s/%s' % (qf_exploded_dir, filename.replace('.gz', ''))
-            with gzip.open(in_filename, 'r') as in_f:
-                pair_contents = [l.decode('utf-8') for l in in_f.readlines() if pair_with_commas in l.decode('utf-8')]
-                if pair_contents:
-                    print('...found %d %s lines in %s -> %s' % (len(pair_contents), pair, in_filename, out_filename))
-                    with open(out_filename, 'w') as out_f:
-                        out_f.writelines(pair_contents)
-                else:
-                    print('...found no %s lines in %s' % (pair, in_filename))
+            if os.path.exists(out_filename):
+              print('...skipping already existing %s' % out_filename)
+            else:
+              in_filename = '%s/%s' % (download_dir, filename)
+              with gzip.open(in_filename, 'r') as in_f:
+                  pair_contents = [l.decode('utf-8') for l in in_f.readlines() if pair_with_commas in l.decode('utf-8')]
+                  if pair_contents:
+                      print('...found %d %s lines in %s -> %s' % (len(pair_contents), pair, in_filename, out_filename))
+                      with open(out_filename, 'w') as out_f:
+                          out_f.writelines(pair_contents)
+                  else:
+                      print('...found no %s lines in %s' % (pair, in_filename))
     elif command == 'ROLLUP':
         # expecting headers: 'timestamp,symbol,side,size,price,tickDirection,trdMatchID,grossValue,homeNotional,foreignNotional
         pair = sys.argv[2].upper()
