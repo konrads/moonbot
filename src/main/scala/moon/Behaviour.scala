@@ -49,12 +49,9 @@ object Behaviour {
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
               case x:OpenInitOrder =>
                 throw new Exception(s"Do not cater for non Limit/Market order: $x")
-              case OpenTakeProfitStoplossOrders(side, qty, takeProfitClOrdID, takeProfitLimit, stoplossClOrdID, stoplossMarginOpt, stoplossPegOpt) =>
+              case OpenTakeProfitOrder(side, qty, takeProfitClOrdID, takeProfitLimit) =>
                 val fut = restGateway.placeBulkOrdersAsync(OrderReqs(
-                  Seq(OrderReq.asLimitOrder(side, qty, takeProfitLimit, true, clOrdID = Some(takeProfitClOrdID))) ++
-                    stoplossMarginOpt.map(stoplossMargin => OrderReq.asStopOrder(side, qty, stoplossMargin, true, clOrdID = Some(stoplossClOrdID))).toSeq ++
-                    stoplossPegOpt.map(stoplossPeg => OrderReq.asTrailingStopOrder(side, qty, stoplossPeg, true, clOrdID = Some(stoplossClOrdID))).toSeq
-                ))
+                  Seq(OrderReq.asLimitOrder(side, qty, takeProfitLimit, true, clOrdID = Some(takeProfitClOrdID)))))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
 
             }
@@ -334,15 +331,10 @@ object Behaviour {
         val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders + (clOrdID -> o2))
         val event = RestEvent(Success(o2.toRest))
         (exchangeCtx2, Seq(event))
-      case OpenTakeProfitStoplossOrders(side, qty, takeProfitClOrdID, takeProfitLimit, stoplossClOrdID, stoplossMargin, stoplossPeg) =>
+      case OpenTakeProfitOrder(side, qty, takeProfitClOrdID, takeProfitLimit) =>
         val to = ExchangeOrder(orderID=uuid, clOrdID=takeProfitClOrdID, qty=qty, price=Some(takeProfitLimit), side=side, status=New, ordType=Limit, timestamp=new DateTime(exchangeCtx.lastTs))
-        val so = ExchangeOrder(orderID=uuid, clOrdID=stoplossClOrdID, qty=qty, price=stoplossMargin, side=side, status=New, ordType=Stop, timestamp=new DateTime(exchangeCtx.lastTs),
-          longHigh=if (stoplossPeg.isDefined && side == Sell) Some(exchangeCtx.bid) else None,
-          shortLow=if (stoplossPeg.isDefined && side == Buy)  Some(exchangeCtx.ask) else None,
-          trailingPeg=stoplossPeg.map(math.abs)
-        )
-        val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders ++ Map(to.clOrdID -> to, so.clOrdID -> so))
-        val event = RestEvent(Success(Orders(Seq(to.toRest, so.toRest))))
+        val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders ++ Map(to.clOrdID -> to))
+        val event = RestEvent(Success(Orders(Seq(to.toRest))))
         (exchangeCtx2, Seq(event))
     }
   }

@@ -189,7 +189,7 @@ object Cli extends App {
       log.info(s"monitoring ledger")
       import scala.jdk.CollectionConverters._
       val bbandsConfig = ConfigFactory.parseMap(Map.empty[String, Any].asJava)
-      val strategy = new BBandsStrategy(bbandsConfig)
+      val strategy = new PermaBullStrategy(bbandsConfig)
       def consumeWs(ledger: Ledger=Ledger()): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
         case WsEvent(wsData) =>
           val ledger2 = ledger.record(wsData)

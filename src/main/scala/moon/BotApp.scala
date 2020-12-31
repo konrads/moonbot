@@ -6,7 +6,7 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorSystem, SupervisorStrategy}
 import com.typesafe.config._
 import com.typesafe.scalalogging.Logger
-import moon.StoplossType._
+import moon.Dir._
 import moon.RunType._
 import org.rogach.scallop.ScallopConf
 import play.api.libs.json._
@@ -43,96 +43,28 @@ object BotApp extends App {
   val flushSessionOnRestart  = conf.getBoolean("bot.flushSessionOnRestart")
   val tradeQty               = conf.getInt("bot.tradeQty")
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
-  val takeProfitMargin       = conf.optDouble("bot.takeProfitMargin").getOrElse(20.0)
-  val stoplossMargin         = conf.optDouble("bot.stoplossMargin").getOrElse(10.0)
-  val openWithMarket         = conf.optBoolean("bot.openWithMarket").getOrElse(false)
-  val useTrailingStoploss    = conf.optBoolean("bot.useTrailingStoploss").getOrElse(false)
+  val takeProfitPerc         = conf.optDouble("bot.takeProfitPerc").getOrElse(0.1)
   val backtestEventDataDir   = conf.optString("bot.backtestEventDataDir")
   val backtestCsvDir         = conf.optString("bot.backtestCsvDir")
   val backtestCandleFile     = conf.optString("bot.backtestCandleFile")
   val useSynthetics          = conf.optBoolean("bot.useSynthetics").getOrElse(false)
   val takerFee               = conf.optDouble("bot.takerFee").getOrElse(.00075)
-  val stoplossType           = conf.optString("bot.stoplossType").map(_.toLowerCase) match {
-    case Some("static")   => Some(Static)
-    case Some("trailing") => Some(Trailing)
-    case Some(other)      => throw new Exception(s"Invalid bot.stoploss: $other")
-    case None             => None
-  }
+  val dir                    = conf.optString("bot.dir").map(Dir.withName).getOrElse(LongDir)
+  val tradePoolQty           = conf.optDouble("bot.tradePoolQty").getOrElse(.5)
+  val tierCnt                = conf.optInt("bot.tierCnt").getOrElse(5)
+  val tierPricePerc          = conf.optDouble("bot.tierPricePerc").getOrElse(0.95)
+  val tierQtyPerc            = conf.optDouble("bot.tierQtyPerc").getOrElse(0.8)
 
   val runType                = conf.optString("bot.runType").map(_.toLowerCase) match {
-    case Some("live-moon")      => LiveMoon
-    case Some("live-yabol")     => LiveYabol
-    case Some("dry-moon")       => DryMoon
-    case Some("dry-yabol")      => DryYabol
-    case Some("backtest-moon")  => BacktestMoon
-    case Some("backtest-yabol") => BacktestYabol
-    case Some(other)            => throw new Exception(s"Invalid bot.runType: $other")
-    case None                   => LiveMoon
+    case Some("live")        => Live
+    case Some("dry")         => Dry
+    case Some("backtest")    => Backtest
+    case Some(other)         => throw new Exception(s"Invalid bot.runType: $other")
+    case None                => Live
   }
-  assert(runType != RunType.BacktestMoon || backtestEventDataDir.isDefined || backtestCsvDir.isDefined || backtestCandleFile.isDefined)
+  assert(runType != RunType.Backtest || backtestEventDataDir.isDefined || backtestCsvDir.isDefined || backtestCandleFile.isDefined)
 
   val strategyName = conf.getString("strategy.selection")
-
-  val notLiveWarning = runType match {
-    case LiveMoon =>
-      """|
-         |                    -=-=- MOON -=-=-
-         |
-         |""".stripMargin
-    case LiveYabol =>
-      """|
-         |                    -=-=- YABOL -=-=-
-         |
-         |""".stripMargin
-    case DryMoon =>
-      s"""
-         |                            ██
-         |                          ██  ██
-         |                        ██      ██
-         |                       ██  DRY   ██
-         |                      ██          ██
-         |                     ██    RUN!    ██
-         |                    ██              ██
-         |                     ████████████████
-         |
-         |""".stripMargin
-    case DryYabol =>
-      s"""
-         |                            ██
-         |                          ██  ██
-         |                        ██      ██
-         |                       ██  YABOL ██
-         |                      ██   DRY    ██
-         |                     ██    RUN!    ██
-         |                    ██              ██
-         |                     ████████████████
-         |
-         |""".stripMargin
-    case BacktestMoon =>
-      s"""
-         |                            ██
-         |                          ██  ██
-         |                        ██      ██
-         |                       ██  BACK  ██
-         |                      ██   TEST   ██
-         |                     ██    RUN!    ██
-         |                    ██              ██
-         |                     ████████████████
-         |
-         |""".stripMargin
-    case BacktestYabol =>
-      s"""
-         |                            ██
-         |                          ██  ██
-         |                        ██      ██
-         |                       ██  YABOL ██
-         |                      ██   BACK   ██
-         |                     ██    TEST    ██
-         |                    ██     RUN!     ██
-         |                     ████████████████
-         |
-         |""".stripMargin
-  }
   log.info(
     s"""
       |
@@ -146,8 +78,8 @@ object BotApp extends App {
       |░      ░   ░ ░ ░ ▒  ░ ░ ░ ▒     ░   ░ ░     ░    ░ ░ ░ ░ ▒    ░
       |       ░       ░ ░      ░ ░           ░     ░          ░ ░
       |                                                 ░
-      |$notLiveWarning
       |Initialized with params...
+      |• runType:              $runType
       |• bitmexUrl:            $bitmexUrl
       |• bitmexWsUrl:          $bitmexWsUrl
       |• wssSubscriptions:     ${wssSubscriptions.mkString(",")}
@@ -157,11 +89,7 @@ object BotApp extends App {
       |• tradeQty:             $tradeQty
       |• takerFee:             $takerFee
       |• restSyncTimeoutMs:    $restSyncTimeoutMs
-      |• takeProfitMargin:     $takeProfitMargin
-      |• stoplossMargin:       $stoplossMargin
-      |• openWithMarket:       $openWithMarket
-      |• runType:              $runType
-      |• stoplossType:         $stoplossType
+      |• takeProfitPerc:       $takeProfitPerc
       |• backtestEventDataDir: $backtestEventDataDir
       |• backtestCsvDir:       $backtestCsvDir
       |• backtestCandleFile:   $backtestCandleFile
@@ -170,40 +98,32 @@ object BotApp extends App {
 
   val metrics = for { h <- graphiteHost; p <- graphitePort } yield Metrics(h, p, namespace)
   val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig, parentConfig = conf.getObject(s"strategy").toConfig)
+  val tierCalc = TierCalcImpl(dir = dir, tradePoolQty = tradePoolQty, tierCnt = tierCnt, tierPricePerc = tierPricePerc, tierQtyPerc = tierQtyPerc)
 
-  if (runType == BacktestMoon || runType == BacktestYabol) {
+  if (runType == Backtest) {
     log.info(s"Instantiating $runType on $backtestEventDataDir or $backtestCandleFile...")
     val sim = new ExchangeSim(
-      runType = runType,
       eventDataDir = backtestEventDataDir.orNull,
       eventCsvDir = backtestCsvDir.orNull,
       candleFile = backtestCandleFile.orNull,
       strategy = strategy,
-      tradeQty = tradeQty,
-      takerFee = takerFee,
-      takeProfitMargin = takeProfitMargin, stoplossMargin = stoplossMargin,
-      stoplossType = stoplossType,
+      tierCalc = tierCalc,
+      dir = dir,
+      takeProfitPerc = takeProfitPerc,
       metrics = metrics,
-      openWithMarket = openWithMarket,
       useSynthetics = useSynthetics)
     val (finalCtx, finalExchangeCtx) = sim.run()
     log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} ($$${finalCtx.ledger.ledgerMetrics.runningPandl * finalCtx.ledger.tradeRollups.latestPrice}) over ${finalCtx.ledger.myTrades.size} trades")
   } else {
     implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
     val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, wssSubscriptions=wssSubscriptions)
-    val behaviorDsl=MoonOrchestrator.asDsl(
+    val behaviorDsl=Orchestrator.asDsl(
       strategy=strategy,
-      tradeQty=tradeQty,
-      takeProfitMargin=takeProfitMargin,
-      stoplossMargin=stoplossMargin,
-      openWithMarket=openWithMarket,
-      useTrailingStoploss=useTrailingStoploss)
-    val yabolBehaviorDsl=YabolOrchestrator.asDsl(
-      strategy=strategy,
-      tradeQty=tradeQty,
-      stoplossType=stoplossType)
+      tierCalc = tierCalc,
+      takeProfitPerc=takeProfitPerc,
+      dir=dir)
 
-    val orchestrator = if (runType == LiveMoon) {
+    val orchestrator = if (runType == Live) {
       log.info(s"Instantiating Live Run...")
       Behaviour.asLiveBehavior(
         restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
@@ -211,28 +131,21 @@ object BotApp extends App {
         flushSessionOnRestart=flushSessionOnRestart,
         behaviorDsl=behaviorDsl,
         initCtx=InitCtx(Ledger()))
-    } else if (runType == LiveYabol) {
-      log.info(s"Instantiating Live Yabol Run...")
+    } else if (runType == Dry) {
+      log.info(s"Instantiating Dry Run...")
       Behaviour.asLiveBehavior(
         restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
         metrics=metrics,
         flushSessionOnRestart=flushSessionOnRestart,
-        behaviorDsl=yabolBehaviorDsl,
-        initCtx=YabolIdleCtx(Ledger()))
-    } else if (runType == DryMoon) {
-      log.info(s"Instantiating Dry Run...")
+        behaviorDsl=behaviorDsl,
+        initCtx=IdleCtx(Ledger()))
+    } else if (runType == Backtest) {
+      log.info(s"Instantiating Backtest Run...")
       Behaviour.asDryBehavior(
         metrics=metrics,
         behaviorDsl=behaviorDsl,
         initCtx=InitCtx(Ledger()),
         askBidFromTrades=false)
-    } else if (runType == DryYabol) {
-      log.info(s"Instantiating Dry Yabol Run...")
-      Behaviour.asDryBehavior(
-        metrics=metrics,
-        behaviorDsl=yabolBehaviorDsl,
-        initCtx=YabolIdleCtx(Ledger()),
-        askBidFromTrades=true)
     } else
       ???
 

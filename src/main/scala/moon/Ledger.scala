@@ -127,8 +127,8 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
   lazy val myOrders: Seq[LedgerOrder] = ledgerOrdersByID.values.filter(_.myOrder).toVector
   lazy val myTrades: Seq[LedgerOrder] = myOrders.filter(_.ordStatus == Filled)
   lazy val isMinimallyFilled: Boolean = tradeRollups.nonEmpty || orderBookSummary != null
-  @deprecated lazy val bidPrice: Double = orderBookSummary.bid
-  @deprecated lazy val askPrice: Double = orderBookSummary.ask
+  lazy val bidPrice: Double = orderBookSummary.bid
+  lazy val askPrice: Double = orderBookSummary.ask
 
   def withMetrics(makerRebate: Double=.00025, takerFee: Double=.00075, strategy: Strategy): Ledger = {
     val volume = tradeRollups.withForecast(`1m`).forecast.volume.lastOption.getOrElse(0)

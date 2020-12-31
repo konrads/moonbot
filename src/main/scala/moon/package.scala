@@ -49,7 +49,7 @@ package object moon {
 
   object RunType extends Enumeration {
     type RunType = Value
-    val LiveMoon, LiveYabol, DryMoon, DryYabol, BacktestMoon, BacktestYabol = Value
+    val Live, Dry, Backtest = Value
   }
 
   object Dir extends Enumeration {
@@ -80,12 +80,9 @@ package object moon {
 
   object TradeLifecycle extends Enumeration {
     type TradeLifecycle = Value
-    val Waiting = Value                   // issued new order, awaiting confirmation of fill/postOnlyFailure(if in open)/(cancel if in close)
-    val IssuingNew = Value                // awaiting order creation confirmation
-    val IssuingOpenAmend = Value          // awaiting amend confirmation
-    val IssuingOpenCancel = Value         // awaiting cancellation confirmation
-    val IssuingTakeProfitCancel = Value   // awaiting takProfit cancel confirmation
-    val IssuingStoplossCancel = Value     // awaiting stoploss cancel confirmation
+    val IssuingNew = Value            // awaiting order creation confirmation
+    val IssuingAmend = Value          // awaiting amend confirmation
+    val IssuingCancel = Value         // awaiting cancel confirmation
   }
 
   val dateFormat = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ").withZone(DateTimeZone.UTC)

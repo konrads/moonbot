@@ -2,6 +2,7 @@ package moon
 
 import com.typesafe.config.Config
 import moon.Behaviour.{ExchangeCtx, ExchangeOrder, maybeFill, paperExchangeSideEffectHandler}
+import moon.Dir.LongDir
 import moon.ModelsSpec._
 import moon.OrderSide._
 import moon.OrderStatus._
@@ -26,13 +27,12 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
     eCtx.orders.values.count(o => o.status == status && o.side == side && o.ordType == ordType && o.price.contains(price) && o.qty == qty) shouldBe 1
   }
 
-  def runSim(strategy: TestStrategy, openWithMarket: Boolean, useTrailingStoploss: Boolean, sentimentsAndEvents: (Sentiment.Value, String)*): (Ctx, ExchangeCtx) = {
-    val behaviorDsl = MoonOrchestrator.asDsl(
-      strategy,
-      100,
-      10, 5,
-      openWithMarket,
-      useTrailingStoploss)
+  def runSim(strategy: TestStrategy, sentimentsAndEvents: (Sentiment.Value, String)*): (Ctx, ExchangeCtx) = {
+    val behaviorDsl = Orchestrator.asDsl(
+      strategy=strategy,
+      tierCalc=TierCalcImpl(dir=LongDir),
+      takeProfitPerc=0.001,
+      dir=LongDir)
 
     /* FIXME: for debug only, should remove!!! */
     def behaviorDsl_dbg(ctx: Ctx, event: ActorEvent, log: org.slf4j.Logger): (Ctx, Option[SideEffect]) = {
@@ -51,7 +51,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   }
 
   "Orchestrator" should "work with Bull Market orders" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bull), true, false,
+    val (ctx, eCtx) = runSim(new TestStrategy(Bull),
       (Bull, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
       (Bull, wsTrade(120, 10, timestampL = startMs + minMs)),
       (Bull, wsOrderBook10(110, 10, 115, 15, timestampL = startMs + 2 * minMs)),
@@ -64,7 +64,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   }
 
   it should "work with Bear Market orders" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bear), true, false,
+    val (ctx, eCtx) = runSim(new TestStrategy(Bear),
       (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
       (Bear, wsTrade(120, 10, timestampL = startMs + minMs)),
       (Neutral, wsOrderBook10(110, 10, 115, 15, timestampL = startMs + 2 * minMs)),
@@ -77,7 +77,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   }
 
   it should "work with vanilla Bull Stop orders" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bull), false, false,
+    val (ctx, eCtx) = runSim(new TestStrategy(Bull),
       (Bull, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
       (Bull, wsTrade(101, 10, timestampL = startMs + minMs)),
       (Bull, wsOrderBook10(95, 10, 100, 15, timestampL = startMs + 2 * minMs)), // trigger buy, sets stoploss at...
@@ -91,7 +91,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   }
 
   it should "work with vanilla Bear Stop orders" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bear), false, false,
+    val (ctx, eCtx) = runSim(new TestStrategy(Bear),
       (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
       (Bear, wsTrade(99, 10, timestampL = startMs + minMs)),
       (Bear, wsOrderBook10(105, 10, 115, 15, timestampL = startMs + 2 * minMs)), // trigger buy, sets stoploss at...
@@ -105,7 +105,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   }
 
   it should "work with init trailing Bull stoploss" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bull), false, true,
+    val (ctx, eCtx) = runSim(new TestStrategy(Bull),
       (Bull, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
       (Bull, wsTrade(101, 10, timestampL = startMs + minMs)),
       (Bull, wsOrderBook10(95, 10, 100, 15, timestampL = startMs + 2 * minMs)), // trigger buy, sets trailing from the current market price (bid)
@@ -122,7 +122,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   }
 
   it should "work with init trailing Bear stoploss" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bear), false, true,
+    val (ctx, eCtx) = runSim(new TestStrategy(Bear),
       (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
       (Bear, wsTrade(99, 10, timestampL = startMs + minMs)),
       (Bear, wsOrderBook10(105, 10, 110, 15, timestampL = startMs + 2 * minMs)), // trigger sell, sets trailing from the current market price (ask)
@@ -139,7 +139,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   }
 
   it should "work with (escalating) Bull amendments" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bull), false, false,
+    val (ctx, eCtx) = runSim(new TestStrategy(Bull),
       (Bull, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
       (Bull, wsTrade(105, 10, timestampL = startMs + minMs)),
       (Bull, wsOrderBook10(110, 10, 115, 15, timestampL = startMs + 2 * minMs)),
@@ -152,7 +152,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   }
 
   it should "work with (escalating) Bear amendments" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bear), false, false,
+    val (ctx, eCtx) = runSim(new TestStrategy(Bear),
       (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
       (Bear, wsTrade(95, 10, timestampL = startMs + minMs)),
       (Bear, wsOrderBook10(95, 10, 100, 15, timestampL = startMs + 2 * minMs)),
@@ -162,22 +162,6 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
     ctx.getClass shouldBe classOf[OpenPositionCtx]
     ctx.ledger.ledgerOrdersByID.size shouldBe 1
     validateContains(ctx, eCtx, New, Sell, Limit, 90, 100) // init, after amendments
-  }
-
-  it should "work with Bull Limit orders" in {
-    ???
-  }
-
-  it should "work with Bear Limit orders" in {
-    ???
-  }
-
-  it should "change of heart in open" in {
-    ???
-  }
-
-  it should "up/down/up/down in open" in {
-    ???
   }
 
   it should "maybeFill Market" in {
@@ -203,14 +187,6 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
     maybeFill(order, bid = 10, ask = 15) shouldBe None
     order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Limit, status = New, price = Some(16), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
     maybeFill(order, bid = 10, ask = 15) shouldBe None
-  }
-
-  it should "maybeFill vanilla Stop" in {
-    ???
-  }
-
-  it should "maybeFill trailing Stop" in {
-    ???
   }
 
   // REMOVE price amendments in opposite dir?

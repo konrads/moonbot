@@ -10,7 +10,7 @@ import play.api.libs.json.JsSuccess
 
 
 class LedgerSpec extends FlatSpec with Matchers with Inside {
-  val bbandsStrategy = new BBandsStrategy(ConfigFactory.parseString(""))
+  val bbandsStrategy = new PermaBullStrategy(ConfigFactory.parseString(""))
 
   "Ledger" should "work with WS and REST orders" in {
     val ws1 = UpsertOrder(Some("insert"), data=Vector(

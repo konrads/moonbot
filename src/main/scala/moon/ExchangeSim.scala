@@ -3,7 +3,6 @@ package moon
 import java.io.File
 
 import moon.Behaviour._
-import moon.RunType._
 import org.joda.time.DateTime
 import play.api.libs.json.{JsError, JsSuccess}
 
@@ -11,18 +10,14 @@ import scala.io.Source
 
 
 class ExchangeSim(
-  runType: RunType.Value = BacktestMoon,
   eventDataDir: String=null,
   eventCsvDir: String=null,
   candleFile: String=null,
   metrics: Option[Metrics],
   strategy: Strategy,
-  tradeQty: Int,
-  takerFee: Double,
-  takeProfitMargin: Double, stoplossMargin: Double,
-  stoplossType: Option[StoplossType.Value],
-  openWithMarket: Boolean = false,
-  useTrailingStoploss: Boolean = false,
+  tierCalc: TierCalc,
+  dir: Dir.Value,
+  takeProfitPerc: Double,
   useSynthetics: Boolean = false) {
 
   assert(Array(eventDataDir, eventCsvDir, candleFile).count(_ != null) == 1)
@@ -37,31 +32,16 @@ class ExchangeSim(
     else
       eventsFromCandleFile(candleFile)
 
-    if (runType == BacktestMoon) {
-      val behaviorDsl = MoonOrchestrator.asDsl(
-        strategy,
-        tradeQty,
-        takeProfitMargin, stoplossMargin,
-        openWithMarket,
-        useTrailingStoploss,
-        true)
-      val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((InitCtx(Ledger()): Ctx, ExchangeCtx())) {
-        case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, false, WsEvent(event))
-      }
-      (finalCtx.asInstanceOf[LedgerAwareCtx], finalExchangeCtx)
-    } else if (runType == BacktestYabol) {
-      val behaviorDsl = YabolOrchestrator.asDsl(
-        strategy,
-        tradeQty,
-        takerFee,
-        stoplossType,
-        true)
-      val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((YabolIdleCtx(Ledger()): YabolCtx, ExchangeCtx())) {
-        case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, true, WsEvent(event))
-      }
-      (finalCtx.asInstanceOf[LedgerAwareCtx], finalExchangeCtx)
-    } else
-      throw new Exception(s"Invalid dslType: $runType")
+    val behaviorDsl = Orchestrator.asDsl(
+      strategy,
+      tierCalc,
+      takeProfitPerc,
+      dir,
+      true)
+    val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((InitCtx(Ledger()): Ctx, ExchangeCtx())) {
+      case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, false, WsEvent(event))
+    }
+    (finalCtx.asInstanceOf[LedgerAwareCtx], finalExchangeCtx)
   }
 
   def eventsFromDataDir(eventDataDir: String): Iterator[WsModel] = {
