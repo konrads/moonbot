@@ -8,8 +8,8 @@ import scala.util.Try
 sealed trait ActorEvent
 case class WsEvent(data: WsModel) extends ActorEvent
 case class RestEvent(res: Try[RestModel]) extends ActorEvent
+case class On30s(nowMs: Option[Long]) extends ActorEvent
 case class On1m(nowMs: Option[Long]) extends ActorEvent
-case class On1h(nowHs: Option[Long]) extends ActorEvent
 
 // Context
 sealed trait LedgerAwareCtx {

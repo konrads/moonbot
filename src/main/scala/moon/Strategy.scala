@@ -10,7 +10,7 @@ case class StrategyResult(sentiment: Sentiment.Value, metrics: Map[String, Doubl
 trait Strategy {
   val log = Logger[Strategy]
   val config: Config
-  def strategize(ledger: Ledger, mustPreserveState: Boolean=false): StrategyResult
+  def strategize(ledger: Ledger): StrategyResult
 }
 
 object Strategy {
@@ -21,7 +21,7 @@ object Strategy {
 
 // Test strategy
 class PermaBullStrategy(val config: Config) extends Strategy {
-  override def strategize(ledger: Ledger, mustPreserveState: Boolean=false): StrategyResult = {
-    StrategyResult(Bull, Map("data.permabull.sentiment" -> Bull.id))
+  override def strategize(ledger: Ledger): StrategyResult = {
+    StrategyResult(Bull, Map.empty)
   }
 }

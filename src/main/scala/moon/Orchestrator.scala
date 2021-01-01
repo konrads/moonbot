@@ -54,18 +54,6 @@ object Orchestrator {
     }
 
     def tick(ctx: Ctx, event: ActorEvent, log: org.slf4j.Logger): (Ctx, Option[SideEffect]) = (ctx, event) match {
-      // Common states/events
-      case (_, On1h(_)) => (ctx, None)  // ignore in moon
-      case (_, On1m(nowMs)) =>
-        if (ctx.ledger.isMinimallyFilled) {
-          val ledger2 = ctx.ledger.withMetrics(strategy = strategy)
-          val effect = PublishMetrics(ledger2.ledgerMetrics.metrics, nowMs)
-          (ctx.withLedger(ledger2), Some(effect))
-        } else
-          (ctx, None)
-      case (_, RestEvent(Failure(_: IgnorableError))) =>
-        (ctx, None)
-
       // Init state
       case (InitCtx(ledger), WsEvent(data)) =>
         if (log.isDebugEnabled) log.debug(s"Init: WsEvent: $data")
@@ -78,7 +66,7 @@ object Orchestrator {
               ||   Ledger minimally filled, ready to go!     |
               ||                                             |
               |`-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-'""".stripMargin)
-          openPositionOrder(ledger) match {
+          openPositionOrder(ledger2) match {
             case Some(effect) =>
               log.info(s"Idle: starting afresh with $dir order: ${effect.clOrdID} @ ${effect.price.get}...")
               (OpenPositionCtx(ledger = ledger2, clOrdID = effect.clOrdID, lifecycle = IssuingNew), Some(effect))
@@ -115,24 +103,24 @@ object Orchestrator {
 
       // open position
       case (ctx2@OpenPositionCtx(clOrdID, ledger, _), event@(WsEvent(_) | RestEvent(Success(_)))) =>
-        val (ledger2, orderOpt, ordStatusOpt, clOrdIDMatch) = event match {
+        val (ledger2, clOrdIDMatch) = event match {
           case WsEvent(o: UpsertOrder) =>
             val ledger2 = ledger.record(o)
-            val orderOpt = ledger2.ledgerOrdersByClOrdID.get(clOrdID)
-            (ledger2, orderOpt, orderOpt.map(_.ordStatus), o.containsClOrdIDs(clOrdID))
+            (ledger2, o.containsClOrdIDs(clOrdID))
           case WsEvent(data) =>
-            (ledger.record(data), None, None, false)
+            (ledger.record(data), false)
           case RestEvent(Success(data)) =>
             val ledger2 = ledger.record(data)
-            val orderOpt = ledger2.ledgerOrdersByClOrdID.get(clOrdID)
             val clOrdIDMatch = data match {
               case o: Order   => o.clOrdID.contains(clOrdID)
               case os: Orders => os.containsClOrdIDs(clOrdID)
               case          _ => false
             }
-            (ledger2, orderOpt, orderOpt.map(_.ordStatus), clOrdIDMatch)
+            (ledger2, clOrdIDMatch)
           case _ => ???  // should never happen
         }
+        val orderOpt = ledger2.ledgerOrdersByClOrdID.get(clOrdID)
+        val ordStatusOpt = orderOpt.map(_.ordStatus)
 
         (ordStatusOpt, clOrdIDMatch) match {
           case (Some(Filled), true) =>
@@ -231,14 +219,31 @@ object Orchestrator {
             // FIXME: not dealing with PostOnlyFailure, in presumption that margins will always be large enough. Otherwise, will need IssueAmend cycle
             throw IrrecoverableError(s"Close: PostOnlyFailure on closing position $ord... need to deal?\ntakeProfitOrder: $orderOpt", null)
           case _ =>
-            openPositionOrder(ledger2) match {
-              case Some(effect) =>
-                log.info(s"Close: issuing new tier $dir order: ${effect.clOrdID} @ ${effect.price.get}...")
-                (OpenPositionCtx(ledger = ledger2, clOrdID = effect.clOrdID, lifecycle = IssuingNew), Some(effect))
-              case None =>
-                (ctx2.withLedger(ledger2), None)
-            }
+            (ctx2.withLedger(ledger2), None)
         }
+
+      // Common states/events
+      // potentially drop down to another tier once holding position
+      case (ctx2@ClosePositionCtx(_, _, ledger), On30s(_)) =>
+        openPositionOrder(ledger) match {
+          case Some(effect) =>
+            log.info(s"Close: issuing new tier $dir order: ${effect.clOrdID} @ ${effect.price.get}...")
+            (OpenPositionCtx(ledger = ledger, clOrdID = effect.clOrdID, lifecycle = IssuingNew), Some(effect))
+          case None =>
+            (ctx2.withLedger(ledger), None)
+        }
+      case (_, On30s(_)) =>
+        (ctx, None)
+      case (_, On1m(nowMs)) =>
+        if (ctx.ledger.isMinimallyFilled) {
+          val ledger2 = ctx.ledger.withMetrics(strategy = strategy)
+          val effect = PublishMetrics(ledger2.ledgerMetrics.metrics, nowMs)
+          (ctx.withLedger(ledger2), Some(effect))
+        } else
+          (ctx, None)
+      case (_, RestEvent(Failure(_: IgnorableError))) =>
+        (ctx, None)
+
 
       // catchall errors
       case (_, RestEvent(Failure(exc))) => throw IrrecoverableError(s"Failed with ctx:\n$ctx", exc)

@@ -126,7 +126,7 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
   }
   lazy val myOrders: Seq[LedgerOrder] = ledgerOrdersByID.values.filter(_.myOrder).toVector
   lazy val myTrades: Seq[LedgerOrder] = myOrders.filter(_.ordStatus == Filled)
-  lazy val isMinimallyFilled: Boolean = tradeRollups.nonEmpty || orderBookSummary != null
+  lazy val isMinimallyFilled: Boolean = orderBookSummary != null
   lazy val bidPrice: Double = orderBookSummary.bid
   lazy val askPrice: Double = orderBookSummary.ask
 

@@ -142,7 +142,7 @@ package object moon {
     }
   }
 
-  class OptimizedIter(backedBy: Iterator[WsModel], issueSynthetic: Boolean=false) extends Iterator[WsModel] {
+  class OptimizedIter(backedBy: Iterator[WsModel], issueSynthetics: Boolean=false) extends Iterator[WsModel] {
     var lastTs: DateTime = null
     var lastOrderBookSummary: OrderBookSummary = null
     var cache: Vector[WsModel] = Vector.empty
@@ -173,7 +173,7 @@ package object moon {
               cache = Vector(summary)
               true
             }
-          case x:Trade if issueSynthetic =>
+          case x:Trade if issueSynthetics =>
             val firstTrade = x.data.head
             val (ask, bid) = if (firstTrade.side == OrderSide.Buy)
               (firstTrade.price, firstTrade.price - 0.5)
@@ -199,11 +199,11 @@ package object moon {
     }
   }
 
+  def tillEO30s: FiniteDuration =
+    FiniteDuration(30000 - System.currentTimeMillis % 30000, TimeUnit.MILLISECONDS)
+
   def tillEOM: FiniteDuration =
     FiniteDuration(60000 - System.currentTimeMillis % 60000, TimeUnit.MILLISECONDS)
-
-  def tillEOH: FiniteDuration =
-    FiniteDuration(3600000 - System.currentTimeMillis % 3600000, TimeUnit.MILLISECONDS)
 
   def createBackoff: () => Int = {
     val delays = (LazyList(250, 500, 1000, 2000, 4000, 8000) ++ LazyList.continually(16000)).iterator

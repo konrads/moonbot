@@ -9,7 +9,6 @@ import org.joda.time.DateTime
 
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
 import scala.util.Success
 
 
@@ -17,8 +16,8 @@ object Behaviour {
   def asLiveBehavior[T <: LedgerAwareCtx](restGateway: IRestGateway, metrics: Option[Metrics]=None, flushSessionOnRestart: Boolean=true, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T)(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
     Behaviors.withTimers { timers =>
       // NOTE: setting up timers externally, to ensure delay starts from start of minute/hour
-      // timers.startTimerAtFixedRate(On1m(None), 1.minute)
-      // timers.startTimerAtFixedRate(On1h(None), 1.hour)
+      // timers.startTimerAtFixedRate(On30s(None), 30.seconds)
+      // timers.startTimerAtFixedRate(On1m(None),  1.minute)
 
       Behaviors.setup { actorCtx =>
         if (flushSessionOnRestart) {
@@ -65,8 +64,8 @@ object Behaviour {
   def asDryBehavior[T <: LedgerAwareCtx](metrics: Option[Metrics]=None, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T, askBidFromTrades: Boolean): Behavior[ActorEvent] = {
     Behaviors.withTimers { timers =>
       // NOTE: setting up timers externally, to ensure delay starts from start of minute/hour
-      // timers.startTimerAtFixedRate(On1m(None), 1.minute)
-      // timers.startTimerAtFixedRate(On1h(None), 1.hour)
+      // timers.startTimerAtFixedRate(On30s(None), 30.seconds)
+      // timers.startTimerAtFixedRate(On1m(None),  1.minute)
 
       Behaviors.setup { actorCtx =>
         def loop(ctx: T, exchangeCtx: ExchangeCtx): Behavior[ActorEvent] =
@@ -84,7 +83,7 @@ object Behaviour {
     def toRest: Order = Order(orderID=orderID, clOrdID=Some(clOrdID), symbol="...", timestamp=timestamp, ordType=ordType, ordStatus=Some(status), side=side, orderQty=qty, price=price)
     def toWs: OrderData = OrderData(orderID=orderID, clOrdID=Some(clOrdID), timestamp=timestamp, ordType=Some(ordType), ordStatus=Some(status), side=Some(side), orderQty=Some(qty), price=price)
   }
-  case class ExchangeCtx(orders: Map[String, ExchangeOrder]=Map.empty, bid: Double=0, ask: Double=0, next1mTs: Long=0, next1hTs: Long=0, lastTs: Long=0)
+  case class ExchangeCtx(orders: Map[String, ExchangeOrder]=Map.empty, bid: Double=0, ask: Double=0, next1mTs: Long=0, next30sTs: Long=0, lastTs: Long=0)
 
   /**
    * Getting bit complex, need to model better... Imagine:
@@ -175,7 +174,7 @@ object Behaviour {
   }
 
   def paperExchangeTsHandler(exchangeCtx: ExchangeCtx, event: ActorEvent, triggerTimers: Boolean): (ExchangeCtx, Seq[ActorEvent]) = {
-    // handle timestamp based events, ie. On1m, On1h
+    // handle timestamp based events, ie. On1m, On30s
     val timestampMsOpt = (event match {
       case WsEvent(x:Trade)            => Some(x.data.head.timestamp)
       case WsEvent(x:OrderBookSummary) => Some(x.timestamp)
@@ -188,14 +187,14 @@ object Behaviour {
 
     timestampMsOpt match {
       case Some(ts) =>
-        if (triggerTimers && exchangeCtx.next1hTs <= 0) {
+        if (triggerTimers && exchangeCtx.next30sTs <= 0) {
+          val init30sTs = ts/30000 * 30000
           val init1mTs = ts/60000 * 60000
-          val init1hTs = ts/60/60000 * 60*60000
-          (exchangeCtx.copy(next1mTs = init1mTs + 60000, next1hTs = init1hTs + 60 * 60000, lastTs = ts), Nil)  // as ts events are executed first, nothing to trigger on yet... //Seq(On1h(Some(init1hTs)), On1m(Some(init1mTs))))
-        } else if (triggerTimers && ts >= exchangeCtx.next1hTs)
-          (exchangeCtx.copy(next1mTs = exchangeCtx.next1hTs + 60000, next1hTs = exchangeCtx.next1hTs + 60 * 60000, lastTs = ts), Seq(On1h(Some(exchangeCtx.next1hTs)), On1m(Some(exchangeCtx.next1mTs))))
-        else if (triggerTimers && ts >= exchangeCtx.next1mTs)
-          (exchangeCtx.copy(next1mTs = exchangeCtx.next1mTs + 60000, lastTs = ts), Seq(On1m(Some(exchangeCtx.next1mTs))))
+          (exchangeCtx.copy(next30sTs = init30sTs + 30000, next1mTs = init1mTs + 60000, lastTs = ts), Nil)
+        } else if (triggerTimers && ts >= exchangeCtx.next1mTs)
+          (exchangeCtx.copy(next30sTs = exchangeCtx.next1mTs + 30000, next1mTs = exchangeCtx.next1mTs + 60000, lastTs = ts), Seq(On30s(Some(exchangeCtx.next30sTs)), On1m(Some(exchangeCtx.next1mTs))))
+        else if (triggerTimers && ts >= exchangeCtx.next30sTs)
+          (exchangeCtx.copy(next30sTs = exchangeCtx.next30sTs + 30000, lastTs = ts), Seq(On30s(Some(exchangeCtx.next30sTs))))
         else
           (exchangeCtx.copy(lastTs=ts), Nil)
       case _ =>

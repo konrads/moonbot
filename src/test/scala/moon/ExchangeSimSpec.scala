@@ -2,7 +2,7 @@ package moon
 
 import com.typesafe.config.Config
 import moon.Behaviour.{ExchangeCtx, ExchangeOrder, maybeFill, paperExchangeSideEffectHandler}
-import moon.Dir.LongDir
+import moon.Dir._
 import moon.ModelsSpec._
 import moon.OrderSide._
 import moon.OrderStatus._
@@ -12,13 +12,14 @@ import org.scalatest._
 import org.scalatest.matchers.should._
 
 class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
-  val log = org.slf4j.LoggerFactory.getLogger(classOf[ExchangeSim])
+  val log = org.slf4j.LoggerFactory.getLogger(classOf[ExchangeSimSpec])
   val startMs = 1600000000000L
   val minMs = 60000L
+  val `30sMs` = 30000L
 
   class TestStrategy(var sentiment: Sentiment.Value) extends Strategy {
     override val config: Config = null
-    override def strategize(ledger: Ledger, mustPreserveState: Boolean=false): StrategyResult =
+    override def strategize(ledger: Ledger): StrategyResult =
       StrategyResult(sentiment, Map.empty)
   }
 
@@ -50,17 +51,19 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
     (finalCtx, finalExchangeCtx)
   }
 
-  "Orchestrator" should "work with Bull Market orders" in {
+  "Orchestrator" should "work with Bull Limit orders" in {
     val (ctx, eCtx) = runSim(new TestStrategy(Bull),
-      (Bull, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
-      (Bull, wsTrade(120, 10, timestampL = startMs + minMs)),
-      (Bull, wsOrderBook10(110, 10, 115, 15, timestampL = startMs + 2 * minMs)),
+      (Bull, wsOrderBook10(10_000, 10, 10_500, 15, timestampL = startMs)),
+      (Bull, wsOrderBook10(11_000, 10, 11_500, 15, timestampL = startMs + `30sMs`)),   // amend buy
+      (Bull, wsOrderBook10(9_000,  10, 9_500,  15, timestampL = startMs + 2 * `30sMs`)), // execute buy @ 110 & issue sell
+      (Bull, wsOrderBook10(10_000, 10, 10_500, 15, timestampL = startMs + 3 * `30sMs`)), // execute buy @ 110 & issue sell
+      (Bull, wsOrderBook10(15_000, 10, 15_500, 15, timestampL = startMs + 4 * `30sMs`)), // execute buy @ 110 & issue sell
     )
-    ctx.getClass shouldBe classOf[ClosePositionCtx]
+    ctx.getClass shouldBe classOf[OpenPositionCtx]
     ctx.ledger.ledgerOrdersByID.size shouldBe 3
-    validateContains(ctx, eCtx, Filled, Buy, Market, 105, 100) // init
-    validateContains(ctx, eCtx, New, Sell, Limit, 115, 100) // takeProfit
-    validateContains(ctx, eCtx, New, Sell, Stop, 100, 100) // stoploss
+    validateContains(ctx, eCtx, Filled, Buy, Limit, 11_000, 1) // init
+    validateContains(ctx, eCtx, Filled, Sell, Limit, 11_011, 1) // takeProfit
+    validateContains(ctx, eCtx, New, Buy, Limit, 15_000, 1) // takeProfit
   }
 
   it should "work with Bear Market orders" in {
