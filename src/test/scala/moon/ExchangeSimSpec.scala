@@ -53,118 +53,20 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
 
   "Orchestrator" should "work with Bull Limit orders" in {
     val (ctx, eCtx) = runSim(new TestStrategy(Bull),
-      (Bull, wsOrderBook10(10_000, 10, 10_500, 15, timestampL = startMs)),
-      (Bull, wsOrderBook10(11_000, 10, 11_500, 15, timestampL = startMs + `30sMs`)),   // amend buy
-      (Bull, wsOrderBook10(9_000,  10, 9_500,  15, timestampL = startMs + 2 * `30sMs`)), // execute buy @ 110 & issue sell
-      (Bull, wsOrderBook10(10_000, 10, 10_500, 15, timestampL = startMs + 3 * `30sMs`)), // execute buy @ 110 & issue sell
-      (Bull, wsOrderBook10(15_000, 10, 15_500, 15, timestampL = startMs + 4 * `30sMs`)), // execute buy @ 110 & issue sell
+      (Bull, wsOrderBook10(10_000, 10, 10_100, 15, timestampL = startMs)),
+      (Bull, wsOrderBook10(11_000, 10, 11_100, 15, timestampL = startMs + `30sMs`)),   // amend buy
+      (Bull, wsOrderBook10(9_000,  10, 9_100,  15, timestampL = startMs + 2 * `30sMs`)), // execute buy @ 110 & issue sell
+      (Bull, wsOrderBook10(10_000, 10, 10_100, 15, timestampL = startMs + 3 * `30sMs`)),
+      (Bull, wsOrderBook10(15_000, 10, 15_100, 15, timestampL = startMs + 4 * `30sMs`)),
+      (Bull, wsOrderBook10(16_000, 10, 16_100, 15, timestampL = startMs + 5 * `30sMs`)),
+      (Bull, wsOrderBook10(15_800, 10, 15_900, 15, timestampL = startMs + 6 * `30sMs`)),
     )
-    ctx.getClass shouldBe classOf[OpenPositionCtx]
-    ctx.ledger.ledgerOrdersByID.size shouldBe 3
+    ctx.getClass shouldBe classOf[ClosePositionCtx]
+    ctx.ledger.ledgerOrdersByID.size shouldBe 4
     validateContains(ctx, eCtx, Filled, Buy, Limit, 11_000, 1) // init
     validateContains(ctx, eCtx, Filled, Sell, Limit, 11_011, 1) // takeProfit
-    validateContains(ctx, eCtx, New, Buy, Limit, 15_000, 1) // takeProfit
-  }
-
-  it should "work with Bear Market orders" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bear),
-      (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
-      (Bear, wsTrade(120, 10, timestampL = startMs + minMs)),
-      (Neutral, wsOrderBook10(110, 10, 115, 15, timestampL = startMs + 2 * minMs)),
-    )
-    ctx.getClass shouldBe classOf[IdleCtx]
-    ctx.ledger.ledgerOrdersByID.size shouldBe 3
-    validateContains(ctx, eCtx, Filled, Sell, Market, 100, 100) // init
-    validateContains(ctx, eCtx, OrderStatus.Canceled, Buy, Limit, 90, 100) // takeProfit
-    validateContains(ctx, eCtx, Filled, Buy, Stop, 105, 100) // stoploss
-  }
-
-  it should "work with vanilla Bull Stop orders" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bull),
-      (Bull, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
-      (Bull, wsTrade(101, 10, timestampL = startMs + minMs)),
-      (Bull, wsOrderBook10(95, 10, 100, 15, timestampL = startMs + 2 * minMs)), // trigger buy, sets stoploss at...
-      (Neutral, wsOrderBook10(94, 10, 99,  15, timestampL = startMs + 3 * minMs)), // trigger stoploss @ 95 (100-5)
-    )
-    ctx.getClass shouldBe classOf[IdleCtx]
-    ctx.ledger.ledgerOrdersByID.size shouldBe 3
-    validateContains(ctx, eCtx, Filled, Buy, Limit, 100, 100) // init
-    validateContains(ctx, eCtx, OrderStatus.Canceled, Sell, Limit, 110, 100) // takeProfit
-    validateContains(ctx, eCtx, Filled, Sell, Stop, 95, 100) // vanilla stoploss
-  }
-
-  it should "work with vanilla Bear Stop orders" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bear),
-      (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
-      (Bear, wsTrade(99, 10, timestampL = startMs + minMs)),
-      (Bear, wsOrderBook10(105, 10, 115, 15, timestampL = startMs + 2 * minMs)), // trigger buy, sets stoploss at...
-      (Neutral, wsOrderBook10(106, 10, 116, 15, timestampL = startMs + 3 * minMs)), // trigger stoploss @ 105 (100+5)
-    )
-    ctx.getClass shouldBe classOf[IdleCtx]
-    ctx.ledger.ledgerOrdersByID.size shouldBe 3
-    validateContains(ctx, eCtx, Filled, Sell, Limit, 105, 100) // init
-    validateContains(ctx, eCtx, OrderStatus.Canceled, Buy, Limit, 95, 100) // takeProfit
-    validateContains(ctx, eCtx, Filled, Buy, Stop, 110, 100) // vanilla stoploss
-  }
-
-  it should "work with init trailing Bull stoploss" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bull),
-      (Bull, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
-      (Bull, wsTrade(101, 10, timestampL = startMs + minMs)),
-      (Bull, wsOrderBook10(95, 10, 100, 15, timestampL = startMs + 2 * minMs)), // trigger buy, sets trailing from the current market price (bid)
-      (Bear, wsOrderBook10(104, 10, 109, 15, timestampL = startMs + 3 * minMs)),
-      (Bear, wsOrderBook10(106, 10, 111, 15, timestampL = startMs + 4 * minMs)),
-      (Bear, wsOrderBook10(102, 10, 107, 15, timestampL = startMs + 5 * minMs)),
-      (Neutral, wsOrderBook10(100, 10, 105, 15, timestampL = startMs + 7 * minMs)), // trigger stoploss @ 101 (106-5)
-    )
-    ctx.getClass shouldBe classOf[IdleCtx]
-    ctx.ledger.ledgerOrdersByID.size shouldBe 3
-    validateContains(ctx, eCtx, Filled, Buy, Limit, 100, 100) // init
-    validateContains(ctx, eCtx, OrderStatus.Canceled, Sell, Limit, 110, 100) // takeProfit
-    validateContains(ctx, eCtx, Filled, Sell, Stop, 101, 100) // trailing stoploss
-  }
-
-  it should "work with init trailing Bear stoploss" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bear),
-      (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
-      (Bear, wsTrade(99, 10, timestampL = startMs + minMs)),
-      (Bear, wsOrderBook10(105, 10, 110, 15, timestampL = startMs + 2 * minMs)), // trigger sell, sets trailing from the current market price (ask)
-      (Bull, wsOrderBook10(96, 10, 101, 15, timestampL = startMs + 3 * minMs)),
-      (Bull, wsOrderBook10(94, 10, 99, 15, timestampL = startMs + 4 * minMs)),
-      (Bull, wsOrderBook10(98, 10, 103, 15, timestampL = startMs + 5 * minMs)),
-      (Neutral, wsOrderBook10(100, 10, 105, 15, timestampL = startMs + 7 * minMs)), // trigger stoploss @ 99 (94+5)
-    )
-    ctx.getClass shouldBe classOf[IdleCtx]
-    ctx.ledger.ledgerOrdersByID.size shouldBe 3
-    validateContains(ctx, eCtx, Filled, Sell, Limit, 105, 100) // init
-    validateContains(ctx, eCtx, OrderStatus.Canceled, Buy, Limit, 95, 100) // takeProfit
-    validateContains(ctx, eCtx, Filled, Buy, Stop, 104, 100) // stoploss
-  }
-
-  it should "work with (escalating) Bull amendments" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bull),
-      (Bull, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
-      (Bull, wsTrade(105, 10, timestampL = startMs + minMs)),
-      (Bull, wsOrderBook10(110, 10, 115, 15, timestampL = startMs + 2 * minMs)),
-      (Bull, wsOrderBook10(115, 10, 120, 15, timestampL = startMs + 2 * minMs)),
-      (Bull, wsOrderBook10(120, 10, 125, 15, timestampL = startMs + 2 * minMs)),
-    )
-    ctx.getClass shouldBe classOf[OpenPositionCtx]
-    ctx.ledger.ledgerOrdersByID.size shouldBe 1
-    validateContains(ctx, eCtx, New, Buy, Limit, 120, 100) // init, after amendments
-  }
-
-  it should "work with (escalating) Bear amendments" in {
-    val (ctx, eCtx) = runSim(new TestStrategy(Bear),
-      (Bear, wsOrderBook10(100, 10, 105, 15, timestampL = startMs)),
-      (Bear, wsTrade(95, 10, timestampL = startMs + minMs)),
-      (Bear, wsOrderBook10(95, 10, 100, 15, timestampL = startMs + 2 * minMs)),
-      (Bear, wsOrderBook10(90, 10, 95, 15, timestampL = startMs + 2 * minMs)),
-      (Bear, wsOrderBook10(85, 10, 90, 15, timestampL = startMs + 2 * minMs)),
-    )
-    ctx.getClass shouldBe classOf[OpenPositionCtx]
-    ctx.ledger.ledgerOrdersByID.size shouldBe 1
-    validateContains(ctx, eCtx, New, Sell, Limit, 90, 100) // init, after amendments
+    validateContains(ctx, eCtx, Filled, Buy, Limit, 16_000, 1) // init
+    validateContains(ctx, eCtx, New, Sell, Limit, 16_016, 1) // init
   }
 
   it should "maybeFill Market" in {

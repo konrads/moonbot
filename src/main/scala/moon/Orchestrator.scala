@@ -159,7 +159,7 @@ object Orchestrator {
                   (ctx3, None)
                 }
               case _ =>
-                log.info(s"Open $dir: sentiment changed, canceling ${clOrdID}")
+                log.info(s"Open $dir: sentiment changed to ${strategyRes.sentiment}, canceling ${clOrdID}")
                 val effect = CancelOrder(clOrdID)
                 val ctx3 = ctx2.copy(ledger = ledger2, lifecycle = IssuingCancel)
                 (ctx3, Some(effect))
