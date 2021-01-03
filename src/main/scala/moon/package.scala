@@ -221,4 +221,9 @@ package object moon {
     case (Sentiment.Bear, true)              => s"$RED$s$RESET"
     case _                                   => ???  // to avoid warning: It would fail on the following input: (_, true)
   }
+
+  def capFirst(s: String): String = {
+    val (first, rest) = s.splitAt(1)
+    first.toUpperCase + rest.toLowerCase()
+  }
 }

@@ -27,23 +27,25 @@ object TrainingApp extends App {
 
   val minTradeCnt             = 100  // Note, roundtrip = 2 trades!
   val takeProfitPercs         = Seq(0.0006, 0.0008, 0.001, 0.0012)
-  // indecreasing
-  val indecreasingPeriods     = Seq(// Seq(5, 4, 3),  Seq(7, 5, 3),  Seq(9, 6, 3), Seq(7, 5, 4, 3),
-                                    Seq(9, 7, 5, 3), Seq(12, 9, 6, 3))
-  val indecreasingMinAbsSlope = Seq(1.5, 1.6, 1.7)
-  val indecreasingMaxAbsSlope = Seq(3.8, 4.0)
+  val tierCnts                = Seq(3, 5, 7)
+  val tierPricePercs          = Seq(0.95)  // Seq(1.0, 0.95, 0.9)
+  val tierQtyPercs            = Seq(1.0, 0.8, 0.6, 0.4)
 
-  val useSynthetics           = false
+  val useSynthetics           = true
 
 
   def bruteForceRun(desc: String, tradeQty: Int=100, strategies: Iterator[Strategy]): (Double, Strategy) = {
     var winningStrategy: Strategy = null
     var winningPandl: Double = Double.MinValue
     var winningCtx: LedgerAwareCtx = null
+    var winningParams: Map[String, Double] = Map.empty
 
     for {
       strategy            <- strategies
       takeProfitPerc      <- takeProfitPercs
+      tierCnt             <- tierCnts
+      tierPricePerc       <- tierPricePercs
+      tierQtyPerc         <- tierQtyPercs
     } {
       val sim = new ExchangeSim(
         eventDataDir = backtestDataDir,
@@ -51,43 +53,43 @@ object TrainingApp extends App {
         strategy = strategy,
         tierCalc = TierCalcImpl(
           dir=LongDir,
-          tradePoolQty=0.5,
-          tierCnt=5,
-          tierPricePerc=0.95 /* how much the price decreases per tier */,
-          tierQtyPerc=0.8
+          tradePoolQty=1000,
+          tierCnt=tierCnt,
+          tierPricePerc=tierPricePerc,
+          tierQtyPerc=tierQtyPerc
         ),
         dir=LongDir,
-        // takerFee = takerFee,
         takeProfitPerc = takeProfitPerc,
         metrics = None,
         useSynthetics = useSynthetics)
       val (ctx, eCtx) = sim.run()
       val pandl = ctx.ledger.ledgerMetrics.runningPandl
-      val price = ctx.ledger.tradeRollups.latestPrice
+      val price = (ctx.ledger.askPrice + ctx.ledger.bidPrice)/2  // was: ctx.ledger.tradeRollups.latestPrice
       val pandlUSD = pandl * price
       val trades = ctx.ledger.myTrades
       val tradesCnt = ctx.ledger.myTrades.size
       val limitTrades = trades.filter(_.ordType == Limit)
       if (pandl > winningPandl && tradesCnt >= minTradeCnt) {
-        log.error(f"$GREEN$desc: NEW WINNER pandl: $pandl%.10f / $pandlUSD%.4f (${limitTrades.size} / $tradesCnt), strategy conf: ${strategy.config}$RESET")
+        winningParams = Map("takeProfitPerc" -> takeProfitPerc, "tierCnt" -> tierCnt, "tierPricePerc" -> tierPricePerc, "tierQtyPerc" -> tierQtyPerc)
+        log.error(f"$GREEN$desc: NEW WINNER pandl: $pandl%.10f / $pandlUSD%.4f (${limitTrades.size} / $tradesCnt), params: ${winningParams.toList.sorted.map{case(k,v) => s"$k: $v"}.mkString(", ")}$RESET")
         winningPandl = pandl
         winningStrategy = strategy
         winningCtx = ctx
       } else
-        log.warn(f"$desc: running pandl: $pandl / $pandlUSD (${limitTrades.size} / $tradesCnt), strategy conf: ${strategy.config}$RESET")
+        log.warn(f"$desc: running pandl: $pandl / $pandlUSD (${limitTrades.size} / $tradesCnt)")
     }
 
-    val winningPrice = winningCtx.ledger.tradeRollups.latestPrice
+    val winningPrice = (winningCtx.ledger.askPrice + winningCtx.ledger.bidPrice)/2  // was: ctx.ledger.tradeRollups.latestPrice
     val winningPandlUSD = winningPandl * winningPrice
     val winningTrades = winningCtx.ledger.myOrders.filter(_.ordStatus == Filled)
     val winningLimitTrades = winningTrades.filter(_.ordType == Limit)
-    log.error(f"$GREEN$BOLD$desc: !!!FINAL WINNER!!! pandl: $winningPandl%.10f / $winningPandlUSD%.4f (${winningLimitTrades.size} / ${winningTrades.size}), strategy conf: ${winningStrategy.config}$RESET")
+    log.error(f"$GREEN$BOLD$desc: !!!FINAL WINNER!!! pandl: $winningPandl%.10f / $winningPandlUSD%.4f (${winningLimitTrades.size} / ${winningTrades.size}), params: ${winningParams.toList.sorted.map{case(k,v) => s"$k: $v"}.mkString(", ")}$RESET")
 
     (winningPandl, winningStrategy)
   }
 
-  def trainPermaBull: (Double, Strategy) =
-    bruteForceRun(desc="PERMABULL", strategies=Seq(new PermaBullStrategy(ConfigFactory.parseString(""))).iterator)
+  // run the training
+  bruteForceRun(desc="PERMABULL", strategies=Seq(new PermaBullStrategy(ConfigFactory.parseString(""))).iterator)
 
 //  def trainIndecreasing: (Double, Strategy) = {
 //    val strategies = for {

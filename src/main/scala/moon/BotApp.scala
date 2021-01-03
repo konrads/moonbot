@@ -40,8 +40,7 @@ object BotApp extends App {
 
   val namespace              = conf.getString("bot.namespace")
   val wssSubscriptions       = conf.getString("bot.wssSubscriptions").split(",").map(_.trim)
-  val flushSessionOnRestart  = conf.getBoolean("bot.flushSessionOnRestart")
-  val tradeQty               = conf.getInt("bot.tradeQty")
+  val flushSessionOnRestart  = conf.optBoolean("bot.flushSessionOnRestart").getOrElse(false)
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
   val takeProfitPerc         = conf.optDouble("bot.takeProfitPerc").getOrElse(0.1)
   val backtestEventDataDir   = conf.optString("bot.backtestEventDataDir")
@@ -55,13 +54,7 @@ object BotApp extends App {
   val tierPricePerc          = conf.optDouble("bot.tierPricePerc").getOrElse(0.95)
   val tierQtyPerc            = conf.optDouble("bot.tierQtyPerc").getOrElse(0.8)
 
-  val runType                = conf.optString("bot.runType").map(_.toLowerCase) match {
-    case Some("live")        => Live
-    case Some("dry")         => Dry
-    case Some("backtest")    => Backtest
-    case Some(other)         => throw new Exception(s"Invalid bot.runType: $other")
-    case None                => Live
-  }
+  val runType                = conf.optString("bot.runType").map(_.toLowerCase).map(x => RunType.withName(capFirst(x))).getOrElse(Live)
   assert(runType != RunType.Backtest || backtestEventDataDir.isDefined || backtestCsvDir.isDefined || backtestCandleFile.isDefined)
 
   val strategyName = conf.getString("strategy.selection")
@@ -86,7 +79,6 @@ object BotApp extends App {
       |• graphiteHost:         $graphiteHost
       |• graphitePort:         $graphitePort
       |• namespace:            $namespace
-      |• tradeQty:             $tradeQty
       |• takerFee:             $takerFee
       |• restSyncTimeoutMs:    $restSyncTimeoutMs
       |• takeProfitPerc:       $takeProfitPerc

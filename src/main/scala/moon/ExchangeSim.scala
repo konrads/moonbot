@@ -98,5 +98,8 @@ class ExchangeSim(
   }
 
   def eventsFromCandleFile(candleFile: String): Iterator[WsModel] =
-    new OptimizedIter(Candle.fromFile(candleFile).map(c => Trade(data = Seq(TradeData(side=OrderSide.Buy, size=c.volume, price=c.close, tickDirection=TickDirection.PlusTick, timestamp=new DateTime(c.period * 1000L))))))
+    new OptimizedIter(
+      Candle.fromFile(candleFile).map(c => Trade(data = Seq(TradeData(side=OrderSide.Buy, size=c.volume, price=c.close, tickDirection=TickDirection.PlusTick, timestamp=new DateTime(c.period * 1000L))))),
+      useSynthetics
+    )
 }
