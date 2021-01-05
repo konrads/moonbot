@@ -105,7 +105,7 @@ object BotApp extends App {
       metrics = metrics,
       useSynthetics = useSynthetics)
     val (finalCtx, finalExchangeCtx) = sim.run()
-    log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} ($$${finalCtx.ledger.ledgerMetrics.runningPandl * finalCtx.ledger.tradeRollups.latestPrice}) over ${finalCtx.ledger.myTrades.size} trades")
+    log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} ($$${finalCtx.ledger.ledgerMetrics.runningPandl * (finalCtx.ledger.askPrice + finalCtx.ledger.bidPrice)/2}) over ${finalCtx.ledger.myTrades.size} trades")
   } else {
     implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
     val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, wssSubscriptions=wssSubscriptions)
@@ -142,7 +142,7 @@ object BotApp extends App {
       ???
 
     val orchestratorActor = ActorSystem(
-      Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
+      Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.stop),  // FIXME: restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
       "orchestrator-actor")
     orchestratorActor.scheduler.scheduleAtFixedRate(tillEO30s, 30.seconds)(() => orchestratorActor ! On30s(None))
     orchestratorActor.scheduler.scheduleAtFixedRate(tillEOM,    1.minute) (() => orchestratorActor ! On1m(None))

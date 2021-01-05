@@ -63,10 +63,10 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
     )
     ctx.getClass shouldBe classOf[ClosePositionCtx]
     ctx.ledger.ledgerOrdersByID.size shouldBe 4
-    validateContains(ctx, eCtx, Filled, Buy, Limit, 11_000, 1) // init
-    validateContains(ctx, eCtx, Filled, Sell, Limit, 11_011, 1) // takeProfit
-    validateContains(ctx, eCtx, Filled, Buy, Limit, 16_000, 1) // init
-    validateContains(ctx, eCtx, New, Sell, Limit, 16_016, 1) // init
+    validateContains(ctx, eCtx, Filled, Buy, Limit, 11_000, 15) // init
+    validateContains(ctx, eCtx, Filled, Sell, Limit, 11_011, 15) // takeProfit
+    validateContains(ctx, eCtx, Filled, Buy, Limit, 16_000, 8) // init
+    validateContains(ctx, eCtx, New, Sell, Limit, 16_016, 8) // init
   }
 
   it should "maybeFill Market" in {

@@ -15,15 +15,15 @@ case class LedgerOrder(orderID: String, clOrdID: String=null, price: Double, qty
 
 case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, lastOrderID: String=null, runningPandl: Double=0)
 
-case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups=Rollups(14*24),
+case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups=Rollups(1),
                   ledgerOrdersByID: ListMap[String, LedgerOrder]=ListMap.empty,
                   ledgerOrdersByClOrdID: ListMap[String, LedgerOrder]=ListMap.empty,
                   ledgerMetrics: LedgerMetrics=LedgerMetrics()) {
 
-  lazy val `_10s` = tradeRollups.withForecast(`10s`)
+  // lazy val `_10s` = tradeRollups.withForecast(`10s`)
   lazy val `_1m`  = tradeRollups.withForecast(`1m`)
-  lazy val `_1h`  = tradeRollups.withForecast(`1h`)
-  lazy val `_4h`  = tradeRollups.withForecast(`4h`)
+//  lazy val `_1h`  = tradeRollups.withForecast(`1h`)
+//  lazy val `_4h`  = tradeRollups.withForecast(`4h`)
 
   @deprecated lazy val ledgerOrders = ledgerOrdersByID.values
 
@@ -135,7 +135,7 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
     val strategyRes = strategy.strategize(this)
     val (s, m) = (strategyRes.sentiment, strategyRes.metrics)
     val metricsVals = Map(
-      "data.price"           -> tradeRollups.latestPrice,
+      "data.price"           -> (bidPrice + askPrice)/2,
       "data.volume"          -> volume,
       "data.sentiment"       -> s.id,
       "data.myTradeCnt"      -> myTrades.size,

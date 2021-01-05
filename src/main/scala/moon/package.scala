@@ -80,9 +80,10 @@ package object moon {
 
   object TradeLifecycle extends Enumeration {
     type TradeLifecycle = Value
-    val IssuingNew = Value            // awaiting order creation confirmation
-    val IssuingAmend = Value          // awaiting amend confirmation
-    val IssuingCancel = Value         // awaiting cancel confirmation
+    val Awaiting = Value              // awaiting fill
+    val IssuingNew = Value            // issued new, no reply yet
+    val IssuingAmend = Value          // amended, no reply yet
+    val IssuingCancel = Value         // cancel, no reply yet
   }
 
   val dateFormat = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ").withZone(DateTimeZone.UTC)
@@ -114,8 +115,8 @@ package object moon {
     (avgRuntime, res.head)
   }
 
-  def round(x: Double): Double =
-    BigDecimal(x).setScale(10, BigDecimal.RoundingMode.HALF_UP).toDouble
+  def round(x: Double, scale: Int=10): Double =
+    BigDecimal(x).setScale(scale, BigDecimal.RoundingMode.HALF_UP).toDouble
 
 
   // var uuidCnt = 0;  def uuid: String = synchronized { uuidCnt += 1; "%05d".format(uuidCnt) }

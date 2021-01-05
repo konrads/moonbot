@@ -17,6 +17,7 @@ object Order { implicit val aReads: Reads[Order] = Json.reads[Order] }
 case class Orders(orders: Seq[Order]) extends RestModel {
   def containsOrderIDs(orderIDs: String*): Boolean = orders.exists(o => orderIDs.contains(o.orderID))
   def containsClOrdIDs(clOrdIDs: String*): Boolean = orders.exists(o => o.clOrdID.exists(clOrdIDs.contains))
+  def containsTexts(texts: String*): Boolean = orders.exists(o => o.text.exists(texts.contains))
 }
 object Orders { implicit val aReads: Reads[Orders] = Json.reads[Orders] }
 

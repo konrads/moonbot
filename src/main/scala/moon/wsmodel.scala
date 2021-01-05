@@ -20,7 +20,7 @@ case class OrderBookData(symbol: String, timestamp: DateTime, asks: Seq[Seq[Doub
 object OrderBookData { implicit val aReads: Reads[OrderBookData] = Json.reads[OrderBookData] }
 
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel {
-  def summary = OrderBookSummary(table = table, timestamp = data.head.timestamp, ask = data.head.asks.head.head, bid = data.head.bids.head.head)
+  def summary = OrderBookSummary(table = table, timestamp = data.head.timestamp, ask = data.head.asks.last.head, bid = data.head.bids.last.head)
 }
 object OrderBook { implicit val aReads: Reads[OrderBook] = Json.reads[OrderBook] }
 
@@ -44,6 +44,7 @@ case class FundingData(symbol: String, fundingInterval: String, fundingRate: Dou
 object FundingData { implicit val aReads: Reads[FundingData] = Json.reads[FundingData] }
 
 case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel {
+  def containsTexts(texts: String*): Boolean = data.exists(o => o.text.exists(texts.contains))
   def containsClOrdIDs(clOrdIDs: String*): Boolean = data.exists(o => o.clOrdID.exists(clOrdIDs.contains))
   def containsOrderIDs(orderIDs: String*): Boolean = data.exists(o => orderIDs.contains(o.orderID))
   def containsAmendedOrderIDs(orderIDs: String*): Boolean = data.exists(o => orderIDs.contains(o.orderID) && o.amended.contains(true))

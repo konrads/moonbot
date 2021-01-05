@@ -7,7 +7,7 @@ trait TierCalc {
 }
 
 case class TierCalcImpl(dir: Dir.Value,
-                        tradePoolQty: Double=0.5,
+                        tradePoolQty: Double=50,
                         tierCnt: Int=5,
                         tierPricePerc: Double=0.95 /* how much the price decreases per tier */,
                         tierQtyPerc: Double=0.8    /* how much qty decreases per tier*/,
@@ -16,7 +16,7 @@ case class TierCalcImpl(dir: Dir.Value,
   type Price = Double
   type Quantity = Double
   val firstTradeQty = tradePoolQty / (0 until tierCnt).map(math.pow(tierQtyPerc, _)).sum
-  val qtyTiers = (0 until tierCnt).map(n => firstTradeQty * math.pow(tierQtyPerc, n))
+  val qtyTiers = (0 until tierCnt).map(n => round(firstTradeQty * math.pow(tierQtyPerc, n), 0))
 
   override def canOpenWithQty(currPrice: Price, existingOpenPrices: Seq[Price]): Option[Quantity] = {
     if (existingOpenPrices.isEmpty)  // no open orders yet!

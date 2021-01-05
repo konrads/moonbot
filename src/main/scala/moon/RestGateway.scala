@@ -240,27 +240,27 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
             b =>
               val bStr = b.utf8String
               if (bStr.contains("Account has insufficient Available Balance"))
-                Future.failed(AccountHasInsufficientBalanceError(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: $bStr"))
+                Future.failed(AccountHasInsufficientBalanceError(s"BadRequest: urlPath: $urlPath, method: $method, reqData: $data, responseStatus: $s responseBody: $bStr"))
               else if (bStr.contains("Invalid ordStatus"))
-                Future.failed(InvalidOrdStatusError(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: $bStr"))
+                Future.failed(InvalidOrdStatusError(s"BadRequest: urlPath: $urlPath, method: $method, reqData: $data, responseStatus: $s responseBody: $bStr"))
               else
-                Future.failed(new Exception(s"BadRequest: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+                Future.failed(new Exception(s"BadRequest: urlPath: $urlPath, method: $method, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
         case HttpResponse(s@StatusCodes.BadGateway, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
             b =>
               if (method == POST)
-                Future.failed(TemporarilyUnavailableOnPostError(s"BadGateway(on POST): urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+                Future.failed(TemporarilyUnavailableOnPostError(s"BadGateway(on POST): urlPath: $urlPath, method: $method, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
               else
-                Future.failed(TemporarilyUnavailableError(s"BadGateway: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+                Future.failed(TemporarilyUnavailableError(s"BadGateway: urlPath: $urlPath, method: $method, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
         case HttpResponse(s@StatusCodes.ServiceUnavailable, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap {
-            b => Future.failed(TemporarilyUnavailableError(s"ServiceUnavailable: urlPath: $urlPath, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
+            b => Future.failed(TemporarilyUnavailableError(s"ServiceUnavailable: urlPath: $urlPath, method: $method, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
         case HttpResponse(status, _headers, entity, _) =>
           val contentsF = entity.dataBytes.runFold(ByteString(""))(_ ++ _)
-          contentsF.flatMap(bs => Future.failed(new Exception(s"Invalid status: $status, body: ${bs.utf8String}")))
+          contentsF.flatMap(bs => Future.failed(new Exception(s"Invalid status: $status, method: $method,  body: ${bs.utf8String}")))
       }
   }
 }
