@@ -1,7 +1,5 @@
 package moon
 
-import moon.TradeLifecycle.IssuingNew
-
 import scala.util.Try
 
 // Event
@@ -10,6 +8,7 @@ case class WsEvent(data: WsModel) extends ActorEvent
 case class RestEvent(res: Try[RestModel]) extends ActorEvent
 case class On30s(nowMs: Option[Long]) extends ActorEvent
 case class On1m(nowMs: Option[Long]) extends ActorEvent
+case class On5m(nowMs: Option[Long]) extends ActorEvent
 
 // Context
 sealed trait LedgerAwareCtx {
@@ -22,10 +21,11 @@ sealed trait Ctx extends LedgerAwareCtx {
 case class InitCtx(ledger: Ledger) extends Ctx { def withLedger(l: Ledger): InitCtx = copy(ledger = l) }  // entry state, ledger not warm yet
 case class IdleCtx(ledger: Ledger) extends Ctx { def withLedger(l: Ledger): IdleCtx = copy(ledger = l) }  // with warm (filled) ledger
 case class OpenPositionCtx(clOrdID: String = null, ledger: Ledger, targetPrice: Double, lifecycle: TradeLifecycle.Value) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
-case class ClosePositionCtx(openPrice: Double, takeProfitClOrdID: String, ledger: Ledger) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
+case class ClosePositionCtx(openClOrdID: String, openPrice: Double, takeProfitClOrdID: String, ledger: Ledger, lifecycle: TradeLifecycle.Value) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
 
 // External side effect, ie. communication with grafana/RestGateway
 sealed trait SideEffect
+case object HealthCheck extends SideEffect
 case class PublishMetrics(gauges: Map[String, Any], now: Option[Long]) extends SideEffect
 case class CancelOrder(clOrdID: String) extends SideEffect
 case class AmendOrder(clOrdID: String, price: Double) extends SideEffect

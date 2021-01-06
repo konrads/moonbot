@@ -32,6 +32,9 @@ object Behaviour {
           Behaviors.receiveMessage { event =>
             val (ctx2, effect) = behaviorDsl(ctx, event, actorCtx.log)
             effect.foreach {
+              case HealthCheck =>
+                val fut = restGateway.getOrdersAsync(Some("open"))
+                fut onComplete (res => actorCtx.self ! RestEvent(res))
               case PublishMetrics(gauges, now) =>
                 metrics.foreach(_.gauge(gauges, now))
               case CancelOrder(clOrdID) =>
@@ -83,7 +86,7 @@ object Behaviour {
     def toRest: Order = Order(orderID=orderID, clOrdID=Some(clOrdID), symbol="...", timestamp=timestamp, ordType=ordType, ordStatus=Some(status), side=side, orderQty=qty, price=price)
     def toWs: OrderData = OrderData(orderID=orderID, clOrdID=Some(clOrdID), timestamp=timestamp, ordType=Some(ordType), ordStatus=Some(status), side=Some(side), orderQty=Some(qty), price=price)
   }
-  case class ExchangeCtx(orders: Map[String, ExchangeOrder]=Map.empty, bid: Double=0, ask: Double=0, next1mTs: Long=0, next30sTs: Long=0, lastTs: Long=0)
+  case class ExchangeCtx(orders: Map[String, ExchangeOrder]=Map.empty, bid: Double=0, ask: Double=0, next1mTs: Long=0, next5mTs: Long=0, next30sTs: Long=0, lastTs: Long=0)
 
   /**
    * Getting bit complex, need to model better... Imagine:
@@ -190,8 +193,11 @@ object Behaviour {
         if (triggerTimers && exchangeCtx.next30sTs <= 0) {
           val init30sTs = ts/30000 * 30000
           val init1mTs = ts/60000 * 60000
-          (exchangeCtx.copy(next30sTs = init30sTs + 30000, next1mTs = init1mTs + 60000, lastTs = ts), Nil)
-        } else if (triggerTimers && ts >= exchangeCtx.next1mTs)
+          val init5mTs = ts/(5*60000) * (5*60000)
+          (exchangeCtx.copy(next30sTs = init30sTs + 30000, next1mTs = init1mTs + 60000, next5mTs = init5mTs + 5*60000, lastTs = ts), Nil)
+        } else if (triggerTimers && ts >= exchangeCtx.next5mTs)
+          (exchangeCtx.copy(next30sTs = exchangeCtx.next5mTs + 30000, next1mTs = exchangeCtx.next5mTs + 60000, next5mTs = exchangeCtx.next5mTs + 5*60000, lastTs = ts), Seq(On30s(Some(exchangeCtx.next30sTs)), On1m(Some(exchangeCtx.next1mTs))))
+        else if (triggerTimers && ts >= exchangeCtx.next1mTs)
           (exchangeCtx.copy(next30sTs = exchangeCtx.next1mTs + 30000, next1mTs = exchangeCtx.next1mTs + 60000, lastTs = ts), Seq(On30s(Some(exchangeCtx.next30sTs)), On1m(Some(exchangeCtx.next1mTs))))
         else if (triggerTimers && ts >= exchangeCtx.next30sTs)
           (exchangeCtx.copy(next30sTs = exchangeCtx.next30sTs + 30000, lastTs = ts), Seq(On30s(Some(exchangeCtx.next30sTs))))
@@ -302,6 +308,9 @@ object Behaviour {
 
   def paperExchangePostHandler(exchangeCtx: ExchangeCtx, effect: SideEffect, metrics: Option[Metrics], log: org.slf4j.Logger): (ExchangeCtx, Seq[ActorEvent]) = {
     effect match {
+      case HealthCheck =>
+        // noop
+        (exchangeCtx, Nil)
       case PublishMetrics(gauges, now) =>
         metrics.foreach(_.gauge(gauges, now))
         (exchangeCtx, Nil)

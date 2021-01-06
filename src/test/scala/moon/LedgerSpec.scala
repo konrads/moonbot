@@ -25,8 +25,8 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     val rest2 = Order(orderID="o2", symbol="XBTUSD", price=Some(2), orderQty=2, side=OrderSide.Buy, ordType=OrderType.Limit, timestamp=parseDateTime("2010-01-01T00:00:00.000Z"), ordStatus=Some(OrderStatus.Filled))
 
     val l = Ledger()
-    val l2 = l.record(ws1).record(ws2)
-    val l3 = l2.record(rest1).record(rest2)
+    val l2 = l.recordWs(ws1).recordWs(ws2)
+    val l3 = l2.recordRest(rest1).recordRest(rest2)
     println(l3.ledgerOrders.mkString("\n"))
   }
 
@@ -102,7 +102,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     l.myOrders.toVector.map(_.orderID) shouldBe Vector("o3", "o2", "o1")
 
     // add orderbook data
-    val l2 = l.record(OrderBook("blah", "update", Vector(OrderBookData("xbtusd", parseDateTime("2001-01-01T00:00:00.000Z"), asks=Vector(Vector(10, 20), Vector(20, 30)), bids=Vector(Vector(100, 200), Vector(200, 300))))))
+    val l2 = l.recordWs(OrderBook("blah", "update", Vector(OrderBookData("xbtusd", parseDateTime("2001-01-01T00:00:00.000Z"), asks=Vector(Vector(10, 20), Vector(20, 30)), bids=Vector(Vector(100, 200), Vector(200, 300))))))
 
     val l3 = l2.withMetrics(strategy = bbandsStrategy)
     val metrics3 = l2.ledgerMetrics
@@ -123,7 +123,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
 
     val l5 = l4.withMetrics(strategy = bbandsStrategy)
     val metrics5 = l5.ledgerMetrics
-    metrics5 shouldBe LedgerMetrics(Map("data.price" -> 110.0, "data.pandl.pandl" -> 0.3524439102564103, "data.pandl.delta" -> 0.3524439102564103, "data.sentiment" -> 1.0, "data.myTradeCnt" -> 3, "data.volume" -> 0.0), "o5", 0.3524439102564103)
+    metrics5 shouldBe LedgerMetrics(Map("data.price" -> 105.0, "data.pandl.pandl" -> 0.3524439102564103, "data.pandl.delta" -> 0.3524439102564103, "data.sentiment" -> 1.0, "data.myTradeCnt" -> 3, "data.volume" -> 0.0), "o5", 0.3524439102564103)
 
     // add sell, recalculate metrics - expect no runningPandl change as not matching Buy
     val l6 = buildLedger(l5,
@@ -135,7 +135,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     l6.ledgerOrders.toVector.map(_.orderID) shouldBe Vector("o4", "o3", "o2", "o1", "o5", "o6", "o7")
     val l7 = l6.withMetrics(strategy = bbandsStrategy)
     val metrics7 = l7.ledgerMetrics
-    metrics7 shouldBe LedgerMetrics(Map("data.price" -> 110.0, "data.pandl.pandl" -> 1.6008814102564104, "data.pandl.delta" -> 1.2484375, "data.sentiment" -> 1.0, "data.myTradeCnt" -> 4, "data.volume" -> 0.0), "o7", 1.6008814102564104)
+    metrics7 shouldBe LedgerMetrics(Map("data.price" -> 105.0, "data.pandl.pandl" -> 1.6008814102564104, "data.pandl.delta" -> 1.2484375, "data.sentiment" -> 1.0, "data.myTradeCnt" -> 4, "data.volume" -> 0.0), "o7", 1.6008814102564104)
 
     // add pairless buy
     val l8 = buildLedger(l7,
@@ -147,7 +147,7 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     l8.ledgerOrders.toVector.map(_.orderID) shouldBe Vector("o4", "o3", "o2", "o1", "o5", "o6", "o7", "o8")
     val l9 = l8.withMetrics(strategy = bbandsStrategy)
     val metrics9 = l9.ledgerMetrics
-    metrics9 shouldBe  LedgerMetrics(Map("data.price" -> 110.0, "data.pandl.pandl" -> 1.6008814102564104, "data.pandl.delta" -> 0, "data.sentiment" -> 1.0, "data.myTradeCnt" -> 5, "data.volume" -> 0), "o7", 1.6008814102564104)
+    metrics9 shouldBe  LedgerMetrics(Map("data.price" -> 105.0, "data.pandl.pandl" -> 1.6008814102564104, "data.pandl.delta" -> 0, "data.sentiment" -> 1.0, "data.myTradeCnt" -> 5, "data.volume" -> 0), "o7", 1.6008814102564104)
   }
 
   it should "do basic pandl" in {
@@ -155,8 +155,8 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     import ModelsSpec._
     def addToLedger(l: Ledger, expPandl: Double, expPandlDelta: Double, orders: Seq[(String, String)]): Ledger = {
       val l2 = orders.foldLeft(l) {
-        case (soFar, ("rest", order)) => soFar.record(RestModel.asModel(order).get)
-        case (soFar, ("ws", order)) => soFar.record(WsModel.asModel(order).get)
+        case (soFar, ("rest", order)) => soFar.recordRest(RestModel.asModel(order).get)
+        case (soFar, ("ws", order)) => soFar.recordWs(WsModel.asModel(order).get)
       }
       val l3 = l2.withMetrics(strategy = bbandsStrategy)
       round(l3.ledgerMetrics.metrics("data.pandl.pandl").asInstanceOf[Double]) shouldBe round(expPandl)
@@ -231,10 +231,10 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
     reqs.foldLeft(l) {
       case (l, ("rest", reqStr)) =>
         RestModel.asModel(reqStr) match {
-          case JsSuccess(x:Order, _)  => l.record(x)
-          case JsSuccess(x:Orders, _) => l.record(x)
+          case JsSuccess(x:Order, _)  => l.recordRest(x)
+          case JsSuccess(x:Orders, _) => l.recordRest(x)
           case other                  => throw new Exception(s"Failed to parse rest json: $reqStr: $other")
         }
-      case (l, ("ws", reqStr))        => l.record(WsModel.asModel(reqStr).get)
+      case (l, ("ws", reqStr))        => l.recordWs(WsModel.asModel(reqStr).get)
     }
 }

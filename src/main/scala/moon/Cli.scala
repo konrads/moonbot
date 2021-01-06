@@ -165,6 +165,14 @@ object Cli extends App {
         case Success(res) => log.info(s"REST amend response: $orderIDOpt, $clOrdOpt, $res")
         case Failure(exc) => log.error(s"REST amend exception: $orderIDOpt, $clOrdOpt", exc)
       }
+    case ("getOpenOrders", _, _, _, _, _, _, _, _, _) =>
+      log.info(s"getting open orders")
+      val resF = restGateway.getOrdersSync(Some("open"))
+      log.info(s"REST getOpenOrders request")
+      resF match {
+        case Success(res) => log.info(s"REST getOpenOrders response: $res")
+        case Failure(exc) => log.error(s"REST getOpenOrders exception:", exc)
+      }
     case ("cancel", _, _, _, _, _, _, orderIDOpt, cliOrdOpt, _) =>
       log.info(s"canceling: orderid: $orderIDOpt")
       wsGateway.run(consumeOrder)
@@ -192,7 +200,7 @@ object Cli extends App {
       val strategy = new PermaBullStrategy(bbandsConfig)
       def consumeWs(ledger: Ledger=Ledger()): Behavior[ActorEvent] = Behaviors.receiveMessagePartial[ActorEvent] {
         case WsEvent(wsData) =>
-          val ledger2 = ledger.record(wsData)
+          val ledger2 = ledger.recordWs(wsData)
           log.info(s"...wsData: $wsData\n                                ledgerOrders:${ledger2.ledgerOrders.map(o => s"\n                                - $o").mkString}")
           if (ledger2.isMinimallyFilled) {
             val strategyRes = strategy.strategize(ledger2)

@@ -14,10 +14,14 @@ sealed trait RestModel
 case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[Double]=None, stopPx: Option[Double]=None, orderQty: Double, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends RestModel
 object Order { implicit val aReads: Reads[Order] = Json.reads[Order] }
 
+case class HealthCheckOrders(orders: Seq[Order]) extends RestModel {
+  def containsOrderIDs(orderIDs: String*): Boolean = orders.exists(o => orderIDs.contains(o.orderID))
+  def containsClOrdIDs(clOrdIDs: String*): Boolean = orders.exists(o => o.clOrdID.exists(clOrdIDs.contains))
+}
+
 case class Orders(orders: Seq[Order]) extends RestModel {
   def containsOrderIDs(orderIDs: String*): Boolean = orders.exists(o => orderIDs.contains(o.orderID))
   def containsClOrdIDs(clOrdIDs: String*): Boolean = orders.exists(o => o.clOrdID.exists(clOrdIDs.contains))
-  def containsTexts(texts: String*): Boolean = orders.exists(o => o.text.exists(texts.contains))
 }
 object Orders { implicit val aReads: Reads[Orders] = Json.reads[Orders] }
 
@@ -65,10 +69,11 @@ object RestModel {
   implicit val aReads: Reads[RestModel] = (json: JsValue) => {
     // log.debug(s"#### rest json: $json")
     val res = json match {
-      case arr@JsArray(_) => (arr(0) \ "orderID").asOpt[String] match {
-        case Some(_) => arr.validate[List[Order]].map(x => Orders(x))
-        case _ => JsError(s"Unknown json array '$json'")
-      }
+      case arr@JsArray(_) => arr.validate[List[Order]].map(x => Orders(x))  // implied it's an array or Orders. Cannot check arr(0)._orderID because it could be an empty list...
+//      case arr@JsArray(_) => (arr(0) \ "orderID").asOpt[String] match {
+//        case Some(_) => arr.validate[List[Order]].map(x => Orders(x))
+//        case _ => JsError(s"Unknown json array '$json'")
+//      }
       case _ => (json \ "orderID").asOpt[String] match {
         case Some(_) => json.validate[Order]
           .map(o => o.copy(

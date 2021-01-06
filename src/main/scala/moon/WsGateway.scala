@@ -5,7 +5,9 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.ws._
+import akka.http.scaladsl.settings.ClientConnectionSettings
 import akka.stream.scaladsl._
+import akka.util.ByteString
 import com.typesafe.scalalogging.Logger
 import play.api.libs.json.JsResult
 
@@ -70,11 +72,17 @@ class WsGateway(val wsUrl: String, val apiKey: String, val apiSecret: String, ws
       Source(authMessage +: subscribeMessages)
     }
 
-    // determining when server closed connection:
     // https://stackoverflow.com/questions/37727410/how-to-listen-websocket-server-close-events-using-akka-http-websocket-client
+    val wsSettings = {
+      // based on https://doc.akka.io/docs/akka-http/current/client-side/websocket-support.html#automatic-keep-alive-ping-support
+      val defSettings = ClientConnectionSettings(system)
+      val wsSettings = defSettings.websocketSettings.withPeriodicKeepAliveData(() => ByteString(s"ping"))
+      defSettings.withWebsocketSettings(wsSettings)
+    }
+    // determining when server closed connection:
     val flow = Flow.fromSinkAndSourceMat(incoming, outgoing.concatMat(Source.maybe[Message])(Keep.right))(Keep.both)
 
-    val (upgradeResponse, (sinkClose, sourceClose)) = Http().singleWebSocketRequest(WebSocketRequest(wsUrl), flow)
+    val (upgradeResponse, (sinkClose, sourceClose)) = Http().singleWebSocketRequest(WebSocketRequest(wsUrl), flow, settings=wsSettings)
     endOfLivePromise = sourceClose
 
     sinkClose.onComplete {

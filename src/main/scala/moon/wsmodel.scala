@@ -20,7 +20,7 @@ case class OrderBookData(symbol: String, timestamp: DateTime, asks: Seq[Seq[Doub
 object OrderBookData { implicit val aReads: Reads[OrderBookData] = Json.reads[OrderBookData] }
 
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel {
-  def summary = OrderBookSummary(table = table, timestamp = data.head.timestamp, ask = data.head.asks.last.head, bid = data.head.bids.last.head)
+  def summary = OrderBookSummary(table = table, timestamp = data.head.timestamp, ask = data.head.asks.map(_.head).min, bid = data.head.bids.map(_.head).max)
 }
 object OrderBook { implicit val aReads: Reads[OrderBook] = Json.reads[OrderBook] }
 

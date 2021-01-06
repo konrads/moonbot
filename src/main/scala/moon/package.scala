@@ -206,6 +206,9 @@ package object moon {
   def tillEOM: FiniteDuration =
     FiniteDuration(60000 - System.currentTimeMillis % 60000, TimeUnit.MILLISECONDS)
 
+  def tillEO5m: FiniteDuration =
+    FiniteDuration(5*60000 - System.currentTimeMillis % 5*60000, TimeUnit.MILLISECONDS)
+
   def createBackoff: () => Int = {
     val delays = (LazyList(250, 500, 1000, 2000, 4000, 8000) ++ LazyList.continually(16000)).iterator
     def _backoff() = {

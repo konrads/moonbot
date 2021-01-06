@@ -32,14 +32,17 @@ object Orchestrator {
       case ShortDir => l.askPrice
     }
 
-    def openPositionOrder(l: Ledger): Option[OpenInitOrder] = {
-      val openPrices = l.myOrders.filter(o => Seq(New, PartiallyFilled).contains(o.ordStatus)).map(_.price)
-      tierCalc.canOpenWithQty(bestOpenPrice(l), openPrices).flatMap { qty =>
+    def openPositionOrder(l: Ledger): Either[String, (OpenInitOrder, Tier)] = {
+      val closeSide = if (dir == LongDir) Sell else Bull
+      val closeOrders = l.myOrders.filter(o => Seq(New, PartiallyFilled).contains(o.ordStatus) && o.side == closeSide)
+      val closeOrderOpenClOrdIDs = closeOrders.map(_.relatedClOrdID)
+      val openPrices = l.myOrders.filter(o => closeOrderOpenClOrdIDs.contains(o.clOrdID)).map(_.price)
+      tierCalc.canOpenWithQty(bestOpenPrice(l), openPrices).flatMap { tier =>
           val strategyRes = strategy.strategize(l)
           (dir, strategyRes.sentiment) match {
-            case (LongDir,  Bull) => Some(OpenInitOrder(Buy,  Limit, uuid, qty, Some(l.bidPrice)))
-            case (ShortDir, Bear) => Some(OpenInitOrder(Sell, Limit, uuid, qty, Some(l.askPrice)))
-            case _                => None
+            case (LongDir,  Bull) => Right((OpenInitOrder(Buy,  Limit, uuid, tier.qty, Some(l.bidPrice)), tier))
+            case (ShortDir, Bear) => Right((OpenInitOrder(Sell, Limit, uuid, tier.qty, Some(l.askPrice)), tier))
+            case _                => Left(s"Failed to open order with unmatched dir: $dir, sentiment: ${strategyRes.sentiment}")
           }
       }
     }
@@ -57,7 +60,7 @@ object Orchestrator {
       // Init state
       case (InitCtx(ledger), WsEvent(data)) =>
         if (log.isDebugEnabled) log.debug(s"Init: WsEvent: $data")
-        val ledger2 = ledger.record(data)
+        val ledger2 = ledger.recordWs(data)
         if (ledger2.isMinimallyFilled) {
           log.info(
             """
@@ -67,17 +70,18 @@ object Orchestrator {
               ||                                             |
               |`-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-'""".stripMargin)
           openPositionOrder(ledger2) match {
-            case Some(effect) =>
-              log.info(s"Idle: starting afresh with $dir order: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get}...")
+            case Right((effect, tier)) =>
+              log.info(s"Init: starting afresh with $dir order: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get} in tier: $tier")
               (OpenPositionCtx(ledger = ledger2, clOrdID = effect.clOrdID, targetPrice = effect.price.get, lifecycle = IssuingNew), Some(effect))
-            case None =>
+            case Left(reason) =>
+              if (log.isDebugEnabled) log.debug(s"Init: Skipping init order creation due to: $reason")
               (ctx.withLedger(ledger2), None)
           }
         } else
           (ctx.withLedger(ledger2), None)
       case (InitCtx(ledger), RestEvent(Success(data))) =>
         if (log.isDebugEnabled) log.debug(s"Init: RestEvent: $data")
-        (ctx.withLedger(ledger.record(data)), None)
+        (ctx.withLedger(ledger.recordRest(data)), None)
       case (InitCtx(_), RestEvent(Failure(exc))) =>
         if (log.isDebugEnabled) log.debug(s"Init: unexpected failure: $exc", exc)
         (ctx, None)
@@ -86,17 +90,18 @@ object Orchestrator {
       case (IdleCtx(ledger), WsEvent(wsData)) =>
         // FIXME: repeated from InitCtx...
         if (log.isDebugEnabled) log.debug(s"Idle: WsEvent: $wsData")
-        val ledger2 = ledger.record(wsData)
+        val ledger2 = ledger.recordWs(wsData)
         openPositionOrder(ledger2) match {
-          case Some(effect) =>
-            log.info(s"Idle: starting afresh with $dir order: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get}...")
+          case Right((effect, tier)) =>
+            log.info(s"Idle: starting afresh with $dir order: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get} in tier: $tier")
             (OpenPositionCtx(ledger = ledger2, clOrdID = effect.clOrdID, targetPrice = effect.price.get, lifecycle = IssuingNew), Some(effect))
-          case None =>
+          case Left(reason) =>
+            if (log.isDebugEnabled) log.debug(s"Idle: Skipping init order creation due to: $reason")
             (ctx.withLedger(ledger2), None)
         }
       case (IdleCtx(_), RestEvent(Success(data))) =>
         if (log.isDebugEnabled) log.debug(s"Idle: unexpected RestEvent: $data")
-        (ctx.withLedger(ctx.ledger.record(data)), None)
+        (ctx.withLedger(ctx.ledger.recordRest(data)), None)
       case (IdleCtx(_), RestEvent(Failure(exc))) =>
         if (log.isDebugEnabled) log.debug(s"Idle: unexpected Rest failure: $exc", exc)
         (ctx, None)
@@ -105,16 +110,17 @@ object Orchestrator {
       case (ctx2@OpenPositionCtx(clOrdID, ledger, targetPrice, lifecycle), event@(WsEvent(_) | RestEvent(Success(_)))) =>
         val (ledger2, clOrdIDMatch, isRestReply) = event match {
           case WsEvent(o: UpsertOrder) =>
-            val ledger2 = ledger.record(o)
+            val ledger2 = ledger.recordWs(o)
             (ledger2, o.containsClOrdIDs(clOrdID), false)
           case WsEvent(data) =>
-            (ledger.record(data), false, false)
+            (ledger.recordWs(data), false, false)
           case RestEvent(Success(data)) =>
-            val ledger2 = ledger.record(data)
+            val ledger2 = ledger.recordRest(data)
             val clOrdIDMatch = data match {
-              case o: Order   => o.clOrdID.contains(clOrdID)
-              case os: Orders => os.containsClOrdIDs(clOrdID)
-              case          _ => false
+              case o: Order               => o.clOrdID.contains(clOrdID)
+              case os: Orders             => os.containsClOrdIDs(clOrdID)
+              case hos: HealthCheckOrders => hos.containsClOrdIDs(clOrdID)
+              case _                      => false
             }
             (ledger2, clOrdIDMatch, true)
           case _ => ???  // should never happen
@@ -124,18 +130,19 @@ object Orchestrator {
 
         (ordStatusOpt, clOrdIDMatch) match {
           case (Some(Filled), true) =>
-            log.info(s"Open $dir: filled orderID: ${orderOpt.get.fullOrdID} @ ${orderOpt.get.price}")
-            val effect = closePositionOrders(orderOpt.get.price, orderOpt.get.qty)
-            val ctx3 = ClosePositionCtx(openPrice = orderOpt.get.price, takeProfitClOrdID = effect.takeProfitClOrdID, ledger = ledger2)
+            val openPrice = round(orderOpt.get.price, 0)
+            val effect = closePositionOrders(openPrice, orderOpt.get.qty)
+            val ctx3 = ClosePositionCtx(openClOrdID = clOrdID, openPrice = openPrice, takeProfitClOrdID = effect.takeProfitClOrdID, ledger = ledger2, lifecycle = IssuingNew)
+            log.info(s"Open $dir: filled orderID: ${orderOpt.get.fullOrdID} @ ${orderOpt.get.price}, issuing close order: $effect")
             (ctx3, Some(effect))
           case (Some(PostOnlyFailure), true) =>
             openPositionOrder(ledger2) match {
-              case Some(effect) =>
-                log.info(s"Open $dir: PostOnlyFailure for orderID: ${orderOpt.get.fullOrdID}, re-issuing order: clOrdID: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get}")
+              case Right((effect, tier)) =>
+                log.info(s"Open $dir: PostOnlyFailure for orderID: ${orderOpt.get.fullOrdID}, re-issuing order: clOrdID: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get} in tier: $tier")
                 val ctx3 = ctx2.copy(clOrdID = effect.clOrdID, targetPrice = effect.price.get, lifecycle = IssuingNew)
                 (ctx3, Some(effect))
-              case None =>
-                log.info(s"Open $dir: PostOnlyFailure, won't re-issue the order...")
+              case Left(reason) =>
+                log.info(s"Open $dir: PostOnlyFailure, won't re-issue the order due to: $reason")
                 (IdleCtx(ledger2), None)
             }
           case (Some(Canceled), true) =>
@@ -156,7 +163,7 @@ object Orchestrator {
                   val ctx3 = ctx2.copy(ledger = ledger2, targetPrice = bestPrice, lifecycle = IssuingAmend)
                   (ctx3, Some(effect))
                 } else {
-                  if (log.isDebugEnabled) log.debug(s"Open $dir: noop, sentiment matches dir @ orderID: ${orderOpt.get.fullOrdID}, event: $event")
+                  if (log.isDebugEnabled) log.debug(s"Open $dir: noop, sentiment matches dir @ orderID: ${orderOpt.map(_.fullOrdID)}, event: $event")
                   val ctx3 = ctx2.copy(ledger = ledger2, lifecycle = Awaiting)
                   (ctx3, None)
                 }
@@ -171,48 +178,52 @@ object Orchestrator {
         }
 
       case (ctx2@OpenPositionCtx(clOrdID, ledger, targetPrice, lifecycle), RestEvent(Failure(e@(TemporarilyUnavailableError(_)|TemporarilyUnavailableOnPostError(_))))) =>
+        log.warn("Encountered error", e)
         lifecycle match {
           case IssuingNew =>
             openPositionOrder(ledger) match {
-              case Some(effect) =>
-                log.info(s"Open: re-issuing $dir order: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get}...")
+              case Right((effect, tier)) =>
+                log.info(s"Open: re-issuing $dir order: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get} due to error in tier: $tier", e)
                 (ctx2.copy(clOrdID = effect.clOrdID, targetPrice = effect.price.get, lifecycle = IssuingNew), Some(effect))
-              case None =>
+              case Left(reason) =>
+                if (log.isDebugEnabled) log.debug(s"Open: Skipping init order creation due to: $reason, here due to error", e)
                 (IdleCtx(ledger), None)
             }
           case IssuingAmend =>
             val bestPrice = bestOpenPrice(ledger)
             if (targetPrice != bestPrice) {
               val effect = AmendOrder(clOrdID, bestPrice)
-              log.info(s"Open: re-amending $dir order: $clOrdID @ $bestPrice...")
+              log.info(s"Open: re-amending $dir order: $clOrdID @ $bestPrice due to error", e)
               val ctx3 = ctx2.copy(lifecycle = IssuingAmend)
               (ctx3, Some(effect))
             } else {
-              log.info(s"Open: no need to re-amend $dir order: $clOrdID, priced not moved...")
+              log.info(s"Open: no need to re-amend $dir order: $clOrdID, priced not moved, here due to error", e)
               (ctx2, None)
             }
           case IssuingCancel =>
-            log.info(s"Open: re-cancelling $dir order: $clOrdID...")
+            log.info(s"Open: re-cancelling $dir order: $clOrdID due to error", e)
             val effect = CancelOrder(clOrdID)
             (ctx2, Some(effect))
         }
 
       // Closing position - dealing with open of bulk orders, or cancel
-      case (ctx2@ClosePositionCtx(_, clOrdID, ledger), event@(WsEvent(_) | RestEvent(Success(_)))) =>
+      case (ctx2@ClosePositionCtx(openClOrdID, _, clOrdID, ledger, lifecycle), event@(WsEvent(_) | RestEvent(Success(_)))) =>
         val (ledger2, orderOpt, ordStatusOpt, clOrdIDMatch) = event match {
           case WsEvent(o: UpsertOrder) =>
-            val ledger2 = ledger.record(o)
+            val ledger2 = ledger.recordWs(o, Some(openClOrdID))
             val orderOpt = ledger2.ledgerOrdersByClOrdID.get(clOrdID)
             (ledger2, orderOpt, orderOpt.map(_.ordStatus), o.containsClOrdIDs(clOrdID))
           case WsEvent(data) =>
-            (ledger.record(data), None, None, false)
+            val ledger2 = ledger.recordWs(data, Some(openClOrdID))
+            (ledger2, None, None, false)
           case RestEvent(Success(data)) =>
-            val ledger2 = ledger.record(data)
+            val ledger2 = ledger.recordRest(data, Some(openClOrdID))
             val orderOpt = ledger2.ledgerOrdersByClOrdID.get(clOrdID)
             val clOrdIDMatch = data match {
-              case o: Order   => o.clOrdID.contains(clOrdID)
-              case os: Orders => os.containsClOrdIDs(clOrdID)
-              case _          => false
+              case o: Order               => o.clOrdID.contains(clOrdID)
+              case os: Orders             => os.containsClOrdIDs(clOrdID)
+              case hos: HealthCheckOrders => hos.containsClOrdIDs(clOrdID)
+              case _                      => false
             }
             (ledger2, orderOpt, orderOpt.map(_.ordStatus), clOrdIDMatch)
           case _ => ???  // should never happen
@@ -229,26 +240,36 @@ object Orchestrator {
           case (Some(ord), Some(PostOnlyFailure), true) =>
             // FIXME: not dealing with PostOnlyFailure, in presumption that margins will always be large enough. Otherwise, will need IssueAmend cycle
             throw IrrecoverableError(s"Close: PostOnlyFailure on closing position $ord... need to deal?\ntakeProfitOrder: $orderOpt", null)
+          case (Some(ord), _, true) =>
+            log.info(s"Close $dir: got update to order $ord, setting lifecycle $lifecycle -> $Awaiting")
+            (ctx2.copy(ledger = ledger2, lifecycle = Awaiting), None)
           case _ =>
             (ctx2.withLedger(ledger2), None)
         }
 
       // Common states/events
       // potentially drop down to another tier once holding position
-      case (ctx2@ClosePositionCtx(_, _, ledger), On30s(_)) =>
+      case (ctx2@ClosePositionCtx(openClOrdID, _, _, ledger, lifecycle), On30s(_)) =>
         openPositionOrder(ledger) match {
-          case Some(effect) =>
-            log.info(s"Close: issuing new tier $dir order: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get}...")
-            (OpenPositionCtx(ledger = ledger, clOrdID = effect.clOrdID, targetPrice = effect.price.get, lifecycle = IssuingNew), Some(effect))
-          case None =>
+          case Right((effect, tier)) =>
+            if (lifecycle == Awaiting) {
+              log.info(s"Close: issuing new tier $dir order: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get} in tier: $tier")
+              (OpenPositionCtx(ledger = ledger, clOrdID = effect.clOrdID, targetPrice = effect.price.get, lifecycle = IssuingNew), Some(effect))
+            } else {
+              if (log.isDebugEnabled) log.debug(s"Close $dir: didn't issue new tier $dir order: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get} in tier: $tier, due to lifecycle: $lifecycle")
+              (ctx2, None)
+            }
+          case Left(reason) =>
+            if (log.isDebugEnabled) log.debug(s"Close $dir: Skipping init order creation due to: $reason")
             (ctx2.withLedger(ledger), None)
         }
+      case (_, On5m(_)) =>
+        (ctx, Some(HealthCheck))
       case (_, On30s(_)) =>
         (ctx, None)
       case (_, On1m(nowMs)) =>
-        // if (log.isDebugEnabled) log.debug(s".....dbg ctx: $ctx")
-        log.info(s".....dbg ctx: $ctx")
         if (ctx.ledger.isMinimallyFilled) {
+          if (log.isDebugEnabled) log.debug(s"...dbg ctx: ${ctx.getClass}, ask/bid prices: ${ctx.ledger.askPrice}/${ctx.ledger.bidPrice}, myOrders:\n${ctx.ledger.myOrders.map(_.toString).mkString("\n")}")
           val ledger2 = ctx.ledger.withMetrics(strategy = strategy)
           val effect = PublishMetrics(ledger2.ledgerMetrics.metrics, nowMs)
           (ctx.withLedger(ledger2), Some(effect))

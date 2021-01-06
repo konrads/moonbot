@@ -146,6 +146,7 @@ object BotApp extends App {
       "orchestrator-actor")
     orchestratorActor.scheduler.scheduleAtFixedRate(tillEO30s, 30.seconds)(() => orchestratorActor ! On30s(None))
     orchestratorActor.scheduler.scheduleAtFixedRate(tillEOM,    1.minute) (() => orchestratorActor ! On1m(None))
+    orchestratorActor.scheduler.scheduleAtFixedRate(tillEO5m,   5.minute) (() => orchestratorActor ! On5m(None))
     // feed the WS events from actual exchange
     class CachedConsumer {
       var cache: OrderBookSummary = null

@@ -10,6 +10,7 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.util.ByteString
 import com.typesafe.scalalogging.Logger
 import moon.OrderSide.OrderSide
+import moon.OrderStatus.OrderStatus
 import play.api.libs.json.{JsError, JsSuccess, Json}
 
 import scala.concurrent.duration._
@@ -39,6 +40,7 @@ trait IRestGateway {
   def cancelOrderAsync(orderIDs: Seq[String]=Vector.empty, clOrdIDs: Seq[String]=Vector.empty): Future[Orders]
   def cancelAllOrdersAsync(): Future[Orders]
   def closePositionAsync(): Future[String]
+  def getOrdersAsync(status: Option[String]=Some("open")): Future[HealthCheckOrders]
 
   // sync
   def placeBulkOrdersSync(orderReqs: OrderReqs): Try[Orders]
@@ -50,6 +52,7 @@ trait IRestGateway {
   def cancelOrderSync(orderIDs: Seq[String]=Vector.empty, origClOrdIDs: Seq[String]=Vector.empty): Try[Orders]
   def cancelAllOrdersSync(): Try[Orders]
   def closePositionSync(): Try[String]
+  def getOrdersSync(status: Option[String]=Some("open")): Try[HealthCheckOrders]
 }
 
 
@@ -73,6 +76,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   def cancelOrderAsync(orderIDs: Seq[String] = Vector.empty, clOrdIDs: Seq[String] = Vector.empty): Future[Orders] = cancelOrder(orderIDs, clOrdIDs)
   def cancelAllOrdersAsync(): Future[Orders] = cancelAllOrders()
   def closePositionAsync(): Future[String] = closePosition()
+  def getOrdersAsync(status: Option[String]=Some("open")): Future[HealthCheckOrders] = getOrders(status)
 
   // sync
   def placeBulkOrdersSync(orderReqs: OrderReqs): Try[Orders] =
@@ -128,6 +132,22 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       closePosition(),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on closePosition") }.value.get
+
+  def getOrdersSync(status: Option[String]): Try[HealthCheckOrders] =
+    Await.ready(
+      getOrders(status),
+      Duration(syncTimeoutMs, MILLISECONDS)
+    ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on getOrders") }.value.getOrElse(scala.util.Success(HealthCheckOrders(Nil)))
+
+  private def getOrders(status: Option[String]=Some("open")): Future[HealthCheckOrders] =
+    sendReq(
+      GET,
+      "/api/v1/order" + status.map(s => "?filter=" + java.net.URLEncoder.encode(s"""{"${s.toLowerCase}":"true"}""", "UTF-8")).getOrElse(""),
+      "",
+      contentType = ContentTypes.`application/json`,
+    ).map(_.asInstanceOf[Orders]).map(o => HealthCheckOrders(o.orders))
+
+  private def setLeverage(symbol: String, leverage: Double) = ???
 
   // LastPrice trigger as described in: https://www.reddit.com/r/BitMEX/comments/8pi7j7/bitmex_api_how_to_switch_sl_trigger_to_last_price/
   private def placeStopOrder(qty: Double, side: OrderSide, price: Double, isClose: Boolean, execInst: String = "LastPrice", clOrdID: Option[String] = None): Future[Order] = {
