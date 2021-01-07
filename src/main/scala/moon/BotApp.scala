@@ -124,7 +124,7 @@ object BotApp extends App {
         flushSessionOnRestart=flushSessionOnRestart,
         behaviorDsl=behaviorDsl,
         initCtx=InitCtx(Ledger()),
-        bootstrap=restGateway.drainSync(dir=dir, priceMargin=50, minPosition=10))
+        bootstrap=restGateway.drainSync(dir=dir, priceMargin=20, minPosition=10))
     } else if (runType == Dry) {
       log.info(s"Instantiating Dry Run...")
       Behaviour.asLiveBehavior(

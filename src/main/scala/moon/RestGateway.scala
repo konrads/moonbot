@@ -166,7 +166,7 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
     var position = getPositionsSync().get.positions.filter(_.symbol == symbol).head
     log.info(s"Fetched position for symbol: $symbol: $position")
     if (math.abs(position.currentQty) > minPosition) {
-      val entryPrice = position.breakEvenPrice.get  // avgCostPrice.get
+      val entryPrice = position.breakEvenPrice.get  // breakevenPrice considers holding costs, avgCostPrice doesn't
       val delta = if (dir == LongDir) priceMargin else -priceMargin
       val drainSide = if (dir == LongDir) OrderSide.Sell else OrderSide.Buy
       log.info(s"Need to drain $drainSide ${position.currentQty} @ ${entryPrice + delta} (avgCost $entryPrice)")
