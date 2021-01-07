@@ -21,7 +21,7 @@ sealed trait Ctx extends LedgerAwareCtx {
 case class InitCtx(ledger: Ledger) extends Ctx { def withLedger(l: Ledger): InitCtx = copy(ledger = l) }  // entry state, ledger not warm yet
 case class IdleCtx(ledger: Ledger) extends Ctx { def withLedger(l: Ledger): IdleCtx = copy(ledger = l) }  // with warm (filled) ledger
 case class OpenPositionCtx(clOrdID: String = null, ledger: Ledger, targetPrice: Double, lifecycle: TradeLifecycle.Value) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
-case class ClosePositionCtx(openClOrdID: String, openPrice: Double, takeProfitClOrdID: String, ledger: Ledger, lifecycle: TradeLifecycle.Value) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
+case class ClosePositionCtx(openClOrdID: String, openPrice: Double, openQty: Double, takeProfitClOrdID: String, ledger: Ledger, lifecycle: TradeLifecycle.Value) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
 
 // External side effect, ie. communication with grafana/RestGateway
 sealed trait SideEffect

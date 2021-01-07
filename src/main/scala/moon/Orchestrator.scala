@@ -32,6 +32,11 @@ object Orchestrator {
       case ShortDir => l.askPrice
     }
 
+    def closestClosePrice(l: Ledger): Double = dir match {
+      case LongDir => l.askPrice
+      case ShortDir => l.bidPrice
+    }
+
     def openPositionOrder(l: Ledger): Either[String, (OpenInitOrder, Tier)] = {
       val closeSide = if (dir == LongDir) Sell else Bull
       val closeOrders = l.myOrders.filter(o => Seq(New, PartiallyFilled).contains(o.ordStatus) && o.side == closeSide)
@@ -48,11 +53,10 @@ object Orchestrator {
     }
 
     // close
-    def closePositionOrders(openPrice: Double, qty: Double): OpenTakeProfitOrder = {
-      val takeProfit = round(math.max(openPrice * takeProfitPerc, 10), 0)
+    def closePositionOrders(closePrice: Double, qty: Double): OpenTakeProfitOrder = {
       dir match {
-        case LongDir  => OpenTakeProfitOrder(Sell, qty, uuid, openPrice+takeProfit)
-        case ShortDir => OpenTakeProfitOrder(Buy,  qty, uuid, openPrice-takeProfit)
+        case LongDir  => OpenTakeProfitOrder(Sell, qty, uuid, closePrice)
+        case ShortDir => OpenTakeProfitOrder(Buy,  qty, uuid, closePrice)
       }
     }
 
@@ -131,8 +135,10 @@ object Orchestrator {
         (ordStatusOpt, clOrdIDMatch) match {
           case (Some(Filled), true) =>
             val openPrice = round(orderOpt.get.price, 0)
-            val effect = closePositionOrders(openPrice, orderOpt.get.qty)
-            val ctx3 = ClosePositionCtx(openClOrdID = clOrdID, openPrice = openPrice, takeProfitClOrdID = effect.takeProfitClOrdID, ledger = ledger2, lifecycle = IssuingNew)
+            val takeProfitDelta = round(math.max(openPrice * takeProfitPerc, 10), 0)
+            val closePrice = if (dir == LongDir) openPrice + takeProfitDelta else openPrice - takeProfitDelta
+            val effect = closePositionOrders(closePrice, orderOpt.get.qty)
+            val ctx3 = ClosePositionCtx(openClOrdID = clOrdID, openPrice = openPrice, openQty = effect.qty, takeProfitClOrdID = effect.takeProfitClOrdID, ledger = ledger2, lifecycle = IssuingNew)
             log.info(s"Open $dir: filled orderID: ${orderOpt.get.fullOrdID} @ ${orderOpt.get.price}, issuing close order: $effect")
             (ctx3, Some(effect))
           case (Some(PostOnlyFailure), true) =>
@@ -158,7 +164,7 @@ object Orchestrator {
                 val bestPrice = bestOpenPrice(ledger2)
                 if (targetPrice != bestPrice &&
                     (dir == LongDir && bestPrice > targetPrice) || (dir == ShortDir && bestPrice < targetPrice)) {
-                  log.info(s"Open $dir: best price moved, will change: $targetPrice -> $bestPrice, $event")
+                  log.info(s"Open $dir: best price moved, will change: $targetPrice -> $bestPrice")
                   val effect = AmendOrder(clOrdID, bestPrice)
                   val ctx3 = ctx2.copy(ledger = ledger2, targetPrice = bestPrice, lifecycle = IssuingAmend)
                   (ctx3, Some(effect))
@@ -207,15 +213,15 @@ object Orchestrator {
         }
 
       // Closing position - dealing with open of bulk orders, or cancel
-      case (ctx2@ClosePositionCtx(openClOrdID, _, clOrdID, ledger, lifecycle), event@(WsEvent(_) | RestEvent(Success(_)))) =>
-        val (ledger2, orderOpt, ordStatusOpt, clOrdIDMatch) = event match {
+      case (ctx2@ClosePositionCtx(openClOrdID, _, openQty, clOrdID, ledger, lifecycle), event@(WsEvent(_) | RestEvent(Success(_)))) =>
+        val (ledger2, orderOpt, ordStatusOpt, clOrdIDMatch, isRestReply) = event match {
           case WsEvent(o: UpsertOrder) =>
             val ledger2 = ledger.recordWs(o, Some(openClOrdID))
             val orderOpt = ledger2.ledgerOrdersByClOrdID.get(clOrdID)
-            (ledger2, orderOpt, orderOpt.map(_.ordStatus), o.containsClOrdIDs(clOrdID))
+            (ledger2, orderOpt, orderOpt.map(_.ordStatus), o.containsClOrdIDs(clOrdID), false)
           case WsEvent(data) =>
             val ledger2 = ledger.recordWs(data, Some(openClOrdID))
-            (ledger2, None, None, false)
+            (ledger2, None, None, false, false)
           case RestEvent(Success(data)) =>
             val ledger2 = ledger.recordRest(data, Some(openClOrdID))
             val orderOpt = ledger2.ledgerOrdersByClOrdID.get(clOrdID)
@@ -225,23 +231,25 @@ object Orchestrator {
               case hos: HealthCheckOrders => hos.containsClOrdIDs(clOrdID)
               case _                      => false
             }
-            (ledger2, orderOpt, orderOpt.map(_.ordStatus), clOrdIDMatch)
+            (ledger2, orderOpt, orderOpt.map(_.ordStatus), clOrdIDMatch, true)
           case _ => ???  // should never happen
         }
 
-        (orderOpt, ordStatusOpt, clOrdIDMatch) match {
-          case (Some(tOrd), Some(Canceled), true) =>
-            throw ExternalCancelError(s"Close $dir: unexpected (external?) cancels on takeProfit: ${tOrd.fullOrdID}, event: $event")
-          case (Some(tOrd), Some(Rejected), true) =>
-            throw OrderRejectedError(s"Close $dir: unexpected rejections on takeProfit: ${tOrd.fullOrdID}, event: $event")
-          case (Some(tOrd), Some(Filled), true) =>
-            log.info(pretty(s"Close $dir: ✔✔✔ filled takeProfit: ${tOrd.fullOrdID} @ ${tOrd.price} ✔✔✔", Bull, consoleDriven))
+        (orderOpt, ordStatusOpt, clOrdIDMatch, isRestReply) match {
+          case (Some(tOrd), Some(Canceled), true, true) =>
+            throw ExternalCancelError(s"Close $dir: unexpected (external?) cancels on takeProfitDelta: ${tOrd.fullOrdID}, event: $event")
+          case (Some(tOrd), Some(Rejected), true, true) =>
+            throw OrderRejectedError(s"Close $dir: unexpected rejections on takeProfitDelta: ${tOrd.fullOrdID}, event: $event")
+          case (Some(tOrd), Some(Filled), true, true) =>
+            log.info(pretty(s"Close $dir: ✔✔✔ filled takeProfitDelta: ${tOrd.fullOrdID} @ ${tOrd.price} ✔✔✔", Bull, consoleDriven))
             (IdleCtx(ledger2), None)
-          case (Some(ord), Some(PostOnlyFailure), true) =>
-            // FIXME: not dealing with PostOnlyFailure, in presumption that margins will always be large enough. Otherwise, will need IssueAmend cycle
-            throw IrrecoverableError(s"Close: PostOnlyFailure on closing position $ord... need to deal?\ntakeProfitOrder: $orderOpt", null)
-          case (Some(ord), _, true) =>
-            log.info(s"Close $dir: got update to order $ord, setting lifecycle $lifecycle -> $Awaiting")
+          case (Some(ord), Some(PostOnlyFailure), true, true) =>
+            // re-issue
+            val effect = closePositionOrders(closestClosePrice(ledger2), openQty)
+            log.warn(s"Close $dir: re-issuing order dur to PostOnlyFailure, clOrdID: ${effect.takeProfitClOrdID} @ ${effect.takeProfitLimit}, qty: ${effect.qty}")
+            (ctx2.copy(ledger=ledger2, takeProfitClOrdID = effect.takeProfitClOrdID, lifecycle = IssuingAmend), Some(effect))
+          case (Some(ord), _, true, _) =>
+            log.info(s"Close $dir: got $event update to order ${ord.fullOrdID}, setting lifecycle $lifecycle -> $Awaiting")
             (ctx2.copy(ledger = ledger2, lifecycle = Awaiting), None)
           case _ =>
             (ctx2.withLedger(ledger2), None)
@@ -249,7 +257,7 @@ object Orchestrator {
 
       // Common states/events
       // potentially drop down to another tier once holding position
-      case (ctx2@ClosePositionCtx(openClOrdID, _, _, ledger, lifecycle), On30s(_)) =>
+      case (ctx2@ClosePositionCtx(_, _, _, _, ledger, lifecycle), On30s(_)) =>
         openPositionOrder(ledger) match {
           case Right((effect, tier)) =>
             if (lifecycle == Awaiting) {

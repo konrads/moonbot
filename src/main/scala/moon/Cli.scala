@@ -6,6 +6,7 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
+import moon.Dir.LongDir
 import moon.Sentiment._
 import org.rogach.scallop._
 import org.slf4j.LoggerFactory
@@ -165,13 +166,21 @@ object Cli extends App {
         case Success(res) => log.info(s"REST amend response: $orderIDOpt, $clOrdOpt, $res")
         case Failure(exc) => log.error(s"REST amend exception: $orderIDOpt, $clOrdOpt", exc)
       }
-    case ("getOpenOrders", _, _, _, _, _, _, _, _, _) =>
-      log.info(s"getting open orders")
-      val resF = restGateway.getOrdersSync(Some("open"))
-      log.info(s"REST getOpenOrders request")
+    case ("getOrders", _, _, _, _, _, _, _, _, _) =>
+      log.info(s"getting orders")
+      val resF = restGateway.getOrdersSync(None)
+      log.info(s"REST getOrders request")
       resF match {
-        case Success(res) => log.info(s"REST getOpenOrders response: $res")
-        case Failure(exc) => log.error(s"REST getOpenOrders exception:", exc)
+        case Success(res) => log.info(s"REST getOrders response:\n${res.orders.map(o => s"- $o").mkString("\n")}")
+        case Failure(exc) => log.error(s"REST getOrders exception:", exc)
+      }
+    case ("getPositions", _, _, _, _, _, _, _, _, _) =>
+      log.info(s"getting positions")
+      val resF = restGateway.getPositionsSync()
+      log.info(s"REST getPositions request")
+      resF match {
+        case Success(res) => log.info(s"REST getPositions response:\n${res.positions.map(o => s"- $o").mkString("\n")}")
+        case Failure(exc) => log.error(s"REST getPositions exception:", exc)
       }
     case ("cancel", _, _, _, _, _, _, orderIDOpt, cliOrdOpt, _) =>
       log.info(s"canceling: orderid: $orderIDOpt")
@@ -182,6 +191,11 @@ object Cli extends App {
         case Success(res) => log.info(s"REST cancel response: $orderIDOpt, $cliOrdOpt, $res")
         case Failure(exc) => log.error(s"REST cancel exception: $orderIDOpt, $cliOrdOpt", exc)
       }
+    case ("drain", _, _, _, _, _, _, _, _, _) =>
+      log.info(s"drain")
+      // wsGateway.run(consumeOrder)
+      log.info(s"REST draining, might take a while...")
+      restGateway.drainSync(LongDir, 10.0, 10.0)
     case ("flush", _, _, _, _, _, _, _, _, _) =>
       log.info(s"closing position & cancelling orders")
       wsGateway.run(consumeOrder)

@@ -9,6 +9,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.util.ByteString
 import com.typesafe.scalalogging.Logger
+import moon.Dir.LongDir
 import moon.OrderSide.OrderSide
 import moon.OrderStatus.OrderStatus
 import play.api.libs.json.{JsError, JsSuccess, Json}
@@ -35,24 +36,28 @@ trait IRestGateway {
   def placeStopOrderAsync(qty: Double, price: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order]
   def placeTrailingStopOrderAsync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order]
   def placeMarketOrderAsync(qty: Double, side: OrderSide, clOrdID: Option[String]): Future[Order]
-  def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order]
+  def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String], participateDoNotInitiate: Boolean=true): Future[Order]
   def amendOrderAsync(orderID: Option[String]=None, origClOrdID: Option[String]=None, price: Double): Future[Order]
   def cancelOrderAsync(orderIDs: Seq[String]=Vector.empty, clOrdIDs: Seq[String]=Vector.empty): Future[Orders]
   def cancelAllOrdersAsync(): Future[Orders]
   def closePositionAsync(): Future[String]
   def getOrdersAsync(status: Option[String]=Some("open")): Future[HealthCheckOrders]
+  def getPositionsAsync(): Future[Positions]
 
   // sync
   def placeBulkOrdersSync(orderReqs: OrderReqs): Try[Orders]
   def placeStopOrderSync(qty: Double, price: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Try[Order]
   def placeTrailingStopOrderSync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Try[Order]
   def placeMarketOrderSync(qty: Double, side: OrderSide, clOrdID: Option[String]): Try[Order]
-  def placeLimitOrderSync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String]): Try[Order]
+  def placeLimitOrderSync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String], participateDoNotInitiate: Boolean=true): Try[Order]
   def amendOrderSync(orderID: Option[String]=None, clOrdID: Option[String]=None, price: Double): Try[Order]
   def cancelOrderSync(orderIDs: Seq[String]=Vector.empty, origClOrdIDs: Seq[String]=Vector.empty): Try[Orders]
   def cancelAllOrdersSync(): Try[Orders]
   def closePositionSync(): Try[String]
   def getOrdersSync(status: Option[String]=Some("open")): Try[HealthCheckOrders]
+  def getPositionsSync(): Try[Positions]
+
+  def drainSync(dir: Dir.Value, priceMargin: Double, minPosition: Double): Unit
 }
 
 
@@ -71,12 +76,13 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   def placeStopOrderAsync(qty: Double, price: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order] = placeStopOrder(qty, side, price, isClose, clOrdID=clOrdID)
   def placeTrailingStopOrderAsync(qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order] = placeTrailingStopOrder(qty, side, pegOffsetValue, isClose, clOrdID=clOrdID)
   def placeMarketOrderAsync(qty: Double, side: OrderSide, clOrdID: Option[String]): Future[Order] = placeMarketOrder(qty, side, clOrdID=clOrdID)
-  def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order] = placeLimitOrder(qty, price, isReduceOnly, side, clOrdID=clOrdID)
+  def placeLimitOrderAsync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String], participateDoNotInitiate: Boolean=true): Future[Order] = placeLimitOrder(qty, price, isReduceOnly, side, clOrdID=clOrdID, participateDoNotInitiate=participateDoNotInitiate)
   def amendOrderAsync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: Double): Future[Order] = amendOrder(orderID, origClOrdID, price)
   def cancelOrderAsync(orderIDs: Seq[String] = Vector.empty, clOrdIDs: Seq[String] = Vector.empty): Future[Orders] = cancelOrder(orderIDs, clOrdIDs)
   def cancelAllOrdersAsync(): Future[Orders] = cancelAllOrders()
   def closePositionAsync(): Future[String] = closePosition()
   def getOrdersAsync(status: Option[String]=Some("open")): Future[HealthCheckOrders] = getOrders(status)
+  def getPositionsAsync(): Future[Positions] = getPositions()
 
   // sync
   def placeBulkOrdersSync(orderReqs: OrderReqs): Try[Orders] =
@@ -103,9 +109,9 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
-  def placeLimitOrderSync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String]): Try[Order] =
+  def placeLimitOrderSync(qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String], participateDoNotInitiate: Boolean=true): Try[Order] =
     Await.ready(
-      placeLimitOrder(qty, price, isReduceOnly, side, clOrdID=clOrdID),
+      placeLimitOrder(qty, price, isReduceOnly, side, clOrdID=clOrdID, participateDoNotInitiate=participateDoNotInitiate),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
@@ -139,13 +145,58 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       Duration(syncTimeoutMs, MILLISECONDS)
     ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on getOrders") }.value.getOrElse(scala.util.Success(HealthCheckOrders(Nil)))
 
-  private def getOrders(status: Option[String]=Some("open")): Future[HealthCheckOrders] =
+  def getPositionsSync(): Try[Positions] =
+    Await.ready(
+      getPositions(),
+      Duration(syncTimeoutMs, MILLISECONDS)
+    ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on getPositions") }.value.getOrElse(scala.util.Success(Positions(Nil)))
+
+  /**
+   * Look up position and for eg. LongDir:
+   * - cancel Open orders
+   * - get position
+   * - issue opposite side order at breakeven +/- 50, with flags: reduce, no postonly
+   * - poll till filled
+   */
+  def drainSync(dir: Dir.Value, priceMargin: Double, minPosition: Double): Unit = {
+    val backoff = (10_000 +: 20_000 +: 40_000 +: LazyList.continually(60_000)).iterator
+    log.info(s"Cancelling all orders for symbol: $symbol...")
+    val cancelledOrders = cancelAllOrdersSync().get
+    println(s"${cancelledOrders.orders.mkString("\n")}")
+    var position = getPositionsSync().get.positions.filter(_.symbol == symbol).head
+    log.info(s"Fetched position for symbol: $symbol: $position")
+    if (math.abs(position.currentQty) > minPosition) {
+      val entryPrice = position.breakEvenPrice.get  // avgCostPrice.get
+      val delta = if (dir == LongDir) priceMargin else -priceMargin
+      val drainSide = if (dir == LongDir) OrderSide.Sell else OrderSide.Buy
+      log.info(s"Need to drain $drainSide ${position.currentQty} @ ${entryPrice + delta} (avgCost $entryPrice)")
+      val drainOrder = placeLimitOrderSync(
+        qty=position.currentQty,
+        price=round(entryPrice + delta, 0),
+        isReduceOnly=true,
+        side=drainSide,
+        clOrdID=None,
+        participateDoNotInitiate=false)
+      log.info(s"Drain order: ${drainOrder.get}")
+      while (position.currentQty > minPosition) {
+        val backoffTs = backoff.next
+        log.info(s"...still draining, remaining qty: ${position.currentQty}, will sleep for ${backoffTs}ms")
+        Thread.sleep(backoffTs)
+        position = getPositionsSync().get.positions.filter(_.symbol == symbol).head
+      }
+    }
+    log.info(s"Position for symbol $symbol drained!")
+  }
+
+  private def getOrders(status: Option[String]=Some("open")): Future[HealthCheckOrders] = {
+    // "/api/v1/order?reverse=true&count=1000" + status.map(s => "&filter=" + java.net.URLEncoder.encode(s"""{"${s.toLowerCase}":"true"}""", "UTF-8")).getOrElse(""),
     sendReq(
       GET,
-      "/api/v1/order" + status.map(s => "?filter=" + java.net.URLEncoder.encode(s"""{"${s.toLowerCase}":"true"}""", "UTF-8")).getOrElse(""),
+      "/api/v1/order?reverse=true" + status.map(s => "&filter=" + java.net.URLEncoder.encode(s"""{"${s.toLowerCase}":"true"}""", "UTF-8")).getOrElse(""),
       "",
       contentType = ContentTypes.`application/json`,
     ).map(_.asInstanceOf[Orders]).map(o => HealthCheckOrders(o.orders))
+  }
 
   private def setLeverage(symbol: String, leverage: Double) = ???
 
@@ -176,12 +227,15 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
       s"symbol=$symbol&ordType=Market&timeInForce=GoodTillCancel&orderQty=${round(qty)}&side=$side" + clOrdID.map("&clOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
 
-  private def placeLimitOrder(qty: Double, price: Double, reduceOnly: Boolean, side: OrderSide, clOrdID: Option[String] = None): Future[Order] = {
-    val reduceOnlyStr = if (reduceOnly) ",ReduceOnly" else ""
+  private def placeLimitOrder(qty: Double, price: Double, reduceOnly: Boolean, side: OrderSide, clOrdID: Option[String] = None, participateDoNotInitiate: Boolean=true): Future[Order] = {
+    val execInstStr = if (reduceOnly && participateDoNotInitiate) "&execInst=ParticipateDoNotInitiate,ReduceOnly"
+      else if (reduceOnly) "&execInst=ReduceOnly"
+      else if (participateDoNotInitiate) "&execInst=ParticipateDoNotInitiate"
+      else ""
     sendReq(
       POST,
       "/api/v1/order",
-      s"symbol=$symbol&ordType=Limit&timeInForce=GoodTillCancel&execInst=ParticipateDoNotInitiate$reduceOnlyStr&orderQty=${round(qty)}&side=$side&price=${round(price)}" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
+      s"symbol=$symbol&ordType=Limit&timeInForce=GoodTillCancel$execInstStr&orderQty=${round(qty)}&side=$side&price=${round(price)}" + clOrdID.map("&clOrdID=" + _).getOrElse(""),
     ).map(_.asInstanceOf[Order])
   }
 
@@ -215,9 +269,17 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
   private def cancelAllOrders(): Future[Orders] = {
     sendReq(
       DELETE,
-      "/api/v1/order/all",
+      s"/api/v1/order/all?symbol=$symbol",
       ""
     ).map(_.asInstanceOf[Orders])
+  }
+
+  private def getPositions(): Future[Positions] = {
+    sendReq(
+      GET,
+      "/api/v1/position?symbol=$symbol",
+      ""
+    ).map(_.asInstanceOf[Positions])
   }
 
   private def closePosition(): Future[String] =

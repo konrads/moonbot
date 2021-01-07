@@ -117,12 +117,14 @@ object BotApp extends App {
 
     val orchestrator = if (runType == Live) {
       log.info(s"Instantiating Live Run...")
+      val restGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs)
       Behaviour.asLiveBehavior(
-        restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
+        restGateway = restGateway,
         metrics=metrics,
         flushSessionOnRestart=flushSessionOnRestart,
         behaviorDsl=behaviorDsl,
-        initCtx=InitCtx(Ledger()))
+        initCtx=InitCtx(Ledger()),
+        bootstrap=restGateway.drainSync(dir=dir, priceMargin=50, minPosition=10))
     } else if (runType == Dry) {
       log.info(s"Instantiating Dry Run...")
       Behaviour.asLiveBehavior(
@@ -142,7 +144,7 @@ object BotApp extends App {
       ???
 
     val orchestratorActor = ActorSystem(
-      Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.stop),  // FIXME: restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
+      Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
       "orchestrator-actor")
     orchestratorActor.scheduler.scheduleAtFixedRate(tillEO30s, 30.seconds)(() => orchestratorActor ! On30s(None))
     orchestratorActor.scheduler.scheduleAtFixedRate(tillEOM,    1.minute) (() => orchestratorActor ! On1m(None))

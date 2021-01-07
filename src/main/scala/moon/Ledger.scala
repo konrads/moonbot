@@ -38,17 +38,17 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
       ledgerOrdersByID.get(o.orderID) match {
         case Some(existing) if existing.ordStatus == Filled || existing.ordStatus == Canceled =>
           // copy all except for ordStatus
-          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), side=o.side, ordType=o.ordType, timestamp=o.timestamp, relatedClOrdID=relatedClOrdID.getOrElse(existing.relatedClOrdID))
+          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), price=o.avgPx.getOrElse(o.price.getOrElse(existing.price)), side=o.side, ordType=o.ordType, timestamp=o.timestamp, relatedClOrdID=relatedClOrdID.getOrElse(existing.relatedClOrdID))
           copy(
             ledgerOrdersByID = ledgerOrdersByID + (existing2.orderID -> existing2),
             ledgerOrdersByClOrdID = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2))
         case Some(existing) =>
-          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), ordStatus=o.ordStatus.getOrElse(existing.ordStatus), price=o.stopPx.getOrElse(o.price.getOrElse(existing.price)), timestamp=o.timestamp, relatedClOrdID=relatedClOrdID.getOrElse(existing.relatedClOrdID))
+          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), ordStatus=o.ordStatus.getOrElse(existing.ordStatus), price=o.avgPx.getOrElse(o.price.getOrElse(existing.price)), timestamp=o.timestamp, relatedClOrdID=relatedClOrdID.getOrElse(existing.relatedClOrdID))
           copy(
             ledgerOrdersByID = ledgerOrdersByID + (existing2.orderID -> existing2),
             ledgerOrdersByClOrdID = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2))
         case None =>
-          val lo = LedgerOrder(orderID=o.orderID, clOrdID=o.clOrdID.orNull, qty=o.orderQty, price=o.stopPx.getOrElse(o.price.getOrElse(-1.0)), side=o.side, ordType=o.ordType, timestamp=o.timestamp, ordStatus=o.ordStatus.getOrElse(New), ordRejReason=o.ordRejReason, myOrder=true, relatedClOrdID=relatedClOrdID.orNull)
+          val lo = LedgerOrder(orderID=o.orderID, clOrdID=o.clOrdID.orNull, qty=o.orderQty, price=o.avgPx.getOrElse(o.price.getOrElse(-1.0)), side=o.side, ordType=o.ordType, timestamp=o.timestamp, ordStatus=o.ordStatus.getOrElse(New), ordRejReason=o.ordRejReason, myOrder=true, relatedClOrdID=relatedClOrdID.orNull)
           copy(
             ledgerOrdersByID = ledgerOrdersByID + (lo.orderID -> lo),
             ledgerOrdersByClOrdID = if (lo.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID +(lo.clOrdID -> lo))
@@ -65,11 +65,11 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
           lsById.get(od.orderID) match {
             case Some(lo) =>
               val lo2 = (lo.ordStatus, od.ordStatus) match {
-                case (Filled, _) => lo.copy(relatedClOrdID=relatedClOrdID.getOrElse(lo.relatedClOrdID))    // ignore, already set, eg. by REST
-                case (Canceled, _) => lo.copy(relatedClOrdID=relatedClOrdID.getOrElse(lo.relatedClOrdID))  // ignore, already set, eg. by REST
+                case (Filled | Canceled, _) =>
+                  lo.copy(relatedClOrdID=relatedClOrdID.getOrElse(lo.relatedClOrdID))    // ignore, already set, eg. by REST
                 case (_, Some(s@New)) =>
                   lo.copy(
-                    price=od.stopPx.getOrElse(od.price.getOrElse(lo.price)),
+                    price=od.avgPx.getOrElse(od.price.getOrElse(lo.price)),
                     qty=od.orderQty.getOrElse(lo.qty),
                     ordStatus=s,
                     timestamp=od.timestamp,
@@ -120,7 +120,7 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
               (lsById + (lo2.orderID -> lo2), lsByClOrdID2)
             case None =>
               // expecting REST to fill in the initial order...
-              val lo = LedgerOrder(orderID=od.orderID, clOrdID=od.clOrdID.orNull, price=od.stopPx.getOrElse(od.avgPx.getOrElse(od.price.getOrElse(-1))), qty=od.cumQty.getOrElse(od.orderQty.getOrElse(0.0)), side=od.side.orNull, ordType=od.ordType.orNull, timestamp=od.timestamp, ordStatus=od.ordStatus.getOrElse(New), ordRejReason=od.ordRejReason, relatedClOrdID=relatedClOrdID.orNull)
+              val lo = LedgerOrder(orderID=od.orderID, clOrdID=od.clOrdID.orNull, price=od.avgPx.getOrElse(od.avgPx.getOrElse(od.price.getOrElse(-1))), qty=od.cumQty.getOrElse(od.orderQty.getOrElse(0.0)), side=od.side.orNull, ordType=od.ordType.orNull, timestamp=od.timestamp, ordStatus=od.ordStatus.getOrElse(New), ordRejReason=od.ordRejReason, relatedClOrdID=relatedClOrdID.orNull)
               val lsByClOrdID2 = if (lo.clOrdID == null) lsByClOrdID else lsByClOrdID + (lo.clOrdID -> lo)
               (lsById + (lo.orderID -> lo), lsByClOrdID2)
           }

@@ -11,8 +11,14 @@ import moon.jodaDateReads
 
 sealed trait RestModel
 
-case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[Double]=None, stopPx: Option[Double]=None, orderQty: Double, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends RestModel
+case class Position(account: Long, symbol: String, currency: String, leverage: Option[Double], crossMargin: Option[Boolean], rebalancedPnl: Double, currentQty: Double, avgCostPrice: Option[Double], breakEvenPrice: Option[Double], marginCallPrice: Option[Double], liquidationPrice: Option[Double], bankruptPrice: Option[Double]) extends RestModel
+object Position { implicit val aReads: Reads[Position] = Json.reads[Position] }
+
+case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Double, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends RestModel
 object Order { implicit val aReads: Reads[Order] = Json.reads[Order] }
+
+case class Positions(positions: Seq[Position]) extends RestModel
+object Positions { implicit val aReads: Reads[Positions] = Json.reads[Positions] }
 
 case class HealthCheckOrders(orders: Seq[Order]) extends RestModel {
   def containsOrderIDs(orderIDs: String*): Boolean = orders.exists(o => orderIDs.contains(o.orderID))
@@ -66,28 +72,31 @@ object OrderReqs {
 
 object RestModel {
   private val log = Logger("RestModel")
+  def reclassifyOrdStatus(o: Order): Order = {
+    o.copy(
+      ordStatus =
+        if (o.ordStatus.contains(Canceled) && o.text.exists(_.contains("had execInst of ParticipateDoNotInitiate")))
+          Some(PostOnlyFailure)
+        else
+          o.ordStatus,
+      amended = o.text.map(_.startsWith("Amended"))
+    )
+  }
   implicit val aReads: Reads[RestModel] = (json: JsValue) => {
     // log.debug(s"#### rest json: $json")
     val res = json match {
-      case arr@JsArray(_) => arr.validate[List[Order]].map(x => Orders(x))  // implied it's an array or Orders. Cannot check arr(0)._orderID because it could be an empty list...
-//      case arr@JsArray(_) => (arr(0) \ "orderID").asOpt[String] match {
-//        case Some(_) => arr.validate[List[Order]].map(x => Orders(x))
-//        case _ => JsError(s"Unknown json array '$json'")
-//      }
-      case _ => (json \ "orderID").asOpt[String] match {
-        case Some(_) => json.validate[Order]
-          .map(o => o.copy(
-            ordStatus =
-              if (o.ordStatus.contains(Canceled) && o.text.exists(_.contains("had execInst of ParticipateDoNotInitiate")))
-                Some(PostOnlyFailure)
-              else
-                o.ordStatus,
-            amended = o.text.map(_.startsWith("Amended"))
-          ))
-        case None    => (json \ "error").asOpt[JsValue] match {
-          case Some(_) => json.validate[Error]
-          case None    => JsError(s"Unknown json '$json'")
+      case arr@JsArray(_) if arr.value.nonEmpty =>
+        ((arr(0) \ "orderID").asOpt[String], (arr(0) \ "account").asOpt[Long]) match {
+          case (Some(_), _) => arr.validate[List[Order]].map(x => Orders(x.map(reclassifyOrdStatus)))
+          case (_, Some(_)) => arr.validate[List[Position]].map(x => Positions(x))
+          case _ => JsError(s"Unknown json array '$json'")
         }
+      case arr@JsArray(_) => arr.validate[List[Order]].map(x => Orders(x.map(reclassifyOrdStatus)))  // FIXME: default to list of Orders, assuming position will always be there...
+      case _ => ((json \ "orderID").asOpt[String], (json \ "account").asOpt[Long], (json \ "error").asOpt[String]) match {
+        case (Some(_), _, _) => json.validate[Order].map(reclassifyOrdStatus)
+        case (_, Some(_), _) => json.validate[Position]
+        case (_, _, Some(_)) => json.validate[Error]
+        case _ => JsError(s"Unknown json '$json'")
       }
     }
     res match {
