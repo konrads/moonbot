@@ -43,9 +43,10 @@ if __name__ == '__main__':
         print("""usage:
         %s download <START_DATE> <OPTIONAL_END_DATE>  # where OPTIONAL_END_DATE defaults to today
         %s list_pairs
-        %s filter   <PAIR>                            # where PAIR is eg. XBTUSD, ETHUSD
-        %s rollup   <PAIR>
-        """ % (sys.argv[0], sys.argv[0], sys.argv[0], sys.argv[0]))
+        %s filter                <PAIR>               # where PAIR is eg. XBTUSD, ETHUSD
+        %s rollup                <PAIR>
+        %s bullTrailingStoploss  <PAIR> <OPTIONAL_TRAILING_STOPLOSS_LIQUIDATION_LIMIT>  # where OPTIONAL_TRAILING_STOPLOSS_LIQUIDATION_LIMIT defaults to infinity
+        """ % (sys.argv[0], sys.argv[0], sys.argv[0], sys.argv[0], sys.argv[0]))
         sys.exit(-1)
 
     command = sys.argv[1].upper()
@@ -122,6 +123,59 @@ if __name__ == '__main__':
                 df_period.to_csv(out_filename, mode=write_mode, header=write_headers)
             write_headers = False
             write_mode = 'a'
+    elif command == 'BULLTRAILINGSTOPLOSS':
+      pair = sys.argv[2].upper()
+      if len(sys.argv) >= 4:
+        trailing_stoploss_liquidation_limit = float(sys.argv[3])
+        assert(trailing_stoploss_liquidation_limit > 0.)
+      else:
+        trailing_stoploss_liquidation_limit = float('inf')
+      qf_exploded_dir = '%s/%s' % (download_exploded_dir, pair)
+
+      files = sorted(os.listdir('%s/%s' % (download_exploded_dir, pair)))
+      high = 0.
+      high_ts = ''
+      max_trailing_stoploss = 0.
+      max_trailing_stoploss_ts = None
+      max_trailing_stoploss_price = None
+      max_trailing_stoploss_high = None
+      max_trailing_stoploss_high_ts = None
+      liquidations = []
+      for filename in files:
+        in_filename = '%s/%s' % (qf_exploded_dir, filename)
+        print('Reading %s...' % in_filename)
+        with open(in_filename, 'r') as f:
+          for l in f.readlines():
+            fields = [x.strip() for x in l.split(',')]
+            ts = fields[0]
+            curr_price = float(fields[4])
+            if curr_price >= high:
+              trailing_stoploss = 0
+              high = curr_price
+              high_ts = ts
+            else:
+              trailing_stoploss = (high - curr_price)/high
+              if trailing_stoploss >= trailing_stoploss_liquidation_limit:
+                liquidations.append((ts, curr_price, high, high_ts, trailing_stoploss))
+                print('%s,%s,%s,%s,%s,liquidation' % (ts, curr_price, high, high_ts, trailing_stoploss))
+                high = curr_price
+                high_ts = ts
+                max_trailing_stoploss = trailing_stoploss = 0.
+                max_trailing_stoploss_ts = None
+                max_trailing_stoploss_price = None
+                max_trailing_stoploss_high = None
+                max_trailing_stoploss_high_ts = None
+              elif trailing_stoploss > max_trailing_stoploss:
+                max_trailing_stoploss = trailing_stoploss
+                max_trailing_stoploss_ts = ts
+                max_trailing_stoploss_price = curr_price
+                max_trailing_stoploss_high = high
+                max_trailing_stoploss_high_ts = high_ts
+                print('%s,%s,%s,%s,%s,new_max' % (ts, curr_price, high, high_ts, trailing_stoploss))
+              else:
+                print('%s,%s,%s,%s,%s,no_change' % (ts, curr_price, high, high_ts, trailing_stoploss))
+      print('Final results: max_trailing_stoploss limit: %s, ts: %s, price: %s, high: %s, high_ts: %s, stoploss: %s' % (trailing_stoploss_liquidation_limit, max_trailing_stoploss_ts, max_trailing_stoploss_price, max_trailing_stoploss_high, max_trailing_stoploss_high_ts, max_trailing_stoploss))
+      print('Liquidations: (ts,price,high,high_ts,stoploss)\n%s' % '\n'.join([str(l) for l in liquidations]))
     else:
-        print('Invalid command: %s' % command)
-        sys.exit(-1)
+      print('Invalid command: %s' % command)
+      sys.exit(-1)
