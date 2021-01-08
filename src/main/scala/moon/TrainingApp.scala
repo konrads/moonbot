@@ -27,10 +27,7 @@ object TrainingApp extends App {
 
   val minTradeCnt             = 100  // Note, roundtrip = 2 trades!
   val takeProfitPercs         = Seq(0.0006, 0.0008, 0.001, 0.0012)
-  val tierCnts                = Seq(3, 5, 7)
-  val tierPricePercs          = Seq(0.95)  // Seq(1.0, 0.95, 0.9)
-  val tierQtyPercs            = Seq(1.0, 0.8, 0.6, 0.4)
-
+  val tiers                   = Seq((0.99, 100.0), (0.98, 80.0), (0.97, 60.0))
   val useSynthetics           = true
 
 
@@ -41,11 +38,8 @@ object TrainingApp extends App {
     var winningParams: Map[String, Double] = Map.empty
 
     for {
-      strategy            <- strategies
-      takeProfitPerc      <- takeProfitPercs
-      tierCnt             <- tierCnts
-      tierPricePerc       <- tierPricePercs
-      tierQtyPerc         <- tierQtyPercs
+      strategy       <- strategies
+      takeProfitPerc <- takeProfitPercs
     } {
       val sim = new ExchangeSim(
         eventDataDir = backtestDataDir,
@@ -53,10 +47,7 @@ object TrainingApp extends App {
         strategy = strategy,
         tierCalc = TierCalcImpl(
           dir=LongDir,
-          tradePoolQty=1000,
-          tierCnt=tierCnt,
-          tierPricePerc=tierPricePerc,
-          tierQtyPerc=tierQtyPerc
+          tiers=tiers
         ),
         dir=LongDir,
         takeProfitPerc = takeProfitPerc,
@@ -70,7 +61,7 @@ object TrainingApp extends App {
       val tradesCnt = ctx.ledger.myTrades.size
       val limitTrades = trades.filter(_.ordType == Limit)
       if (pandl > winningPandl && tradesCnt >= minTradeCnt) {
-        winningParams = Map("takeProfitPerc" -> takeProfitPerc, "tierCnt" -> tierCnt, "tierPricePerc" -> tierPricePerc, "tierQtyPerc" -> tierQtyPerc)
+        winningParams = Map("takeProfitPerc" -> takeProfitPerc)
         log.error(f"$GREEN$desc: NEW WINNER pandl: $pandl%.10f / $pandlUSD%.4f (${limitTrades.size} / $tradesCnt), params: ${winningParams.toList.sorted.map{case(k,v) => s"$k: $v"}.mkString(", ")}$RESET")
         winningPandl = pandl
         winningStrategy = strategy

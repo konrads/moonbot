@@ -1,6 +1,7 @@
 package moon
 
 import java.io.File
+import java.util
 
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorSystem, SupervisorStrategy}
@@ -13,6 +14,7 @@ import play.api.libs.json._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.collection.JavaConverters._
 
 
 object BotApp extends App {
@@ -49,10 +51,7 @@ object BotApp extends App {
   val useSynthetics          = conf.optBoolean("bot.useSynthetics").getOrElse(false)
   val takerFee               = conf.optDouble("bot.takerFee").getOrElse(.00075)
   val dir                    = conf.optString("bot.dir").map(Dir.withName).getOrElse(LongDir)
-  val tradePoolQty           = conf.optDouble("bot.tradePoolQty").getOrElse(.5)
-  val tierCnt                = conf.optInt("bot.tierCnt").getOrElse(5)
-  val tierPricePerc          = conf.optDouble("bot.tierPricePerc").getOrElse(0.95)
-  val tierQtyPerc            = conf.optDouble("bot.tierQtyPerc").getOrElse(0.8)
+  val tiers                  = conf.getList("bot.tiers").asScala.toSeq.map(_.unwrapped.asInstanceOf[util.ArrayList[Number]]).map(l => (l.get(0).doubleValue, l.get(1).doubleValue))
 
   val runType                = conf.optString("bot.runType").map(_.toLowerCase).map(x => RunType.withName(capFirst(x))).getOrElse(Live)
   assert(runType != RunType.Backtest || backtestEventDataDir.isDefined || backtestCsvDir.isDefined || backtestCandleFile.isDefined)
@@ -86,11 +85,13 @@ object BotApp extends App {
       |• backtestCsvDir:       $backtestCsvDir
       |• backtestCandleFile:   $backtestCandleFile
       |• useSynthetics:        $useSynthetics
+      |• dir:                  $dir
+      |• tiers:                ${tiers.mkString(",")}
       |""".stripMargin)
 
   val metrics = for { h <- graphiteHost; p <- graphitePort } yield Metrics(h, p, namespace)
   val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig, parentConfig = conf.getObject(s"strategy").toConfig)
-  val tierCalc = TierCalcImpl(dir = dir, tradePoolQty = tradePoolQty, tierCnt = tierCnt, tierPricePerc = tierPricePerc, tierQtyPerc = tierQtyPerc)
+  val tierCalc = TierCalcImpl(dir = dir, tiers = tiers)
 
   if (runType == Backtest) {
     log.info(s"Instantiating $runType on $backtestEventDataDir or $backtestCandleFile...")
@@ -124,7 +125,7 @@ object BotApp extends App {
         flushSessionOnRestart=flushSessionOnRestart,
         behaviorDsl=behaviorDsl,
         initCtx=InitCtx(Ledger()),
-        bootstrap=restGateway.drainSync(dir=dir, priceMargin=20, minPosition=10))
+        bootstrap=restGateway.drainSync(dir=dir, priceMargin=200, minPosition=10))
     } else if (runType == Dry) {
       log.info(s"Instantiating Dry Run...")
       Behaviour.asLiveBehavior(
