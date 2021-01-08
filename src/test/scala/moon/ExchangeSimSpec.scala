@@ -31,7 +31,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   def runSim(strategy: TestStrategy, sentimentsAndEvents: (Sentiment.Value, String)*): (Ctx, ExchangeCtx) = {
     val behaviorDsl = Orchestrator.asDsl(
       strategy=strategy,
-      tierCalc=TierCalcImpl(dir=LongDir),
+      tierCalc=TierCalcImpl(dir=LongDir, tiers=Seq((0.95, 15.0), (0.9025, 13.0), (0.857, 11.0), (0.815, 8.0), (0.774, 4.0))),
       takeProfitPerc=0.001,
       dir=LongDir)
 
@@ -54,19 +54,19 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   "Orchestrator" should "work with Bull Limit orders" in {
     val (ctx, eCtx) = runSim(new TestStrategy(Bull),
       (Bull, wsOrderBook10(10_000, 10, 10_100, 15, timestampL = startMs)),
-      (Bull, wsOrderBook10(11_000, 10, 11_100, 15, timestampL = startMs + `30sMs`)),   // amend buy
+      (Bull, wsOrderBook10(11_000, 10, 11_100, 15, timestampL = startMs + `30sMs`)),     // amend buy
       (Bull, wsOrderBook10(9_000,  10, 9_100,  15, timestampL = startMs + 2 * `30sMs`)), // execute buy @ 110 & issue sell
       (Bull, wsOrderBook10(10_000, 10, 10_100, 15, timestampL = startMs + 3 * `30sMs`)),
-      (Bull, wsOrderBook10(15_000, 10, 15_100, 15, timestampL = startMs + 4 * `30sMs`)),
+      (Bull, wsOrderBook10(15_000, 10, 15_100, 15, timestampL = startMs + 4 * `30sMs`)), // fill sell @ 11011
       (Bull, wsOrderBook10(16_000, 10, 16_100, 15, timestampL = startMs + 5 * `30sMs`)),
       (Bull, wsOrderBook10(15_800, 10, 15_900, 15, timestampL = startMs + 6 * `30sMs`)),
     )
     ctx.getClass shouldBe classOf[ClosePositionCtx]
     ctx.ledger.ledgerOrdersByID.size shouldBe 4
-    validateContains(ctx, eCtx, Filled, Buy, Limit, 11_000, 15) // init
-    validateContains(ctx, eCtx, Filled, Sell, Limit, 11_011, 15) // takeProfit
-    validateContains(ctx, eCtx, Filled, Buy, Limit, 16_000, 8) // init
-    validateContains(ctx, eCtx, New, Sell, Limit, 16_016, 8) // init
+    validateContains(ctx, eCtx, Filled, Buy, Limit, 11_000, 15) // init @ 11_000
+    validateContains(ctx, eCtx, Filled, Sell, Limit, 11_011, 15) // takeProfit @ 11_000 + profit
+    validateContains(ctx, eCtx, Filled, Buy, Limit, 16_000, 8) // init, triggered at tier 3, price 9_000, amended up to 16_000
+    validateContains(ctx, eCtx, New, Sell, Limit, 16_016, 8) // takeProfit
   }
 
   it should "maybeFill Market" in {
