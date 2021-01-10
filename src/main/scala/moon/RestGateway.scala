@@ -10,8 +10,8 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.util.ByteString
 import com.typesafe.scalalogging.Logger
 import moon.Dir.LongDir
-import moon.OrderSide.OrderSide
-import moon.OrderStatus.OrderStatus
+import moon.OrderSide.{Buy, OrderSide, Sell}
+import moon.OrderStatus.{New, OrderStatus, PartiallyFilled}
 import play.api.libs.json.{JsError, JsSuccess, Json}
 
 import scala.concurrent.duration._
@@ -61,7 +61,7 @@ trait IRestGateway {
 }
 
 
-class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSecret: String, syncTimeoutMs: Long)(implicit system: ActorSystem) extends IRestGateway {
+class RestGateway(symbol: String, url: String, apiKey: String, apiSecret: String, syncTimeoutMs: Long)(implicit system: ActorSystem) extends IRestGateway {
   val MARKUP_INDUCING_ERROR = "Order had execInst of ParticipateDoNotInitiate"
 
   // FIXME: consider timeouts!
@@ -158,34 +158,45 @@ class RestGateway(symbol: String = "XBTUSD", url: String, apiKey: String, apiSec
    * - issue opposite side order at breakeven +/- 50, with flags: reduce, no postonly
    * - poll till filled
    */
-  def drainSync(dir: Dir.Value, priceMargin: Double, minPosition: Double): Unit = {
+  def drainSync(dir: Dir.Value, priceDeltaPct: Double, minPosition: Double): Unit = {
     val backoff = (10_000 +: 20_000 +: 40_000 +: LazyList.continually(60_000)).iterator
+    val drainSide = if (dir == LongDir) Sell else Buy
+
     log.info(s"Cancelling all orders for symbol: $symbol...")
-    val cancelledOrders = cancelAllOrdersSync().get
-    println(s"${cancelledOrders.orders.mkString("\n")}")
-    var position = getPositionsSync().get.positions.filter(_.symbol == symbol).head
-    log.info(s"Fetched position for symbol: $symbol: $position")
-    if (math.abs(position.currentQty) > minPosition) {
-      val entryPrice = position.breakEvenPrice.get  // breakevenPrice considers holding costs, avgCostPrice doesn't
-      val delta = if (dir == LongDir) priceMargin else -priceMargin
-      val drainSide = if (dir == LongDir) OrderSide.Sell else OrderSide.Buy
-      log.info(s"Need to drain $drainSide ${position.currentQty} @ ${entryPrice + delta} (avgCost $entryPrice)")
-      val drainOrder = placeLimitOrderSync(
-        qty=position.currentQty,
-        price=round(entryPrice + delta, 0),
-        isReduceOnly=true,
-        side=drainSide,
-        clOrdID=None,
-        participateDoNotInitiate=false)
-      log.info(s"Drain order: ${drainOrder.get}")
-      while (position.currentQty > minPosition) {
-        val backoffTs = backoff.next
-        log.info(s"...still draining, remaining qty: ${position.currentQty}, will sleep for ${backoffTs}ms")
-        Thread.sleep(backoffTs)
-        position = getPositionsSync().get.positions.filter(_.symbol == symbol).head
-      }
+
+    // get open orders, see if they match position, if so, skip
+    val positionOpt = getPositionsSync().get.positions.find(_.symbol.toUpperCase == symbol.toUpperCase)
+    positionOpt match {
+      case Some(position) =>
+        val oppositeOrders = getOrdersSync(Some("open")).get.orders.filter(o => o.ordStatus.exists(s => Seq(New, PartiallyFilled).contains(s)) && o.side == drainSide)
+        val oppositeOrdersQty = oppositeOrders.map(_.orderQty).sum
+        if (math.abs(position.currentQty) - math.abs(oppositeOrdersQty) > minPosition) {
+          val entryPrice = position.breakEvenPrice.get // breakevenPrice considers holding costs, avgCostPrice doesn't
+          val delta = if (dir == LongDir) priceDeltaPct * entryPrice else -priceDeltaPct * entryPrice
+          log.info(s"Need to drain $drainSide ${position.currentQty} @ ${entryPrice + delta} (avgCost $entryPrice)")
+          val drainOrder = placeLimitOrderSync(
+            qty = position.currentQty,
+            price = round(entryPrice + delta, 0),
+            isReduceOnly = true,
+            side = drainSide,
+            clOrdID = None,
+            participateDoNotInitiate = false)
+          log.info(s"Drain order: ${drainOrder.get}")
+        } else
+          log.info(s"Position for symbol $symbol: $position has sufficient matching opposite side orders: ${oppositeOrders.mkString(", ")}, waiting for these to drain...")
+
+        var pos = position
+        while (pos.currentQty > minPosition) {
+          val backoffTs = backoff.next
+          log.info(s"...still draining, remaining qty: ${position.currentQty}, will sleep for ${backoffTs}ms")
+          Thread.sleep(backoffTs)
+          val positions = getPositionsSync().get.positions
+          pos = positions.find(_.symbol == symbol).getOrElse(throw new Exception(s"Failed to find position for $symbol, have positions: ${positions.mkString(", ")}"))
+        }
+        log.info(s"Position for symbol $symbol drained!")
+      case None =>
+        log.info(s"No open position for $symbol, nothing to drain")
     }
-    log.info(s"Position for symbol $symbol drained!")
   }
 
   private def getOrders(status: Option[String]=Some("open")): Future[HealthCheckOrders] = {

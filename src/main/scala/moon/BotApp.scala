@@ -44,7 +44,10 @@ object BotApp extends App {
   val wssSubscriptions       = conf.getString("bot.wssSubscriptions").split(",").map(_.trim)
   val flushSessionOnRestart  = conf.optBoolean("bot.flushSessionOnRestart").getOrElse(false)
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
-  val takeProfitPerc         = conf.optDouble("bot.takeProfitPerc").getOrElse(0.1)
+  val symbol                 = conf.getString("bot.symbol")
+  val takeProfitPerc         = conf.optDouble("bot.takeProfitPerc").getOrElse(0.005)
+  val drainPriceDeltaPct     = conf.optDouble("bot.drainPriceDeltaPct").getOrElse(0.005)
+  val drainMinPosition       = conf.optDouble("drainMinPosition").getOrElse(5.0)
   val backtestEventDataDir   = conf.optString("bot.backtestEventDataDir")
   val backtestCsvDir         = conf.optString("bot.backtestCsvDir")
   val backtestCandleFile     = conf.optString("bot.backtestCandleFile")
@@ -118,18 +121,18 @@ object BotApp extends App {
 
     val orchestrator = if (runType == Live) {
       log.info(s"Instantiating Live Run...")
-      val restGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs)
+      val restGateway = new RestGateway(symbol=symbol, url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs)
       Behaviour.asLiveBehavior(
         restGateway = restGateway,
         metrics=metrics,
         flushSessionOnRestart=flushSessionOnRestart,
         behaviorDsl=behaviorDsl,
         initCtx=InitCtx(Ledger()),
-        bootstrap=restGateway.drainSync(dir=dir, priceMargin=200, minPosition=10))
+        bootstrap=restGateway.drainSync(dir=dir, priceDeltaPct=drainPriceDeltaPct, minPosition=drainMinPosition))
     } else if (runType == Dry) {
       log.info(s"Instantiating Dry Run...")
       Behaviour.asLiveBehavior(
-        restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
+        restGateway=new RestGateway(symbol=symbol, url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
         metrics=metrics,
         flushSessionOnRestart=flushSessionOnRestart,
         behaviorDsl=behaviorDsl,

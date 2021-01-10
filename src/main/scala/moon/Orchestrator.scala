@@ -249,7 +249,8 @@ object Orchestrator {
             log.warn(s"Close $dir: re-issuing order dur to PostOnlyFailure, clOrdID: ${effect.takeProfitClOrdID} @ ${effect.takeProfitLimit}, qty: ${effect.qty}")
             (ctx2.copy(ledger=ledger2, takeProfitClOrdID = effect.takeProfitClOrdID, lifecycle = IssuingAmend), Some(effect))
           case (Some(ord), _, true, _) =>
-            log.info(s"Close $dir: got $event update to order ${ord.fullOrdID}, setting lifecycle $lifecycle -> $Awaiting")
+            if (lifecycle != Awaiting)
+              log.info(s"Close $dir: got $event update to order ${ord.fullOrdID}, setting lifecycle $lifecycle -> $Awaiting")
             (ctx2.copy(ledger = ledger2, lifecycle = Awaiting), None)
           case _ =>
             (ctx2.withLedger(ledger2), None)

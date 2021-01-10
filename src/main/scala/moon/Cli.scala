@@ -38,6 +38,7 @@ object Cli extends App {
     val stoplossprice   = opt[Double]()
     val pegoffsetvalue  = opt[Double](default = Some(10.0))
     val reduceOnly      = opt[Boolean](default = Some(false))
+    val symbol          = opt[String](default = Some("XBTUSD"))
     val qty             = opt[Double]()
     val side            = opt[String](default = Some("buy"))
     val orderid         = opt[String]()
@@ -57,7 +58,7 @@ object Cli extends App {
     case _           => OrderSide.Sell
   }
 
-  val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
+  val restGateway = new RestGateway(symbol=cliConf.symbol(), url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
   val wsGateway = new WsGateway(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, wssSubscriptions = "orderBook10:XBTUSD,trade:XBTUSD,instrument:.BXBT,funding:XBTUSD,order:XBTUSD".split(","))
   val consumeAll: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value, _) => log.info(s"WS ${value.getClass.getSimpleName}: $value")
