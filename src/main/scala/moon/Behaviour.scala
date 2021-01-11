@@ -13,32 +13,24 @@ import scala.util.Success
 
 
 object Behaviour {
-  def asLiveBehavior[T <: LedgerAwareCtx](restGateway: IRestGateway, metrics: Option[Metrics]=None, flushSessionOnRestart: Boolean=true, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T, bootstrap: => Unit = ())(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
+  def asLiveBehavior[T <: LedgerAwareCtx](restGateway: IRestGateway, metrics: Option[Metrics]=None, symbol: String, namespace: String, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T, bootstrap: => Unit = ())(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
     Behaviors.withTimers { timers =>
       // NOTE: setting up timers externally, to ensure delay starts from start of minute/hour
       // timers.startTimerAtFixedRate(On30s(None), 30.seconds)
       // timers.startTimerAtFixedRate(On1m(None),  1.minute)
 
-      bootstrap
-
       Behaviors.setup { actorCtx =>
-        if (flushSessionOnRestart) {
-          actorCtx.log.info("init: Bootstrapping via closePosition/orderCancels...")
-          for {
-            _ <- restGateway.closePositionAsync()
-            _ <- restGateway.cancelAllOrdersAsync()
-          } yield ()
-        }
+        bootstrap
 
         def loop(ctx: T): Behavior[ActorEvent] =
           Behaviors.receiveMessage { event =>
             val (ctx2, effect) = behaviorDsl(ctx, event, actorCtx.log)
             effect.foreach {
               case HealthCheck =>
-                val fut = restGateway.getOrdersAsync(Some("open"))
+                val fut = restGateway.getOrdersAsync(symbol, Some("open"))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
               case PublishMetrics(gauges, now) =>
-                metrics.foreach(_.gauge(gauges, now))
+                metrics.foreach(_.gauge(namespace, gauges, now))
               case CancelOrder(clOrdID) =>
                 val fut = restGateway.cancelOrderAsync(clOrdIDs = Seq(clOrdID))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
@@ -46,16 +38,16 @@ object Behaviour {
                 val fut = restGateway.amendOrderAsync(origClOrdID = Some(clOrdID), price = price)
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
               case OpenInitOrder(side, Limit, clOrdID, qty, price) =>
-                val fut = restGateway.placeLimitOrderAsync(qty=qty, price=price.get, side=side, isReduceOnly=false, clOrdID=Some(clOrdID))
+                val fut = restGateway.placeLimitOrderAsync(symbol=symbol, qty=qty, price=price.get, side=side, isReduceOnly=false, clOrdID=Some(clOrdID))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
               case OpenInitOrder(side, Market, clOrdID, qty, price) =>
-                val fut = restGateway.placeMarketOrderAsync(qty=qty, side=side, clOrdID=Some(clOrdID))
+                val fut = restGateway.placeMarketOrderAsync(symbol=symbol, qty=qty, side=side, clOrdID=Some(clOrdID))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
               case x:OpenInitOrder =>
                 throw new Exception(s"Do not cater for non Limit/Market order: $x")
               case OpenTakeProfitOrder(side, qty, takeProfitClOrdID, takeProfitLimit) =>
                 val fut = restGateway.placeBulkOrdersAsync(OrderReqs(
-                  Seq(OrderReq.asLimitOrder(side, qty, takeProfitLimit, true, clOrdID = Some(takeProfitClOrdID)))))
+                  Seq(OrderReq.asLimitOrder(symbol, side, qty, takeProfitLimit, true, clOrdID = Some(takeProfitClOrdID)))))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
 
             }
@@ -66,7 +58,7 @@ object Behaviour {
     }
   }
 
-  def asDryBehavior[T <: LedgerAwareCtx](metrics: Option[Metrics]=None, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T, askBidFromTrades: Boolean): Behavior[ActorEvent] = {
+  def asDryBehavior[T <: LedgerAwareCtx](metrics: Option[Metrics]=None, namespace: String, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T, askBidFromTrades: Boolean): Behavior[ActorEvent] = {
     Behaviors.withTimers { timers =>
       // NOTE: setting up timers externally, to ensure delay starts from start of minute/hour
       // timers.startTimerAtFixedRate(On30s(None), 30.seconds)
@@ -75,7 +67,7 @@ object Behaviour {
       Behaviors.setup { actorCtx =>
         def loop(ctx: T, exchangeCtx: ExchangeCtx): Behavior[ActorEvent] =
           Behaviors.receiveMessage { event =>
-            val (ctx2, exchangeCtx2) = paperExchangeSideEffectHandler(behaviorDsl, ctx, exchangeCtx, metrics, actorCtx.log, false, askBidFromTrades, event)
+            val (ctx2, exchangeCtx2) = paperExchangeSideEffectHandler(behaviorDsl, ctx, exchangeCtx, metrics, namespace, actorCtx.log, false, askBidFromTrades, event)
             loop(ctx2, exchangeCtx2)
           }
 
@@ -108,7 +100,7 @@ object Behaviour {
    *   - exchange deal with trade X's price, generate fillEvents:
    *     - loop client: events <-> exchange_monitor_fills: effects - till empty
    */
-  def paperExchangeSideEffectHandler[T <: LedgerAwareCtx](behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), ctx: T, eCtx: ExchangeCtx, metrics: Option[Metrics], log: org.slf4j.Logger, triggerMetrics: Boolean, askBidFromTrades: Boolean, event: ActorEvent): (T, ExchangeCtx) = {
+  def paperExchangeSideEffectHandler[T <: LedgerAwareCtx](behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), ctx: T, eCtx: ExchangeCtx, metrics: Option[Metrics], namespace: String, log: org.slf4j.Logger, triggerMetrics: Boolean, askBidFromTrades: Boolean, event: ActorEvent): (T, ExchangeCtx) = {
     @tailrec def handleEventsAndDownstreamEffects(ctx: T, eCtx: ExchangeCtx, events: ActorEvent*): (T, ExchangeCtx) = {
       // get effects for events, loop through each, generating newEvents
       if (events.isEmpty)
@@ -124,7 +116,7 @@ object Behaviour {
         else {
           val (eCtx2, events2) = effects.foldLeft((eCtx, Vector.empty[ActorEvent])) {
             case ((eCtx_, evs_), ef) =>
-              val (eCtx2_, evs) = paperExchangePostHandler(eCtx_, ef, metrics, log)
+              val (eCtx2_, evs) = paperExchangePostHandler(eCtx_, ef, metrics, namespace)
               (eCtx2_, evs_ ++ evs)
           }
           handleEventsAndDownstreamEffects(ctx2, eCtx2, events2:_*)
@@ -138,44 +130,6 @@ object Behaviour {
     val (ctx5, eCtx5) = handleEventsAndDownstreamEffects(ctx3, eCtx4, fillEvents:_*)
     val (ctx6, eCtx6) = handleEventsAndDownstreamEffects(ctx5, eCtx5, event)
     (ctx6, eCtx6)
-//
-//
-//    val head +: tail = events
-//    val (eCtx, filledEvents, tsEvents) = paperExchangePreHandler(exchangeCtx, head, log, triggerMetrics)
-//    if (log.isDebugEnabled && (filledEvents ++ tsEvents).nonEmpty) log.debug(s"paperExch:: adding tsEvents: ${tsEvents.mkString(", ")}, filledEvents: ${filledEvents.mkString(", ")}")
-//
-//    // deal with tsEvents, capture effects
-//    val (ctx2, tsEffects) = tsEvents.foldLeft((ctx, Vector.empty[SideEffect])) {
-//      case ((ctx_, effs), ev) =>
-//        val (ctx2_, effOpt) = behaviorDsl(ctx_, ev, log)
-//        (ctx2_, effs ++ effOpt.toSeq)
-//    }
-//
-//    // deal with head, capture effects
-//    val (ctx3, headEffectOpt) = behaviorDsl(ctx2, head, log)
-//
-//    // deal with filledEvents, capture effects
-//    val (ctx4, filledEffects) = filledEvents.foldLeft((ctx3, Vector.empty[SideEffect])) {
-//      case ((ctx_, effs), ev) =>
-//        val (ctx2_, effOpt) = behaviorDsl(ctx_, ev, log)
-//        (ctx2_, effs ++ effOpt.toSeq)
-//    }
-//
-//    // deal with all effects, capture postEvents
-//    val allEffects = tsEffects ++ headEffectOpt.toSeq ++ filledEffects
-//    val (eCtx2, postEvents) = allEffects.foldLeft((eCtx, Seq.empty[ActorEvent])) {
-//      case ((eCtx_, pEvs), eff) =>
-//        val (eCtx2_, evs) = paperExchangePostHandler(eCtx_, eff, metrics, log)
-//        (eCtx2_, pEvs ++ evs)
-//    }
-//
-//    // recursive, process events.tail ++ postEvents
-//    if (postEvents.nonEmpty) log.debug(s"paperExch:: adding postEvents: ${postEvents.mkString(", ")}")
-//    val events2 =  tail ++ postEvents
-//    if (events2.isEmpty)
-//      (ctx4, eCtx2)
-//    else
-//      paperExchangeSideEffectHandler(behaviorDsl, ctx4, eCtx2, metrics, log, triggerMetrics, events2:_*)
   }
 
   def paperExchangeTsHandler(exchangeCtx: ExchangeCtx, event: ActorEvent, triggerTimers: Boolean): (ExchangeCtx, Seq[ActorEvent]) = {
@@ -245,76 +199,13 @@ object Behaviour {
     (eCtx3, filledEvents)
   }
 
-//  def paperExchangePreHandler(exchangeCtx: ExchangeCtx, event: ActorEvent, log: org.slf4j.Logger, triggerTimers: Boolean): (ExchangeCtx, Seq[ActorEvent], Seq[ActorEvent]) = {
-//    // handle timestamp based events, ie. On1m, On1h
-//    val timestampMsOpt = (event match {
-//      case WsEvent(x:Trade)            => Some(x.data.head.timestamp)
-//      case WsEvent(x:OrderBookSummary) => Some(x.timestamp)
-//      case WsEvent(x:OrderBook)        => Some(x.data.head.timestamp)
-//      case WsEvent(x:Info)             => Some(x.timestamp)
-//      case WsEvent(x:Funding)          => Some(x.data.head.timestamp)
-//      case WsEvent(x:UpsertOrder)      => Some(x.data.head.timestamp)
-//      case _                           => None
-//    }).map(_.getMillis)
-//
-//    val (exchangeCtx2, tsEvents) = timestampMsOpt match {
-//      case Some(ts) =>
-//        if (triggerTimers && exchangeCtx.next1hTs <= 0) {
-//          val init1mTs = ts/60000 * 60000
-//          val init1hTs = ts/60/60000 * 60*60000
-//          (exchangeCtx.copy(next1mTs = init1mTs + 60000, next1hTs = init1hTs + 60 * 60000, lastTs = ts), Nil)  // as ts events are executed first, nothing to trigger on yet... //Seq(On1h(Some(init1hTs)), On1m(Some(init1mTs))))
-//        } else if (triggerTimers && ts >= exchangeCtx.next1hTs)
-//          (exchangeCtx.copy(next1mTs = exchangeCtx.next1hTs + 60000, next1hTs = exchangeCtx.next1hTs + 60 * 60000, lastTs = ts), Seq(On1h(Some(exchangeCtx.next1hTs)), On1m(Some(exchangeCtx.next1mTs))))
-//        else if (triggerTimers && ts >= exchangeCtx.next1mTs)
-//          (exchangeCtx.copy(next1mTs = exchangeCtx.next1mTs + 60000, lastTs = ts), Seq(On1m(Some(exchangeCtx.next1mTs))))
-//        else
-//          (exchangeCtx.copy(lastTs=ts), Nil)
-//      case _ =>
-//        (exchangeCtx, Nil)
-//    }
-//
-//    // handle price based events, ie. fills
-//    val (askOpt, bidOpt) = event match {
-//      case WsEvent(x:OrderBookSummary) => (Some(x.ask), Some(x.bid))
-//      case WsEvent(x:OrderBook)        => (Some(x.summary.ask), Some(x.summary.bid))
-//      /* FIXME: ok for yabol, but will not work for moon, which expects bid != ask */ case WsEvent(x:Trade)            => (Some(x.data.head.price), Some(x.data.head.price))
-//      case _                           => (None, None)
-//    }
-//    // update trailing highs/lows
-//    val exchangeCtx3 = (askOpt, bidOpt) match {
-//      case (Some(ask), Some(bid)) =>
-//        if (log.isDebugEnabled) log.debug(s"paperExch:: updates to ask: ${exchangeCtx2.ask} -> $ask, bid: ${exchangeCtx2.bid} -> $bid")
-//        val orders2 = exchangeCtx2.orders map {
-//          case (k, v:ExchangeOrder) if v.longHigh.exists(bid > _) => k -> v.copy(longHigh=Some(bid))
-//          case (k, v:ExchangeOrder) if v.shortLow.exists(ask < _) => k -> v.copy(shortLow=Some(ask))
-//          case kv => kv
-//        }
-//        exchangeCtx2.copy(orders=orders2)
-//      case _ => exchangeCtx2
-//    }
-//    val (exchangeCtx4, filledEvents) = (askOpt, bidOpt) match {
-//      case (Some(ask), Some(bid)) =>
-//        val filledOrders = exchangeCtx3.orders.values.map(o => maybeFill(o, ask, bid)).collect { case Some(o) => o }
-//        if (filledOrders.isEmpty)
-//          (exchangeCtx3.copy(ask=ask, bid=bid), Nil)
-//        else {
-//          log.info(s"paperExch:: Filled orders: ${filledOrders.map(o => s"${o.clOrdID} @ ${o.price.get} : ${formatDateTime(o.timestamp)}").mkString(", ")}")
-//          val wsOrders = filledOrders.map(_.toWs)
-//          val exchangeCtx4 = exchangeCtx3.copy(ask=ask, bid=bid, orders=exchangeCtx3.orders ++ filledOrders.map(x => x.clOrdID -> x))
-//          (exchangeCtx4, Seq(WsEvent(UpsertOrder(Some("update"), wsOrders.toSeq))))
-//        }
-//      case _ => (exchangeCtx3, Nil)
-//    }
-//    (exchangeCtx4, filledEvents, tsEvents)
-//  }
-
-  def paperExchangePostHandler(exchangeCtx: ExchangeCtx, effect: SideEffect, metrics: Option[Metrics], log: org.slf4j.Logger): (ExchangeCtx, Seq[ActorEvent]) = {
+  def paperExchangePostHandler(exchangeCtx: ExchangeCtx, effect: SideEffect, metrics: Option[Metrics], namespace: String): (ExchangeCtx, Seq[ActorEvent]) = {
     effect match {
       case HealthCheck =>
         // noop
         (exchangeCtx, Nil)
       case PublishMetrics(gauges, now) =>
-        metrics.foreach(_.gauge(gauges, now))
+        metrics.foreach(_.gauge(namespace, gauges, now))
         (exchangeCtx, Nil)
       case CancelOrder(clOrdID) =>
         val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders.map {

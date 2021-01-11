@@ -40,19 +40,20 @@ object BotApp extends App {
   val graphiteHost      = sys.env.get("graphite_host").orElse(conf.optString("graphite.host"))
   val graphitePort      = conf.optInt("graphite.port")
 
-  val namespace              = conf.getString("bot.namespace")
   val wssSubscriptions       = conf.getString("bot.wssSubscriptions").split(",").map(_.trim)
-  val flushSessionOnRestart  = conf.optBoolean("bot.flushSessionOnRestart").getOrElse(false)
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
-  val symbol                 = conf.getString("bot.symbol")
-  val takeProfitPerc         = conf.optDouble("bot.takeProfitPerc").getOrElse(0.005)
-  val drainPriceDeltaPct     = conf.optDouble("bot.drainPriceDeltaPct").getOrElse(0.005)
-  val drainMinPosition       = conf.optDouble("drainMinPosition").getOrElse(5.0)
   val backtestEventDataDir   = conf.optString("bot.backtestEventDataDir")
   val backtestCsvDir         = conf.optString("bot.backtestCsvDir")
   val backtestCandleFile     = conf.optString("bot.backtestCandleFile")
   val useSynthetics          = conf.optBoolean("bot.useSynthetics").getOrElse(false)
   val takerFee               = conf.optDouble("bot.takerFee").getOrElse(.00075)
+
+  // pair specific
+  val namespace              = conf.getString("bot.namespace")
+  val symbol                 = conf.getString("bot.symbol")
+  val takeProfitPerc         = conf.optDouble("bot.takeProfitPerc").getOrElse(0.005)
+  val drainPriceDeltaPct     = conf.optDouble("bot.drainPriceDeltaPct").getOrElse(0.005)
+  val drainMinPosition       = conf.optDouble("drainMinPosition").getOrElse(5.0)
   val dir                    = conf.optString("bot.dir").map(Dir.withName).getOrElse(LongDir)
   val tiers                  = conf.getList("bot.tiers").asScala.toSeq.map(_.unwrapped.asInstanceOf[util.ArrayList[Number]]).map(l => (l.get(0).doubleValue, l.get(1).doubleValue))
 
@@ -80,19 +81,21 @@ object BotApp extends App {
       |• wssSubscriptions:     ${wssSubscriptions.mkString(",")}
       |• graphiteHost:         $graphiteHost
       |• graphitePort:         $graphitePort
-      |• namespace:            $namespace
       |• takerFee:             $takerFee
       |• restSyncTimeoutMs:    $restSyncTimeoutMs
-      |• takeProfitPerc:       $takeProfitPerc
+      |• useSynthetics:        $useSynthetics
       |• backtestEventDataDir: $backtestEventDataDir
+      |
+      |$namespace:
+      |• symbol:               $symbol
+      |• dir:                  $dir
       |• backtestCsvDir:       $backtestCsvDir
       |• backtestCandleFile:   $backtestCandleFile
-      |• useSynthetics:        $useSynthetics
-      |• dir:                  $dir
+      |• takeProfitPerc:       $takeProfitPerc
       |• tiers:                ${tiers.mkString(",")}
       |""".stripMargin)
 
-  val metrics = for { h <- graphiteHost; p <- graphitePort } yield Metrics(h, p, namespace)
+  val metrics = for { h <- graphiteHost; p <- graphitePort } yield Metrics(h, p)
   val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig, parentConfig = conf.getObject(s"strategy").toConfig)
   val tierCalc = TierCalcImpl(dir = dir, tiers = tiers)
 
@@ -107,6 +110,7 @@ object BotApp extends App {
       dir = dir,
       takeProfitPerc = takeProfitPerc,
       metrics = metrics,
+      namespace = namespace,
       useSynthetics = useSynthetics)
     val (finalCtx, finalExchangeCtx) = sim.run()
     log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} ($$${finalCtx.ledger.ledgerMetrics.runningPandl * (finalCtx.ledger.askPrice + finalCtx.ledger.bidPrice)/2}) over ${finalCtx.ledger.myTrades.size} trades")
@@ -121,26 +125,29 @@ object BotApp extends App {
 
     val orchestrator = if (runType == Live) {
       log.info(s"Instantiating Live Run...")
-      val restGateway = new RestGateway(symbol=symbol, url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs)
+      val restGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs)
       Behaviour.asLiveBehavior(
         restGateway = restGateway,
         metrics=metrics,
-        flushSessionOnRestart=flushSessionOnRestart,
+        namespace=namespace,
+        symbol=symbol,
         behaviorDsl=behaviorDsl,
         initCtx=InitCtx(Ledger()),
-        bootstrap=restGateway.drainSync(dir=dir, priceDeltaPct=drainPriceDeltaPct, minPosition=drainMinPosition))
+        bootstrap=restGateway.drainSync(symbol=symbol, dir=dir, priceDeltaPct=drainPriceDeltaPct, minPosition=drainMinPosition))
     } else if (runType == Dry) {
       log.info(s"Instantiating Dry Run...")
       Behaviour.asLiveBehavior(
-        restGateway=new RestGateway(symbol=symbol, url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
+        restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
         metrics=metrics,
-        flushSessionOnRestart=flushSessionOnRestart,
+        namespace=namespace,
+        symbol=symbol,
         behaviorDsl=behaviorDsl,
         initCtx=IdleCtx(Ledger()))
     } else if (runType == Backtest) {
       log.info(s"Instantiating Backtest Run...")
       Behaviour.asDryBehavior(
         metrics=metrics,
+        namespace=namespace,
         behaviorDsl=behaviorDsl,
         initCtx=InitCtx(Ledger()),
         askBidFromTrades=false)

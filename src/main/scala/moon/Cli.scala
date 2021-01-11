@@ -58,7 +58,7 @@ object Cli extends App {
     case _           => OrderSide.Sell
   }
 
-  val restGateway = new RestGateway(symbol=cliConf.symbol(), url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
+  val restGateway = new RestGateway(url = bitmexUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, syncTimeoutMs = restSyncTimeoutMs)
   val wsGateway = new WsGateway(wsUrl = bitmexWsUrl, apiKey = bitmexApiKey, apiSecret = bitmexApiSecret, wssSubscriptions = "orderBook10:XBTUSD,trade:XBTUSD,instrument:.BXBT,funding:XBTUSD,order:XBTUSD".split(","))
   val consumeAll: PartialFunction[JsResult[WsModel], Unit] = {
     case JsSuccess(value, _) => log.info(s"WS ${value.getClass.getSimpleName}: $value")
@@ -99,8 +99,8 @@ object Cli extends App {
       wsGateway.run(consumeOrder)
       val (takeProfitClOrdID, stoplossClOrdID) = (uuid, uuid)
       val resF = restGateway.placeBulkOrdersAsync(OrderReqs(Vector(
-        OrderReq.asLimitOrder(oSide, qty, takeProfitPrice, true, Some(takeProfitClOrdID)),
-        OrderReq.asStopOrder(oSide, qty, stoplossPrice, true, Some(stoplossClOrdID)))))
+        OrderReq.asLimitOrder(cliConf.symbol(), oSide, qty, takeProfitPrice, true, Some(takeProfitClOrdID)),
+        OrderReq.asStopOrder(cliConf.symbol(), oSide, qty, stoplossPrice, true, Some(stoplossClOrdID)))))
       log.info(s"REST takeProfitAndStoploss request: takeProfit: $takeProfitClOrdID, stoploss: $stoplossClOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST takeProfitAndStoploss response: takeProfit: $takeProfitClOrdID, stoploss: $stoplossClOrdID, $res")
@@ -111,8 +111,8 @@ object Cli extends App {
       wsGateway.run(consumeOrder)
       val (takeProfitClOrdID, stoplossClOrdID) = (uuid, uuid)
       val resF = restGateway.placeBulkOrdersAsync(OrderReqs(Vector(
-        OrderReq.asLimitOrder(oSide, qty, takeProfitPrice, true, Some(takeProfitClOrdID)),
-        OrderReq.asTrailingStopOrder(oSide, qty, pegOffsetValue, true, Some(stoplossClOrdID)))))
+        OrderReq.asLimitOrder(cliConf.symbol(), oSide, qty, takeProfitPrice, true, Some(takeProfitClOrdID)),
+        OrderReq.asTrailingStopOrder(cliConf.symbol(), oSide, qty, pegOffsetValue, true, Some(stoplossClOrdID)))))
       log.info(s"REST $oSide takeProfitAndStoploss request: takeProfit: $takeProfitClOrdID, stoploss: $stoplossClOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST $oSide takeProfitAndStoploss response: takeProfit: $takeProfitClOrdID, stoploss: $stoplossClOrdID, $res")
@@ -122,7 +122,7 @@ object Cli extends App {
       log.info(s"issuing $oSide limit: price: $price, qty: $qty")
       wsGateway.run(consumeOrder)
       val clOrdID = uuid
-      val resF = restGateway.placeLimitOrderAsync(qty, price, reduceOnly, oSide, Some(clOrdID))
+      val resF = restGateway.placeLimitOrderAsync(cliConf.symbol(), qty, price, reduceOnly, oSide, Some(clOrdID))
       log.info(s"REST $oSide limit request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST $oSide limit response: $clOrdID, $res")
@@ -132,7 +132,7 @@ object Cli extends App {
       log.info(s"issuing $oSide market: qty: $qty")
       wsGateway.run(consumeOrder)
       val clOrdID = uuid
-      val resF = restGateway.placeMarketOrderAsync(qty, oSide, Some(clOrdID))
+      val resF = restGateway.placeMarketOrderAsync(cliConf.symbol(), qty, oSide, Some(clOrdID))
       log.info(s"REST $oSide market request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST $oSide market response: $clOrdID, $res")
@@ -142,7 +142,7 @@ object Cli extends App {
       log.info(s"issuing $oSide stop: price: $price, qty: $qty, close: $close")
       wsGateway.run(consumeOrder)
       val clOrdID = uuid
-      val resF = restGateway.placeStopOrderAsync(qty, price, close, oSide, Some(clOrdID))
+      val resF = restGateway.placeStopOrderAsync(cliConf.symbol(), qty, price, close, oSide, Some(clOrdID))
       log.info(s"REST bid request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST $oSide stop response: $clOrdID, $res")
@@ -152,7 +152,7 @@ object Cli extends App {
       log.info(s"issuing $oSide trailingStop: pegOffsetValue: $pegOffsetValue, qty: $qty, close: $close")
       wsGateway.run(consumeOrder)
       val clOrdID = uuid
-      val resF = restGateway.placeTrailingStopOrderAsync(qty, pegOffsetValue, close, oSide, Some(clOrdID))
+      val resF = restGateway.placeTrailingStopOrderAsync(cliConf.symbol(), qty, pegOffsetValue, close, oSide, Some(clOrdID))
       log.info(s"REST $oSide trailingStop request: $clOrdID")
       resF.onComplete {
         case Success(res) => log.info(s"REST $oSide trailingStop response: $clOrdID, $res")
@@ -169,7 +169,7 @@ object Cli extends App {
       }
     case ("getOrders", _, _, _, _, _, _, _, _, _) =>
       log.info(s"getting orders")
-      val resF = restGateway.getOrdersSync(None)
+      val resF = restGateway.getOrdersSync(cliConf.symbol(), None)
       log.info(s"REST getOrders request")
       resF match {
         case Success(res) => log.info(s"REST getOrders response:\n${res.orders.map(o => s"- $o").mkString("\n")}")
@@ -177,7 +177,7 @@ object Cli extends App {
       }
     case ("getPositions", _, _, _, _, _, _, _, _, _) =>
       log.info(s"getting positions")
-      val resF = restGateway.getPositionsSync()
+      val resF = restGateway.getPositionsSync(cliConf.symbol())
       log.info(s"REST getPositions request")
       resF match {
         case Success(res) => log.info(s"REST getPositions response:\n${res.positions.map(o => s"- $o").mkString("\n")}")
@@ -196,15 +196,15 @@ object Cli extends App {
       log.info(s"drain")
       // wsGateway.run(consumeOrder)
       log.info(s"REST draining, might take a while...")
-      restGateway.drainSync(LongDir, 10.0, 10.0)
+      restGateway.drainSync(cliConf.symbol(), LongDir, 10.0, 10.0)
     case ("flush", _, _, _, _, _, _, _, _, _) =>
       log.info(s"closing position & cancelling orders")
       wsGateway.run(consumeOrder)
-      restGateway.closePositionSync() match {
+      restGateway.closePositionSync(cliConf.symbol()) match {
         case Success(res) => log.info(s"REST closePosition response: $res")
         case Failure(exc) => log.error(s"REST closePosition exception", exc)
       }
-      restGateway.cancelAllOrdersSync() match {
+      restGateway.cancelAllOrdersSync(cliConf.symbol()) match {
         case Success(res) => log.info(s"REST cancelAllOrders response: $res")
         case Failure(exc) => log.error(s"REST cancelAllOrders exception", exc)
       }

@@ -45,23 +45,23 @@ case class OrderReq(orderQty: Double, side: OrderSide, ordType: OrderType.Value,
 object OrderReq {
   implicit val aWrites: Writes[OrderReq] = Json.writes[OrderReq]
 
-  def asStopOrder(side: OrderSide, orderQty: Double, price: Double, isClose:Boolean, clOrdID: Option[String]) = {
+  def asStopOrder(symbol: String, side: OrderSide, orderQty: Double, price: Double, isClose:Boolean, clOrdID: Option[String]) = {
     val closeStr = if (isClose) ",Close" else ""
-    OrderReq(ordType=OrderType.Stop, side=side, orderQty=orderQty, execInst=Some("LastPrice" + closeStr), stopPx=Some(price), clOrdID=clOrdID)
+    OrderReq(symbol=Some(symbol), ordType=OrderType.Stop, side=side, orderQty=orderQty, execInst=Some("LastPrice" + closeStr), stopPx=Some(price), clOrdID=clOrdID)
   }
 
-  def asTrailingStopOrder(side: OrderSide, orderQty: Double, pegOffsetValue: Double, isClose:Boolean, clOrdID: Option[String]) = {
+  def asTrailingStopOrder(symbol: String, side: OrderSide, orderQty: Double, pegOffsetValue: Double, isClose:Boolean, clOrdID: Option[String]) = {
     val pegOffsetValue2 = if (side == OrderSide.Buy) pegOffsetValue.abs else -pegOffsetValue.abs
     val closeStr = if (isClose) ",Close" else ""
     OrderReq(ordType=OrderType.Stop, side=side, orderQty=orderQty, execInst=Some("LastPrice" + closeStr), pegPriceType=Some("TrailingStopPeg"), pegOffsetValue=Some(pegOffsetValue2), clOrdID=clOrdID)
   }
 
-  def asMarketOrder(side: OrderSide, orderQty: Double, clOrdID: Option[String]) =
-    OrderReq(ordType=OrderType.Market, side=side, orderQty=orderQty, clOrdID=clOrdID)
+  def asMarketOrder(symbol: String, side: OrderSide, orderQty: Double, clOrdID: Option[String]) =
+    OrderReq(symbol=Some(symbol), ordType=OrderType.Market, side=side, orderQty=orderQty, clOrdID=clOrdID)
 
-  def asLimitOrder(side: OrderSide, orderQty: Double, price: Double, isReduceOnly: Boolean, clOrdID: Option[String]) = {
+  def asLimitOrder(symbol: String, side: OrderSide, orderQty: Double, price: Double, isReduceOnly: Boolean, clOrdID: Option[String]) = {
     val isReduceOnlyStr = if (isReduceOnly) ",ReduceOnly" else ""
-    OrderReq(ordType=OrderType.Limit, side=side, orderQty=orderQty, execInst=Some("ParticipateDoNotInitiate" + isReduceOnlyStr), price=Some(price), clOrdID=clOrdID)
+    OrderReq(symbol=Some(symbol), ordType=OrderType.Limit, side=side, orderQty=orderQty, execInst=Some("ParticipateDoNotInitiate" + isReduceOnlyStr), price=Some(price), clOrdID=clOrdID)
   }
 }
 

@@ -14,6 +14,7 @@ class ExchangeSim(
   eventCsvDir: String=null,
   candleFile: String=null,
   metrics: Option[Metrics],
+  namespace: String,
   strategy: Strategy,
   tierCalc: TierCalc,
   dir: Dir.Value,
@@ -39,7 +40,7 @@ class ExchangeSim(
       dir,
       true)
     val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((InitCtx(Ledger()): Ctx, ExchangeCtx())) {
-      case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, log, true, false, WsEvent(event))
+      case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, namespace, log, true, false, WsEvent(event))
     }
     (finalCtx.asInstanceOf[LedgerAwareCtx], finalExchangeCtx)
   }

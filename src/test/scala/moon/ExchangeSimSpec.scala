@@ -46,7 +46,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       case ((ctx2, exchangeCtx2), (sentiment, eventStr)) =>
         val event = WsEvent(WsModel.asModel(eventStr).get)
         strategy.sentiment = sentiment
-        paperExchangeSideEffectHandler(behaviorDsl_dbg, ctx2, exchangeCtx2, None, log, true, false, event)
+        paperExchangeSideEffectHandler(behaviorDsl_dbg, ctx2, exchangeCtx2, None, "namespace", log, true, false, event)
     }
     (finalCtx, finalExchangeCtx)
   }

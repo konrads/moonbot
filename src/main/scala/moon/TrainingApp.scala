@@ -31,7 +31,7 @@ object TrainingApp extends App {
   val useSynthetics           = true
 
 
-  def bruteForceRun(desc: String, tradeQty: Int=100, strategies: Iterator[Strategy]): (Double, Strategy) = {
+  def bruteForceRun(desc: String, strategies: Iterator[Strategy]): (Double, Strategy) = {
     var winningStrategy: Strategy = null
     var winningPandl: Double = Double.MinValue
     var winningCtx: LedgerAwareCtx = null
@@ -52,6 +52,7 @@ object TrainingApp extends App {
         dir=LongDir,
         takeProfitPerc = takeProfitPerc,
         metrics = None,
+        namespace = "training",
         useSynthetics = useSynthetics)
       val (ctx, eCtx) = sim.run()
       val pandl = ctx.ledger.ledgerMetrics.runningPandl
