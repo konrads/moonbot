@@ -178,7 +178,7 @@ object BotApp extends App {
             case ("other", value) =>
               log.info(s"Received actor unrelated WsEvent: $value")
             case (symbol, value) =>
-              throw new Exception(s"Received unexpected WsEvent for symbol $symbol: $value")
+              throw new Exception(s"Received unexpected WsEvent for symbol $symbol: $value, have bots working on ${actorBySymbol.keySet.mkString(", ")}")
           }
         case e: JsError =>
           log.error("WS consume error!", e)
