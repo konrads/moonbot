@@ -13,7 +13,7 @@ import scala.util.Success
 
 
 object Behaviour {
-  def asLiveBehavior[T <: LedgerAwareCtx](restGateway: IRestGateway, metrics: Option[Metrics]=None, symbol: String, namespace: String, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T, bootstrap: => Unit = ())(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
+  def asLiveBehavior[T <: LedgerAwareCtx](restGateway: IRestGateway, metrics: Option[Metrics]=None, symbol: String, namespace: String, behaviorDsl: (T, ActorEvent, org.slf4j.Logger, String) => (T, Option[SideEffect]), initCtx: T, bootstrap: => Unit = ())(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
     Behaviors.withTimers { timers =>
       // NOTE: setting up timers externally, to ensure delay starts from start of minute/hour
       // timers.startTimerAtFixedRate(On30s(None), 30.seconds)
@@ -24,7 +24,7 @@ object Behaviour {
 
         def loop(ctx: T): Behavior[ActorEvent] =
           Behaviors.receiveMessage { event =>
-            val (ctx2, effect) = behaviorDsl(ctx, event, actorCtx.log)
+            val (ctx2, effect) = behaviorDsl(ctx, event, actorCtx.log, symbol)
             effect.foreach {
               case HealthCheck =>
                 val fut = restGateway.getOrdersAsync(symbol, Some("open"))
@@ -37,15 +37,15 @@ object Behaviour {
               case AmendOrder(clOrdID, price) =>
                 val fut = restGateway.amendOrderAsync(origClOrdID = Some(clOrdID), price = price)
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
-              case OpenInitOrder(side, Limit, clOrdID, qty, price) =>
+              case OpenInitOrder(symbol, side, Limit, clOrdID, qty, price) =>
                 val fut = restGateway.placeLimitOrderAsync(symbol=symbol, qty=qty, price=price.get, side=side, isReduceOnly=false, clOrdID=Some(clOrdID))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
-              case OpenInitOrder(side, Market, clOrdID, qty, price) =>
+              case OpenInitOrder(symbol, side, Market, clOrdID, qty, price) =>
                 val fut = restGateway.placeMarketOrderAsync(symbol=symbol, qty=qty, side=side, clOrdID=Some(clOrdID))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
               case x:OpenInitOrder =>
                 throw new Exception(s"Do not cater for non Limit/Market order: $x")
-              case OpenTakeProfitOrder(side, qty, takeProfitClOrdID, takeProfitLimit) =>
+              case OpenTakeProfitOrder(symbol, side, qty, takeProfitClOrdID, takeProfitLimit) =>
                 val fut = restGateway.placeBulkOrdersAsync(OrderReqs(
                   Seq(OrderReq.asLimitOrder(symbol, side, qty, takeProfitLimit, true, clOrdID = Some(takeProfitClOrdID)))))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
@@ -58,7 +58,7 @@ object Behaviour {
     }
   }
 
-  def asDryBehavior[T <: LedgerAwareCtx](metrics: Option[Metrics]=None, namespace: String, behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), initCtx: T, askBidFromTrades: Boolean): Behavior[ActorEvent] = {
+  def asDryBehavior[T <: LedgerAwareCtx](metrics: Option[Metrics]=None, symbol: String, namespace: String, behaviorDsl: (T, ActorEvent, org.slf4j.Logger, String) => (T, Option[SideEffect]), initCtx: T, askBidFromTrades: Boolean): Behavior[ActorEvent] = {
     Behaviors.withTimers { timers =>
       // NOTE: setting up timers externally, to ensure delay starts from start of minute/hour
       // timers.startTimerAtFixedRate(On30s(None), 30.seconds)
@@ -67,7 +67,7 @@ object Behaviour {
       Behaviors.setup { actorCtx =>
         def loop(ctx: T, exchangeCtx: ExchangeCtx): Behavior[ActorEvent] =
           Behaviors.receiveMessage { event =>
-            val (ctx2, exchangeCtx2) = paperExchangeSideEffectHandler(behaviorDsl, ctx, exchangeCtx, metrics, namespace, actorCtx.log, false, askBidFromTrades, event)
+            val (ctx2, exchangeCtx2) = paperExchangeSideEffectHandler(behaviorDsl, ctx, exchangeCtx, metrics, symbol, namespace, actorCtx.log, false, askBidFromTrades, event)
             loop(ctx2, exchangeCtx2)
           }
 
@@ -76,9 +76,9 @@ object Behaviour {
     }
   }
 
-  case class ExchangeOrder(orderID: String, clOrdID: String, qty: Double, side: OrderSide.Value, ordType: OrderType.Value, status: OrderStatus.Value, price: Option[Double]=None, trailingPeg: Option[Double]=None, longHigh: Option[Double]=None, shortLow: Option[Double]=None, timestamp: DateTime) {
+  case class ExchangeOrder(symbol: String, orderID: String, clOrdID: String, qty: Double, side: OrderSide.Value, ordType: OrderType.Value, status: OrderStatus.Value, price: Option[Double]=None, trailingPeg: Option[Double]=None, longHigh: Option[Double]=None, shortLow: Option[Double]=None, timestamp: DateTime) {
     def toRest: Order = Order(orderID=orderID, clOrdID=Some(clOrdID), symbol="...", timestamp=timestamp, ordType=ordType, ordStatus=Some(status), side=side, orderQty=qty, price=price)
-    def toWs: OrderData = OrderData(orderID=orderID, clOrdID=Some(clOrdID), timestamp=timestamp, ordType=Some(ordType), ordStatus=Some(status), side=Some(side), orderQty=Some(qty), price=price)
+    def toWs: OrderData = OrderData(symbol=symbol, orderID=orderID, clOrdID=Some(clOrdID), timestamp=timestamp, ordType=Some(ordType), ordStatus=Some(status), side=Some(side), orderQty=Some(qty), price=price)
   }
   case class ExchangeCtx(orders: Map[String, ExchangeOrder]=Map.empty, bid: Double=0, ask: Double=0, next1mTs: Long=0, next5mTs: Long=0, next30sTs: Long=0, lastTs: Long=0)
 
@@ -100,7 +100,7 @@ object Behaviour {
    *   - exchange deal with trade X's price, generate fillEvents:
    *     - loop client: events <-> exchange_monitor_fills: effects - till empty
    */
-  def paperExchangeSideEffectHandler[T <: LedgerAwareCtx](behaviorDsl: (T, ActorEvent, org.slf4j.Logger) => (T, Option[SideEffect]), ctx: T, eCtx: ExchangeCtx, metrics: Option[Metrics], namespace: String, log: org.slf4j.Logger, triggerMetrics: Boolean, askBidFromTrades: Boolean, event: ActorEvent): (T, ExchangeCtx) = {
+  def paperExchangeSideEffectHandler[T <: LedgerAwareCtx](behaviorDsl: (T, ActorEvent, org.slf4j.Logger, String) => (T, Option[SideEffect]), ctx: T, eCtx: ExchangeCtx, metrics: Option[Metrics], symbol: String, namespace: String, log: org.slf4j.Logger, triggerMetrics: Boolean, askBidFromTrades: Boolean, event: ActorEvent): (T, ExchangeCtx) = {
     @tailrec def handleEventsAndDownstreamEffects(ctx: T, eCtx: ExchangeCtx, events: ActorEvent*): (T, ExchangeCtx) = {
       // get effects for events, loop through each, generating newEvents
       if (events.isEmpty)
@@ -108,7 +108,7 @@ object Behaviour {
       else {
         val (ctx2, effects) = events.foldLeft((ctx, Vector.empty[SideEffect])) {
           case ((ctx_, effs_), ev) =>
-            val (ctx2_, effOpt) = behaviorDsl(ctx_, ev, log)
+            val (ctx2_, effOpt) = behaviorDsl(ctx_, ev, log, symbol)
             (ctx2_, effs_ ++ effOpt.toSeq)
         }
         if (effects.isEmpty)
@@ -226,14 +226,14 @@ object Behaviour {
         })
         val event = RestEvent(Success(exchangeCtx2.orders(clOrdID).toRest))
         (exchangeCtx2, Seq(event))
-      case OpenInitOrder(side, ordType, clOrdID, qty, price) =>
-        val o = ExchangeOrder(orderID=uuid, clOrdID=clOrdID, qty=qty, price=price, side=side, status=New, ordType=ordType, timestamp=new DateTime(exchangeCtx.lastTs))
+      case OpenInitOrder(symbol, side, ordType, clOrdID, qty, price) =>
+        val o = ExchangeOrder(symbol=symbol, orderID=uuid, clOrdID=clOrdID, qty=qty, price=price, side=side, status=New, ordType=ordType, timestamp=new DateTime(exchangeCtx.lastTs))
         val o2 = maybeFill(o, exchangeCtx.ask, exchangeCtx.bid).getOrElse(o)
         val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders + (clOrdID -> o2))
         val event = RestEvent(Success(o2.toRest))
         (exchangeCtx2, Seq(event))
-      case OpenTakeProfitOrder(side, qty, takeProfitClOrdID, takeProfitLimit) =>
-        val to = ExchangeOrder(orderID=uuid, clOrdID=takeProfitClOrdID, qty=qty, price=Some(takeProfitLimit), side=side, status=New, ordType=Limit, timestamp=new DateTime(exchangeCtx.lastTs))
+      case OpenTakeProfitOrder(symbol, side, qty, takeProfitClOrdID, takeProfitLimit) =>
+        val to = ExchangeOrder(symbol=symbol, orderID=uuid, clOrdID=takeProfitClOrdID, qty=qty, price=Some(takeProfitLimit), side=side, status=New, ordType=Limit, timestamp=new DateTime(exchangeCtx.lastTs))
         val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders ++ Map(to.clOrdID -> to))
         val event = RestEvent(Success(Orders(Seq(to.toRest))))
         (exchangeCtx2, Seq(event))

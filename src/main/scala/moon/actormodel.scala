@@ -29,5 +29,5 @@ case object HealthCheck extends SideEffect
 case class PublishMetrics(gauges: Map[String, Any], now: Option[Long]) extends SideEffect
 case class CancelOrder(clOrdID: String) extends SideEffect
 case class AmendOrder(clOrdID: String, price: Double) extends SideEffect
-case class OpenInitOrder(side: OrderSide.Value, ordType: OrderType.Value, clOrdID: String, qty: Double, price: Option[Double] = None) extends SideEffect
-case class OpenTakeProfitOrder(side: OrderSide.Value, qty: Double, takeProfitClOrdID: String, takeProfitLimit: Double) extends SideEffect
+case class OpenInitOrder(symbol: String, side: OrderSide.Value, ordType: OrderType.Value, clOrdID: String, qty: Double, price: Option[Double] = None) extends SideEffect
+case class OpenTakeProfitOrder(symbol: String, side: OrderSide.Value, qty: Double, takeProfitClOrdID: String, takeProfitLimit: Double) extends SideEffect

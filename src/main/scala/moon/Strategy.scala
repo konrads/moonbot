@@ -14,7 +14,7 @@ trait Strategy {
 }
 
 object Strategy {
-  def apply(name: String, config: Config, parentConfig: Config): Strategy = name match {
+  def apply(name: String, config: Config): Strategy = name match {
     case "permabull"  => new PermaBullStrategy(config)
   }
 }

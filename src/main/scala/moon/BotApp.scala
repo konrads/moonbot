@@ -26,9 +26,9 @@ object BotApp extends App {
   }
   val cliConf = new CliConf()
 
-  val conf = ConfigFactory.load(cliConf.config())
-    .withFallback(ConfigFactory.parseFile(new File("application.private.conf")))
+  val conf = ConfigFactory.load(ConfigFactory.parseFile(new File("application.private.conf")))
     .withFallback(ConfigFactory.parseResources("application.private.conf"))
+    .withFallback(ConfigFactory.parseResources(cliConf.config()))
     .resolve()
 
   val bitmexUrl         = conf.getString("bitmex.url")
@@ -40,7 +40,7 @@ object BotApp extends App {
   val graphiteHost      = sys.env.get("graphite_host").orElse(conf.optString("graphite.host"))
   val graphitePort      = conf.optInt("graphite.port")
 
-  val wssSubscriptions       = conf.getString("bot.wssSubscriptions").split(",").map(_.trim)
+  val runType                = conf.optString("bot.runType").map(_.toLowerCase).map(x => RunType.withName(capFirst(x))).getOrElse(Live)
   val restSyncTimeoutMs      = conf.getLong("bot.restSyncTimeoutMs")
   val backtestEventDataDir   = conf.optString("bot.backtestEventDataDir")
   val backtestCsvDir         = conf.optString("bot.backtestCsvDir")
@@ -48,19 +48,25 @@ object BotApp extends App {
   val useSynthetics          = conf.optBoolean("bot.useSynthetics").getOrElse(false)
   val takerFee               = conf.optDouble("bot.takerFee").getOrElse(.00075)
 
-  // pair specific
-  val namespace              = conf.getString("bot.namespace")
-  val symbol                 = conf.getString("bot.symbol")
-  val takeProfitPerc         = conf.optDouble("bot.takeProfitPerc").getOrElse(0.005)
-  val drainPriceDeltaPct     = conf.optDouble("bot.drainPriceDeltaPct").getOrElse(0.005)
-  val drainMinPosition       = conf.optDouble("drainMinPosition").getOrElse(5.0)
-  val dir                    = conf.optString("bot.dir").map(Dir.withName).getOrElse(LongDir)
-  val tiers                  = conf.getList("bot.tiers").asScala.toSeq.map(_.unwrapped.asInstanceOf[util.ArrayList[Number]]).map(l => (l.get(0).doubleValue, l.get(1).doubleValue))
+  // bots specific
+  val bots = conf.getObject("bot.bots").keySet().asScala.map {
+    botName =>
+      val c = conf.getConfig(s"bot.bots.$botName")
+      BotSpec(
+        namespace            = c.optString("namespace").getOrElse(s"moon.$botName"),
+        symbol               = botName.toUpperCase,
+        wssSubscriptions     = c.getString("wssSubscriptions").split(",").map(_.trim),
+        dir                  = c.optString("dir").map(Dir.withName).getOrElse(LongDir),
+        takeProfitPerc       = c.optDouble("takeProfitPerc").getOrElse(0.005),
+        drainPriceDeltaPct   = c.optDouble("drainPriceDeltaPct").getOrElse(0.005),
+        drainMinPosition     = c.optDouble("drainMinPosition").getOrElse(5.0),
+        tiers                = c.getList("tiers").asScala.toSeq.map(_.unwrapped.asInstanceOf[util.ArrayList[Number]]).map(l => (l.get(0).doubleValue, l.get(1).doubleValue)),
+        strategyName         = c.getString("strategy.selection"),
+        strategyConf         = c.getObject(s"strategy.${c.getString("strategy.selection")}").toConfig)
+  }
 
-  val runType                = conf.optString("bot.runType").map(_.toLowerCase).map(x => RunType.withName(capFirst(x))).getOrElse(Live)
   assert(runType != RunType.Backtest || backtestEventDataDir.isDefined || backtestCsvDir.isDefined || backtestCandleFile.isDefined)
 
-  val strategyName = conf.getString("strategy.selection")
   log.info(
     s"""
       |
@@ -78,102 +84,108 @@ object BotApp extends App {
       |• runType:              $runType
       |• bitmexUrl:            $bitmexUrl
       |• bitmexWsUrl:          $bitmexWsUrl
-      |• wssSubscriptions:     ${wssSubscriptions.mkString(",")}
+      |
       |• graphiteHost:         $graphiteHost
       |• graphitePort:         $graphitePort
       |• takerFee:             $takerFee
       |• restSyncTimeoutMs:    $restSyncTimeoutMs
       |• useSynthetics:        $useSynthetics
       |• backtestEventDataDir: $backtestEventDataDir
-      |
-      |$namespace:
-      |• symbol:               $symbol
-      |• dir:                  $dir
-      |• backtestCsvDir:       $backtestCsvDir
       |• backtestCandleFile:   $backtestCandleFile
-      |• takeProfitPerc:       $takeProfitPerc
-      |• tiers:                ${tiers.mkString(",")}
+      |• backtestCsvDir:       $backtestCsvDir
+      |
+      |bots:
+      |${bots.mkString("\n")}
       |""".stripMargin)
 
   val metrics = for { h <- graphiteHost; p <- graphitePort } yield Metrics(h, p)
-  val strategy = Strategy(name = strategyName, config = conf.getObject(s"strategy.$strategyName").toConfig, parentConfig = conf.getObject(s"strategy").toConfig)
-  val tierCalc = TierCalcImpl(dir = dir, tiers = tiers)
-
   if (runType == Backtest) {
-    log.info(s"Instantiating $runType on $backtestEventDataDir or $backtestCandleFile...")
-    val sim = new ExchangeSim(
-      eventDataDir = backtestEventDataDir.orNull,
-      eventCsvDir = backtestCsvDir.orNull,
-      candleFile = backtestCandleFile.orNull,
-      strategy = strategy,
-      tierCalc = tierCalc,
-      dir = dir,
-      takeProfitPerc = takeProfitPerc,
-      metrics = metrics,
-      namespace = namespace,
-      useSynthetics = useSynthetics)
-    val (finalCtx, finalExchangeCtx) = sim.run()
-    log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} ($$${finalCtx.ledger.ledgerMetrics.runningPandl * (finalCtx.ledger.askPrice + finalCtx.ledger.bidPrice)/2}) over ${finalCtx.ledger.myTrades.size} trades")
-  } else {
+    bots foreach { bot =>
+      log.info(s"Instantiating ${bot.namespace} $runType on $backtestEventDataDir or $backtestCandleFile...")
+      val strategy = Strategy(name = bot.strategyName, config = conf.getObject(s"strategy.${bot.strategyName}").toConfig)
+      val tierCalc = TierCalcImpl(dir = bot.dir, tiers = bot.tiers)
+      val sim = new ExchangeSim(
+        eventDataDir = backtestEventDataDir.orNull,
+        eventCsvDir = backtestCsvDir.orNull,
+        candleFile = backtestCandleFile.orNull,
+        strategy = strategy,
+        tierCalc = tierCalc,
+        dir = bot.dir,
+        takeProfitPerc = bot.takeProfitPerc,
+        metrics = metrics,
+        symbol = bot.symbol,
+        namespace = bot.namespace,
+        useSynthetics = useSynthetics)
+      val (finalCtx, finalExchangeCtx) = sim.run()
+      log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} ($$${finalCtx.ledger.ledgerMetrics.runningPandl * (finalCtx.ledger.askPrice + finalCtx.ledger.bidPrice)/2}) over ${finalCtx.ledger.myTrades.size} trades")
+    }
+  } else if (runType == Dry) {
+    ??? // FIXME: No implementation for dry run, had same one as live before, need to remove "trade" flag...
+  } else if (runType == Live) {
     implicit val serviceSystem: akka.actor.ActorSystem = akka.actor.ActorSystem()
+    val wssSubscriptions = bots.flatMap(_.wssSubscriptions).toSeq
     val wsGateway = new WsGateway(wsUrl=bitmexWsUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, wssSubscriptions=wssSubscriptions)
-    val behaviorDsl=Orchestrator.asDsl(
-      strategy=strategy,
-      tierCalc = tierCalc,
-      takeProfitPerc=takeProfitPerc,
-      dir=dir)
+    val restGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs)
+    val actorBySymbol = (bots map { bot =>
+      val strategy = Strategy(
+        name = bot.strategyName,
+        config = bot.strategyConf)
+      val tierCalc = TierCalcImpl(dir = bot.dir, tiers = bot.tiers)
 
-    val orchestrator = if (runType == Live) {
-      log.info(s"Instantiating Live Run...")
-      val restGateway = new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs)
-      Behaviour.asLiveBehavior(
+      val behaviorDsl = Orchestrator.asDsl(
+        strategy = strategy,
+        tierCalc = tierCalc,
+        takeProfitPerc = bot.takeProfitPerc,
+        dir = bot.dir)
+
+      log.info(s"Instantiating Live Run for ${bot.namespace}...")
+      val orchestrator = Behaviour.asLiveBehavior(
         restGateway = restGateway,
         metrics=metrics,
-        namespace=namespace,
-        symbol=symbol,
+        namespace=bot.namespace,
+        symbol=bot.symbol,
         behaviorDsl=behaviorDsl,
         initCtx=InitCtx(Ledger()),
-        bootstrap=restGateway.drainSync(symbol=symbol, dir=dir, priceDeltaPct=drainPriceDeltaPct, minPosition=drainMinPosition))
-    } else if (runType == Dry) {
-      log.info(s"Instantiating Dry Run...")
-      Behaviour.asLiveBehavior(
-        restGateway=new RestGateway(url=bitmexUrl, apiKey=bitmexApiKey, apiSecret=bitmexApiSecret, syncTimeoutMs=restSyncTimeoutMs),
-        metrics=metrics,
-        namespace=namespace,
-        symbol=symbol,
-        behaviorDsl=behaviorDsl,
-        initCtx=IdleCtx(Ledger()))
-    } else if (runType == Backtest) {
-      log.info(s"Instantiating Backtest Run...")
-      Behaviour.asDryBehavior(
-        metrics=metrics,
-        namespace=namespace,
-        behaviorDsl=behaviorDsl,
-        initCtx=InitCtx(Ledger()),
-        askBidFromTrades=false)
-    } else
-      ???
-
-    val orchestratorActor = ActorSystem(
-      Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
-      "orchestrator-actor")
-    orchestratorActor.scheduler.scheduleAtFixedRate(tillEO30s, 30.seconds)(() => orchestratorActor ! On30s(None))
-    orchestratorActor.scheduler.scheduleAtFixedRate(tillEOM,    1.minute) (() => orchestratorActor ! On1m(None))
-    orchestratorActor.scheduler.scheduleAtFixedRate(tillEO5m,   5.minute) (() => orchestratorActor ! On5m(None))
+        bootstrap=restGateway.drainSync(symbol=bot.symbol, dir=bot.dir, priceDeltaPct=bot.drainPriceDeltaPct, minPosition=bot.drainMinPosition))
+      val actor = ActorSystem(
+        Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
+        s"${bot.symbol}-actor")
+      actor.scheduler.scheduleAtFixedRate(tillEO30s, 30.seconds)(() => actor ! On30s(None))
+      actor.scheduler.scheduleAtFixedRate(tillEOM,    1.minute) (() => actor ! On1m(None))
+      actor.scheduler.scheduleAtFixedRate(tillEO5m,   5.minute) (() => actor ! On5m(None))
+      (bot.symbol, actor)
+    }).toMap
     // feed the WS events from actual exchange
     class CachedConsumer {
-      var cache: OrderBookSummary = null
+      var cache: Map[String, OrderBookSummary] = Map.empty
       val wsMessageConsumer: PartialFunction[JsResult[WsModel], Unit] = {
-        case JsSuccess(value:OrderBook, _) =>
-          val summary = value.summary
-          if (! summary.isEquivalent(cache)) {
-            cache = summary
-            orchestratorActor ! WsEvent(summary)
+        case JsSuccess(value, _path) =>
+          WsModel.bySymbol(value) foreach {
+            case (symbol, value: OrderBook) if actorBySymbol.keySet.contains(symbol) =>
+              val summary = value.summary
+              cache.get(symbol) match {
+                case Some(cached) if !summary.isEquivalent(cached) =>
+                  cache += symbol -> summary
+                  actorBySymbol(symbol) ! WsEvent(summary)
+                case Some(cached) =>
+                  ()
+                case None =>
+                  cache += symbol -> summary
+                  actorBySymbol(symbol) ! WsEvent(summary)
+              }
+            case (symbol, value) if actorBySymbol.keySet.contains(symbol) =>
+              actorBySymbol(symbol) ! WsEvent(value)
+            case ("other", value) =>
+              log.info(s"Received actor unrelated WsEvent: $value")
+            case (symbol, value) =>
+              throw new Exception(s"Received unexpected WsEvent for symbol $symbol: $value")
           }
-        case JsSuccess(value, _) => orchestratorActor ! WsEvent(value)
-        case e:JsError           => log.error("WS consume error!", e)
+        case e: JsError =>
+          log.error("WS consume error!", e)
       }
     }
     wsGateway.run(new CachedConsumer().wsMessageConsumer)
   }
 }
+
+case class BotSpec(namespace: String, symbol: String, takeProfitPerc: Double, wssSubscriptions: Seq[String], dir: Dir.Value, drainPriceDeltaPct: Double, drainMinPosition: Double, tiers: Seq[(Double, Double)], strategyName: String, strategyConf: Config)

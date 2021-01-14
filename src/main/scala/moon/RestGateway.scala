@@ -167,6 +167,8 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, syncTimeoutMs:
     // get open orders, see if they match position, if so, skip
     val positionOpt = getPositionsSync(symbol).get.positions.find(_.symbol.toUpperCase == symbol.toUpperCase)
     positionOpt match {
+      case Some(position) if position.currentQty == 0 =>
+        log.info(s"No need to drain empty position: $drainSide ${position.currentQty}")
       case Some(position) =>
         val oppositeOrders = getOrdersSync(symbol, Some("open")).get.orders.filter(o => o.ordStatus.exists(s => Seq(New, PartiallyFilled).contains(s)) && o.side == drainSide)
         val oppositeOrdersQty = oppositeOrders.map(_.orderQty).sum

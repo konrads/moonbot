@@ -14,12 +14,12 @@ class LedgerSpec extends FlatSpec with Matchers with Inside {
 
   "Ledger" should "work with WS and REST orders" in {
     val ws1 = UpsertOrder(Some("insert"), data=Vector(
-      OrderData(orderID="o1", price=Some(1), orderQty=Some(1), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-01T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
-      OrderData(orderID="o2", price=Some(2), orderQty=Some(2), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-02T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
-      OrderData(orderID="o3", price=Some(3), orderQty=Some(3), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-03T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
+      OrderData(symbol="XBTUSD", orderID="o1", price=Some(1), orderQty=Some(1), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-01T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
+      OrderData(symbol="XBTUSD", orderID="o2", price=Some(2), orderQty=Some(2), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-02T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
+      OrderData(symbol="XBTUSD", orderID="o3", price=Some(3), orderQty=Some(3), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-03T00:00:00.000Z"), ordStatus=Some(OrderStatus.New)),
     ))
     val ws2 = UpsertOrder(Some("update"), data=Vector(
-      OrderData(orderID="o2", price=Some(2), orderQty=Some(2), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-02T00:00:00.000Z"), ordStatus=Some(OrderStatus.PostOnlyFailure), text=Some("had execInst of ParticipateDoNotInitiate")),
+      OrderData(symbol="XBTUSD", orderID="o2", price=Some(2), orderQty=Some(2), side=Some(OrderSide.Buy), timestamp=parseDateTime("2010-01-02T00:00:00.000Z"), ordStatus=Some(OrderStatus.PostOnlyFailure), text=Some("had execInst of ParticipateDoNotInitiate")),
     ))
     val rest1 = Order(orderID="o1", symbol="XBTUSD", price=Some(1), orderQty=1, side=OrderSide.Buy, ordType=OrderType.Limit, timestamp=parseDateTime("2010-01-01T00:00:00.000Z"), ordStatus=Some(OrderStatus.New))
     val rest2 = Order(orderID="o2", symbol="XBTUSD", price=Some(2), orderQty=2, side=OrderSide.Buy, ordType=OrderType.Limit, timestamp=parseDateTime("2010-01-01T00:00:00.000Z"), ordStatus=Some(OrderStatus.Filled))

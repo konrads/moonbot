@@ -28,7 +28,7 @@ case class OrderBookSummary(table: String, timestamp: DateTime, ask: Double, bid
   def isEquivalent(that: OrderBookSummary): Boolean = that != null && that.ask == ask && that.bid == bid
 }
 
-case class OrderData(orderID: String, clOrdID: Option[String]=None, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Option[Double], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: DateTime, leavesQty: Option[Double]=None, cumQty: Option[Double]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends WsModel
+case class OrderData(symbol: String, orderID: String, clOrdID: Option[String]=None, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Option[Double], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: DateTime, leavesQty: Option[Double]=None, cumQty: Option[Double]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends WsModel
 object OrderData { implicit val aReads: Reads[OrderData] = Json.reads[OrderData] }
 
 case class Instrument(data: Seq[InstrumentData]) extends WsModel
@@ -51,7 +51,7 @@ case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsM
 }
 object UpsertOrder { implicit val aReads: Reads[UpsertOrder] = Json.reads[UpsertOrder] }
 
-case class TradeData(side: OrderSide.Value, size: Double, price: Double, tickDirection: TickDirection.Value, timestamp: DateTime) extends WsModel
+case class TradeData(symbol: String, side: OrderSide.Value, size: Double, price: Double, tickDirection: TickDirection.Value, timestamp: DateTime) extends WsModel
 object TradeData { implicit val aReads: Reads[TradeData] = Json.reads[TradeData] }
 
 case class Trade(data: Seq[TradeData]) extends WsModel
@@ -68,6 +68,7 @@ object WsModel {
   implicit val aReads: Reads[WsModel] = (json: JsValue) => {
     // if (! (json \ "table").asOpt[String].exists(_.startsWith("orderBook")))
     //   log.debug(s"### ws json: $json")
+    // println(s"### ws json: $json")
     val res = ((json \ "table").asOpt[String], (json \ "action").asOpt[String]) match {
       case (Some(table), Some("partial")) if Vector("order", "trade", "instrument", "funding").contains(table) => JsSuccess(Ignorable(json))
       case (Some(table), _@Some(_)) if table.startsWith("orderBook") => json.validate[OrderBook]
@@ -102,5 +103,30 @@ object WsModel {
   def asModel(jsonStr: String): JsResult[WsModel] = {
     val parsedJsValue = Json.parse(jsonStr)
     Json.fromJson[WsModel](parsedJsValue)
+  }
+
+  def bySymbol[T <: WsModel](model: T): Map[String, T] = {
+    def rejig[U](s: Seq[Map[String, U]]): Map[String, Seq[U]] = {
+      s.foldLeft(Map.empty[String, Seq[U]]) {
+        case (soFar, x) =>
+          x.foldLeft(soFar) { case (soFar2, (k, v)) => soFar2.get(k) match {
+            case Some(xs) => soFar2 + (k -> (xs :+ v))
+            case None     => soFar2 + (k -> Vector(v))
+          }}
+      }
+    }
+    model match {
+      case x:OrderBook      => rejig(x.data.map(bySymbol)).mapValues(ds => x.copy(data = ds).asInstanceOf[T]).toMap
+      case x:OrderBookData  => Map(x.symbol -> x.asInstanceOf[T])
+      case x:UpsertOrder    => rejig(x.data.map(bySymbol)).mapValues(ds => x.copy(data = ds).asInstanceOf[T]).toMap
+      case x:OrderData      => Map(x.symbol -> x.asInstanceOf[T])
+      case x:Instrument     => rejig(x.data.map(bySymbol)).mapValues(ds => x.copy(data = ds).asInstanceOf[T]).toMap
+      case x:InstrumentData => Map(x.symbol -> x.asInstanceOf[T])
+      case x:Funding        => rejig(x.data.map(bySymbol)).mapValues(ds => x.copy(data = ds).asInstanceOf[T]).toMap
+      case x:FundingData    => Map(x.symbol -> x.asInstanceOf[T])
+      case x:TradeData      => Map(x.symbol -> x.asInstanceOf[T])
+      case x:Trade          => rejig(x.data.map(bySymbol)).mapValues(ds => x.copy(data = ds).asInstanceOf[T]).toMap
+      case other            => Map("other" -> other)
+    }
   }
 }

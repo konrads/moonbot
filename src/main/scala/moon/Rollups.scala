@@ -65,7 +65,7 @@ case class RollupBuckets(
   lazy val forecast: RollupBuckets = promote(false).prune
 
   lazy val asCandles: Vector[Candle] = period.zipWithIndex.map {
-    case (p, i) => Candle(high=high(i), low=low(i), open=open(i), close=close(i), vwap=vwap(i), volume=volume(i), period=p)
+    case (p, i) => Candle(symbol="MOONUSD", high=high(i), low=low(i), open=open(i), close=close(i), vwap=vwap(i), volume=volume(i), period=p)
   }
 
   private def promote(useLatestVol: Boolean): RollupBuckets =
@@ -148,7 +148,7 @@ case class RollupBuckets(
 }
 
 
-case class Candle(high: Double, low: Double, open: Double, close: Double, vwap: Double, volume: Double, period: Long) {
+case class Candle(symbol: String, high: Double, low: Double, open: Double, close: Double, vwap: Double, volume: Double, period: Long) {
   lazy val sentiment: Sentiment.Value = if (open < close) Sentiment.Bull else Sentiment.Bear
 }
 
@@ -161,7 +161,7 @@ object Candle {
       val headerMap = headers.split(",").map(_.trim).zipWithIndex.map { case (h, ind) => ind -> h }.toMap
       (for (line <- iter) yield {
         val rowMap = line.split(",").map(_.trim).zipWithIndex.map { case (v, ind) => headerMap(ind) -> v }.toMap
-        Candle(high = rowMap("high").toDouble, low = rowMap("low").toDouble, open = rowMap("open").toDouble, close = rowMap("close").toDouble, vwap = rowMap("vwap").toDouble, volume = rowMap("volume").toDouble, period = rowMap("period").toLong)
+        Candle(symbol = rowMap("symbol"), high = rowMap("high").toDouble, low = rowMap("low").toDouble, open = rowMap("open").toDouble, close = rowMap("close").toDouble, vwap = rowMap("vwap").toDouble, volume = rowMap("volume").toDouble, period = rowMap("period").toLong)
       }).toVector.toIterator
     } finally
       source.close()

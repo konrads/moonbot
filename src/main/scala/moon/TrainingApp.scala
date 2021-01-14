@@ -52,6 +52,7 @@ object TrainingApp extends App {
         dir=LongDir,
         takeProfitPerc = takeProfitPerc,
         metrics = None,
+        symbol = "MOONUSD",  // mock symbol...
         namespace = "training",
         useSynthetics = useSynthetics)
       val (ctx, eCtx) = sim.run()

@@ -14,6 +14,7 @@ class ExchangeSim(
   eventCsvDir: String=null,
   candleFile: String=null,
   metrics: Option[Metrics],
+  symbol: String,
   namespace: String,
   strategy: Strategy,
   tierCalc: TierCalc,
@@ -40,7 +41,7 @@ class ExchangeSim(
       dir,
       true)
     val (finalCtx, finalExchangeCtx) = eventIter.foldLeft((InitCtx(Ledger()): Ctx, ExchangeCtx())) {
-      case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, namespace, log, true, false, WsEvent(event))
+      case ((ctx2, exchangeCtx2), event) => paperExchangeSideEffectHandler(behaviorDsl, ctx2, exchangeCtx2, metrics, symbol, namespace, log, true, false, WsEvent(event))
     }
     (finalCtx.asInstanceOf[LedgerAwareCtx], finalExchangeCtx)
   }
@@ -85,7 +86,7 @@ class ExchangeSim(
         // interpret: 2020-05-04D00:00:03.367608000,XBTUSD,Buy,1,8907.5,ZeroPlusTick,9d3d65b9-f073-ec03-eceb-61c49761ff1d,11226,0.00011226,1
         msg <- {
           val Array(timestamp, symbol, side, size, price, tickDirection, trdMatchID, grossValue, homeNotional, foreignNotional) = line.split(",")
-          Seq(new Trade(Seq(TradeData(side=OrderSide.withName(side), size=size.toDouble, price=price.toDouble, tickDirection=TickDirection.withName(tickDirection), timestamp=parseDateTime(timestamp.take(23).replace("D", "T")+"Z")))))
+          Seq(new Trade(Seq(TradeData(symbol=symbol, side=OrderSide.withName(side), size=size.toDouble, price=price.toDouble, tickDirection=TickDirection.withName(tickDirection), timestamp=parseDateTime(timestamp.take(23).replace("D", "T")+"Z")))))
         }
       } yield {
         if (filename != prevFilename) {
@@ -100,7 +101,7 @@ class ExchangeSim(
 
   def eventsFromCandleFile(candleFile: String): Iterator[WsModel] =
     new OptimizedIter(
-      Candle.fromFile(candleFile).map(c => Trade(data = Seq(TradeData(side=OrderSide.Buy, size=c.volume, price=c.close, tickDirection=TickDirection.PlusTick, timestamp=new DateTime(c.period * 1000L))))),
+      Candle.fromFile(candleFile).map(c => Trade(data = Seq(TradeData(symbol=c.symbol, side=OrderSide.Buy, size=c.volume, price=c.close, tickDirection=TickDirection.PlusTick, timestamp=new DateTime(c.period * 1000L))))),
       useSynthetics
     )
 }

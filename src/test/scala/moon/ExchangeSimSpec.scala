@@ -36,8 +36,8 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       dir=LongDir)
 
     /* FIXME: for debug only, should remove!!! */
-    def behaviorDsl_dbg(ctx: Ctx, event: ActorEvent, log: org.slf4j.Logger): (Ctx, Option[SideEffect]) = {
-      val (resCtx, resEffect) = behaviorDsl(ctx, event, log)
+    def behaviorDsl_dbg(ctx: Ctx, event: ActorEvent, log: org.slf4j.Logger, symbol: String): (Ctx, Option[SideEffect]) = {
+      val (resCtx, resEffect) = behaviorDsl(ctx, event, log, "XBTUSD")
       println(s"##### init_ctx: ${ctx.getClass.getSimpleName}, event: $event =>\n#####  res_ctx: ${resCtx.getClass.getSimpleName}, effect: $resEffect\n")
       (resCtx, resEffect)
     }
@@ -46,7 +46,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
       case ((ctx2, exchangeCtx2), (sentiment, eventStr)) =>
         val event = WsEvent(WsModel.asModel(eventStr).get)
         strategy.sentiment = sentiment
-        paperExchangeSideEffectHandler(behaviorDsl_dbg, ctx2, exchangeCtx2, None, "namespace", log, true, false, event)
+        paperExchangeSideEffectHandler(behaviorDsl_dbg, ctx2, exchangeCtx2, None, "XBTUSD", "namespace", log, true, false, event)
     }
     (finalCtx, finalExchangeCtx)
   }
@@ -71,26 +71,26 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
 
   it should "maybeFill Market" in {
     var order: ExchangeOrder = null
-    order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Market, status = New, price = None, trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
+    order = ExchangeOrder(symbol="XBTUSD", orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Market, status = New, price = None, trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
     maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(15), status = Filled))
-    order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Market, status = New, price = None, trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
+    order = ExchangeOrder(symbol="XBTUSD", orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Market, status = New, price = None, trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
     maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(10), status = Filled))
   }
 
   it should "maybeFill Limit" in {
     var order: ExchangeOrder = null
-    order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Limit, status = New, price = Some(9), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
+    order = ExchangeOrder(symbol="XBTUSD", orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Limit, status = New, price = Some(9), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
     maybeFill(order, bid = 10, ask = 15) shouldBe None
-    order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Limit, status = New, price = Some(12), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
+    order = ExchangeOrder(symbol="XBTUSD", orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Limit, status = New, price = Some(12), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
     maybeFill(order, bid = 10, ask = 15) shouldBe None
-    order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Limit, status = New, price = Some(16), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
+    order = ExchangeOrder(symbol="XBTUSD", orderID = "x", clOrdID = "y", qty = 10, side = Buy, ordType = Limit, status = New, price = Some(16), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
     maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(16), status = Filled))
 
-    order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Limit, status = New, price = Some(9), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
+    order = ExchangeOrder(symbol="XBTUSD", orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Limit, status = New, price = Some(9), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
     maybeFill(order, bid = 10, ask = 15) shouldBe Some(order.copy(price = Some(9), status = Filled))
-    order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Limit, status = New, price = Some(12), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
+    order = ExchangeOrder(symbol="XBTUSD", orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Limit, status = New, price = Some(12), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
     maybeFill(order, bid = 10, ask = 15) shouldBe None
-    order = ExchangeOrder(orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Limit, status = New, price = Some(16), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
+    order = ExchangeOrder(symbol="XBTUSD", orderID = "x", clOrdID = "y", qty = 10, side = Sell, ordType = Limit, status = New, price = Some(16), trailingPeg = None, longHigh = None, shortLow = None, timestamp = null)
     maybeFill(order, bid = 10, ask = 15) shouldBe None
   }
 

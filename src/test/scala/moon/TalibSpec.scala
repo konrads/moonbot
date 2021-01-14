@@ -44,7 +44,7 @@ class TalibSpec extends FlatSpec with Matchers with Inside {
   }
 
   it should "work with resample" in {
-    def minTradeData(ts: DateTime, price: Double, size: Double) = TradeData(timestamp = ts, price = price, size = size, side = null, tickDirection = null)
+    def minTradeData(ts: DateTime, price: Double, size: Double) = TradeData(symbol="XBTUSD", timestamp = ts, price = price, size = size, side = null, tickDirection = null)
 
     resample(Vector(
       minTradeData(parseDateTime("2010-01-01T00:00:08.000Z"), 1, 10),
