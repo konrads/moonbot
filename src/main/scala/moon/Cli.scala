@@ -158,10 +158,10 @@ object Cli extends App {
         case Success(res) => log.info(s"REST $oSide trailingStop response: $clOrdID, $res")
         case Failure(exc) => log.error(s"REST $oSide trailingStop exception: $clOrdID", exc)
       }
-    case ("amend", _, Some(price), _, _, _, _, orderIDOpt, clOrdOpt, _) =>
+    case ("amend", _, Some(price), _, _, _, Some(qty), orderIDOpt, clOrdOpt, _) =>
       log.info(s"amending: price: $price, orderid: $orderIDOpt")
       wsGateway.run(consumeOrder)
-      val resF = restGateway.amendOrderAsync(orderIDOpt, clOrdOpt, price)
+      val resF = restGateway.amendOrderAsync(orderIDOpt, clOrdOpt, price, qty)
       log.info(s"REST amend request: $orderIDOpt")
       resF.onComplete {
         case Success(res) => log.info(s"REST amend response: $orderIDOpt, $clOrdOpt, $res")

@@ -38,12 +38,12 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
       ledgerOrdersByID.get(o.orderID) match {
         case Some(existing) if existing.ordStatus == Filled || existing.ordStatus == Canceled =>
           // copy all except for ordStatus
-          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), price=o.avgPx.getOrElse(o.price.getOrElse(existing.price)), side=o.side, ordType=o.ordType, timestamp=o.timestamp, relatedClOrdID=relatedClOrdID.getOrElse(existing.relatedClOrdID))
+          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), price=o.avgPx.getOrElse(o.price.getOrElse(existing.price)), qty=o.orderQty, side=o.side, ordType=o.ordType, timestamp=o.timestamp, relatedClOrdID=relatedClOrdID.getOrElse(existing.relatedClOrdID))
           copy(
             ledgerOrdersByID = ledgerOrdersByID + (existing2.orderID -> existing2),
             ledgerOrdersByClOrdID = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2))
         case Some(existing) =>
-          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), ordStatus=o.ordStatus.getOrElse(existing.ordStatus), price=o.avgPx.getOrElse(o.price.getOrElse(existing.price)), timestamp=o.timestamp, relatedClOrdID=relatedClOrdID.getOrElse(existing.relatedClOrdID))
+          val existing2 = existing.copy(myOrder=true, clOrdID=o.clOrdID.getOrElse(existing.clOrdID), ordStatus=o.ordStatus.getOrElse(existing.ordStatus), price=o.avgPx.getOrElse(o.price.getOrElse(existing.price)), qty=o.orderQty, timestamp=o.timestamp, relatedClOrdID=relatedClOrdID.getOrElse(existing.relatedClOrdID))
           copy(
             ledgerOrdersByID = ledgerOrdersByID + (existing2.orderID -> existing2),
             ledgerOrdersByClOrdID = if (existing2.clOrdID == null) ledgerOrdersByClOrdID else ledgerOrdersByClOrdID + (existing2.clOrdID -> existing2))

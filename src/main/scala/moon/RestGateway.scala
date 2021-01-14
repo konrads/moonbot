@@ -37,7 +37,7 @@ trait IRestGateway {
   def placeTrailingStopOrderAsync(symbol: String, qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order]
   def placeMarketOrderAsync(symbol: String, qty: Double, side: OrderSide, clOrdID: Option[String]): Future[Order]
   def placeLimitOrderAsync(symbol: String, qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String], participateDoNotInitiate: Boolean=true): Future[Order]
-  def amendOrderAsync(orderID: Option[String]=None, origClOrdID: Option[String]=None, price: Double): Future[Order]
+  def amendOrderAsync(orderID: Option[String]=None, origClOrdID: Option[String]=None, price: Double, qty: Double): Future[Order]
   def cancelOrderAsync(orderIDs: Seq[String]=Vector.empty, clOrdIDs: Seq[String]=Vector.empty): Future[Orders]
   def cancelAllOrdersAsync(symbol: String): Future[Orders]
   def closePositionAsync(symbol: String): Future[String]
@@ -50,7 +50,7 @@ trait IRestGateway {
   def placeTrailingStopOrderSync(symbol: String, qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Try[Order]
   def placeMarketOrderSync(symbol: String, qty: Double, side: OrderSide, clOrdID: Option[String]): Try[Order]
   def placeLimitOrderSync(symbol: String, qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String], participateDoNotInitiate: Boolean=true): Try[Order]
-  def amendOrderSync(orderID: Option[String]=None, clOrdID: Option[String]=None, price: Double): Try[Order]
+  def amendOrderSync(orderID: Option[String]=None, clOrdID: Option[String]=None, price: Double, qty: Double): Try[Order]
   def cancelOrderSync(orderIDs: Seq[String]=Vector.empty, origClOrdIDs: Seq[String]=Vector.empty): Try[Orders]
   def cancelAllOrdersSync(symbol: String): Try[Orders]
   def closePositionSync(symbol: String): Try[String]
@@ -77,7 +77,7 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, syncTimeoutMs:
   def placeTrailingStopOrderAsync(symbol: String, qty: Double, pegOffsetValue: Double, isClose: Boolean, side: OrderSide, clOrdID: Option[String]): Future[Order] = placeTrailingStopOrder(symbol, qty, side, pegOffsetValue, isClose, clOrdID=clOrdID)
   def placeMarketOrderAsync(symbol: String, qty: Double, side: OrderSide, clOrdID: Option[String]): Future[Order] = placeMarketOrder(symbol, qty, side, clOrdID=clOrdID)
   def placeLimitOrderAsync(symbol: String, qty: Double, price: Double, isReduceOnly: Boolean, side: OrderSide, clOrdID: Option[String], participateDoNotInitiate: Boolean=true): Future[Order] = placeLimitOrder(symbol, qty, price, isReduceOnly, side, clOrdID=clOrdID, participateDoNotInitiate=participateDoNotInitiate)
-  def amendOrderAsync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: Double): Future[Order] = amendOrder(orderID, origClOrdID, price)
+  def amendOrderAsync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: Double, qty: Double): Future[Order] = amendOrder(orderID, origClOrdID, price, qty)
   def cancelOrderAsync(orderIDs: Seq[String] = Vector.empty, clOrdIDs: Seq[String] = Vector.empty): Future[Orders] = cancelOrder(orderIDs, clOrdIDs)
   def cancelAllOrdersAsync(symbol: String): Future[Orders] = cancelAllOrders(symbol)
   def closePositionAsync(symbol: String): Future[String] = closePosition(symbol)
@@ -115,9 +115,9 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, syncTimeoutMs:
       Duration(syncTimeoutMs, MILLISECONDS)
     ).value.get // FIXME: not wrapping in recoverable error...
 
-  def amendOrderSync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: Double): Try[Order] =
+  def amendOrderSync(orderID: Option[String] = None, origClOrdID: Option[String] = None, price: Double, qty: Double): Try[Order] =
     Await.ready(
-      amendOrder(orderID, origClOrdID, price),
+      amendOrder(orderID, origClOrdID, price, qty),
       Duration(syncTimeoutMs, MILLISECONDS)
     ).recoverWith { case exc: TimeoutException => throw TimeoutError(s"Timeout on amendOrderSync orderID: $orderID, origClOrdID: $origClOrdID") }.value.get
 
@@ -262,11 +262,11 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, syncTimeoutMs:
       contentType = ContentTypes.`application/json`,
     ).map(_.asInstanceOf[Orders])
 
-  private def amendOrder(orderID: Option[String], orgClOrdID: Option[String], price: Double): Future[Order] =
+  private def amendOrder(orderID: Option[String], orgClOrdID: Option[String], price: Double, qty: Double): Future[Order] =
     sendReq(
       PUT,
       "/api/v1/order",
-      s"price=${round(price)}" + orderID.map("&orderID=" + _).getOrElse("") + orgClOrdID.map("&origClOrdID=" + _).getOrElse("")
+      s"price=${round(price)}&orderQty=${round(qty)}" + orderID.map("&orderID=" + _).getOrElse("") + orgClOrdID.map("&origClOrdID=" + _).getOrElse("")
     ).map(_.asInstanceOf[Order])
 
   private def cancelOrder(orderIDs: Seq[String], clOrdIDs: Seq[String]): Future[Orders] = {

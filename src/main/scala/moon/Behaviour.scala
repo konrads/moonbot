@@ -34,8 +34,8 @@ object Behaviour {
               case CancelOrder(clOrdID) =>
                 val fut = restGateway.cancelOrderAsync(clOrdIDs = Seq(clOrdID))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
-              case AmendOrder(clOrdID, price) =>
-                val fut = restGateway.amendOrderAsync(origClOrdID = Some(clOrdID), price = price)
+              case AmendOrder(clOrdID, price, qty) =>
+                val fut = restGateway.amendOrderAsync(origClOrdID = Some(clOrdID), price = price, qty = qty)
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
               case OpenInitOrder(symbol, side, Limit, clOrdID, qty, price) =>
                 val fut = restGateway.placeLimitOrderAsync(symbol=symbol, qty=qty, price=price.get, side=side, isReduceOnly=false, clOrdID=Some(clOrdID))
@@ -216,10 +216,10 @@ object Behaviour {
         })
         val event = RestEvent(Success(Orders(Seq(exchangeCtx2.orders(clOrdID).toRest))))
         (exchangeCtx2, Seq(event))
-      case AmendOrder(clOrdID, price) =>
+      case AmendOrder(clOrdID, price, qty) =>
         val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders.map {
           case (k, v) if k == clOrdID && v.status != Canceled && v.status != Filled =>
-            val v2 = v.copy(price=Some(price))
+            val v2 = v.copy(price=Some(price), qty=qty)
             val v3 = maybeFill(v2, exchangeCtx.ask, exchangeCtx.bid).getOrElse(v2)
             k -> v3
           case other => other

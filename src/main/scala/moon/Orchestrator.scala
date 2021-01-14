@@ -42,11 +42,12 @@ object Orchestrator {
       val closeOrders = l.myOrders.filter(o => Seq(New, PartiallyFilled).contains(o.ordStatus) && o.side == closeSide)
       val closeOrderOpenClOrdIDs = closeOrders.map(_.relatedClOrdID)
       val openPrices = l.myOrders.filter(o => closeOrderOpenClOrdIDs.contains(o.clOrdID)).map(_.price)
-      tierCalc.canOpenWithQty(bestOpenPrice(l), openPrices).flatMap { tier =>
+      val bestPrice = bestOpenPrice(l)
+      tierCalc.canOpenWithQty(bestPrice, openPrices).flatMap { tier =>
           val strategyRes = strategy.strategize(l)
           (dir, strategyRes.sentiment) match {
-            case (LongDir,  Bull) => Right((OpenInitOrder(symbol, Buy,  Limit, uuid, tier.qty, Some(l.bidPrice)), tier))
-            case (ShortDir, Bear) => Right((OpenInitOrder(symbol, Sell, Limit, uuid, tier.qty, Some(l.askPrice)), tier))
+            case (LongDir,  Bull) => Right((OpenInitOrder(symbol, Buy,  Limit, uuid, tier.qty, Some(bestPrice)), tier))
+            case (ShortDir, Bear) => Right((OpenInitOrder(symbol, Sell, Limit, uuid, tier.qty, Some(bestPrice)), tier))
             case _                => Left(s"Failed to open order with unmatched dir: $dir, sentiment: ${strategyRes.sentiment}")
           }
       }
@@ -162,12 +163,18 @@ object Orchestrator {
             (dir, strategyRes.sentiment) match {
               case (LongDir, Bull) | (ShortDir, Bear) =>
                 val bestPrice = bestOpenPrice(ledger2)
-                if (targetPrice != bestPrice &&
-                    (dir == LongDir && bestPrice > targetPrice) || (dir == ShortDir && bestPrice < targetPrice)) {
-                  log.info(s"$symbol Open $dir: best price moved, will change: $targetPrice -> $bestPrice")
-                  val effect = AmendOrder(clOrdID, bestPrice)
-                  val ctx3 = ctx2.copy(ledger = ledger2, targetPrice = bestPrice, lifecycle = IssuingAmend)
-                  (ctx3, Some(effect))
+                if (dir == LongDir && bestPrice > targetPrice || dir == ShortDir && bestPrice < targetPrice) {
+                  openPositionOrder(ledger2, symbol) match {
+                    case Right((order, tier)) =>
+                      log.info(s"$symbol Open $dir: best price moved, will change price: $targetPrice -> ${order.price}, qty: ${order.qty}, tier: $tier")
+                      val effect = AmendOrder(clOrdID, bestPrice, order.qty)
+                      val ctx3 = ctx2.copy(ledger = ledger2, targetPrice = bestPrice, lifecycle = IssuingAmend)
+                      (ctx3, Some(effect))
+                    case Left(reason) =>
+                      log.info(s"$symbol Open $dir: Cannot amend new order, moved out of free tier: $reason")
+                      val ctx3 = ctx2.copy(ledger = ledger2, lifecycle = Awaiting)
+                      (ctx3, None)
+                  }
                 } else {
                   if (log.isDebugEnabled) log.debug(s"$symbol Open $dir: noop, sentiment matches dir @ orderID: ${orderOpt.map(_.fullOrdID)}, event: $event")
                   val ctx3 = ctx2.copy(ledger = ledger2, lifecycle = Awaiting)
@@ -198,10 +205,15 @@ object Orchestrator {
           case IssuingAmend =>
             val bestPrice = bestOpenPrice(ledger)
             if (targetPrice != bestPrice) {
-              val effect = AmendOrder(clOrdID, bestPrice)
-              log.info(s"$symbol Open: re-amending $dir order: $clOrdID @ $bestPrice due to error", e)
-              val ctx3 = ctx2.copy(lifecycle = IssuingAmend)
-              (ctx3, Some(effect))
+              openPositionOrder(ledger, symbol) match {
+                case Right((order, tier)) =>
+                  log.info(s"$symbol Open: re-amending $dir order: $clOrdID of ${order.qty} @ ${order.price} due to error, tier: $tier", e)
+                  val ctx3 = ctx2.copy(clOrdID = order.clOrdID, targetPrice = order.price.get, lifecycle = IssuingAmend)
+                  (ctx3, Some(order))
+                case Left(reason) =>
+                  if (log.isDebugEnabled) log.debug(s"$symbol Open: skipping re-amending $dir order creation due to: $reason, here due to error", e)
+                  (IdleCtx(ledger), None)
+              }
             } else {
               log.info(s"$symbol Open: no need to re-amend $dir order: $clOrdID, priced not moved, here due to error", e)
               (ctx2, None)
