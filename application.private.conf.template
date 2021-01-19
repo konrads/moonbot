@@ -12,7 +12,8 @@ bot.bots.ETHUSD {
     [0.98, 9],
     [0.97, 8],
     [0.96, 7],
-  ]
+  ],
+  shouldDrain = false
 }
 bot.bots.BTCUSD {
   takeProfitPerc = 0.001
@@ -21,5 +22,6 @@ bot.bots.BTCUSD {
     [0.990, 600],
     [0.985, 400],
     [0.980, 200]
-  ]
+  ],
+  shouldDrain = false
 }
