@@ -163,7 +163,7 @@ object Orchestrator {
             (dir, strategyRes.sentiment) match {
               case (LongDir, Bull) | (ShortDir, Bear) =>
                 val bestPrice = bestOpenPrice(ledger2)
-                if (dir == LongDir && bestPrice > targetPrice || dir == ShortDir && bestPrice < targetPrice) {
+                if (dir == LongDir && bestPrice > targetPrice || dir == ShortDir && bestPrice < targetPrice)
                   openPositionOrder(ledger2, symbol) match {
                     case Right((order, tier)) =>
                       log.info(s"$symbol Open $dir: best price moved, will change price: $targetPrice -> ${order.price}, qty: ${order.qty}, tier: $tier")
@@ -171,17 +171,18 @@ object Orchestrator {
                       val ctx3 = ctx2.copy(ledger = ledger2, targetPrice = bestPrice, lifecycle = IssuingAmend)
                       (ctx3, Some(effect))
                     case Left(reason) =>
-                      log.info(s"$symbol Open $dir: Cannot amend new order, moved out of free tier: $reason")
-                      val ctx3 = ctx2.copy(ledger = ledger2, lifecycle = Awaiting)
-                      (ctx3, None)
+                      log.info(s"$symbol Open $dir: Cannot amend new order, moved into a tier with order, reason: $reason, canceling $clOrdID")
+                      val effect = CancelOrder(clOrdID)
+                      val ctx3 = ctx2.copy(ledger = ledger2, lifecycle = IssuingCancel)
+                      (ctx3, Some(effect))
                   }
-                } else {
+                else {
                   if (log.isDebugEnabled) log.debug(s"$symbol Open $dir: noop, sentiment matches dir @ orderID: ${orderOpt.map(_.fullOrdID)}, event: $event")
                   val ctx3 = ctx2.copy(ledger = ledger2, lifecycle = Awaiting)
                   (ctx3, None)
                 }
               case _ =>
-                log.info(s"$symbol Open $dir: sentiment changed to ${strategyRes.sentiment}, canceling ${clOrdID}")
+                log.info(s"$symbol Open $dir: sentiment changed to ${strategyRes.sentiment}, canceling $clOrdID")
                 val effect = CancelOrder(clOrdID)
                 val ctx3 = ctx2.copy(clOrdID = null, ledger = ledger2, lifecycle = IssuingCancel)
                 (ctx3, Some(effect))

@@ -62,7 +62,8 @@ object BotApp extends App {
         drainMinPosition     = c.optDouble("drainMinPosition").getOrElse(5.0),
         tiers                = c.getList("tiers").asScala.toSeq.map(_.unwrapped.asInstanceOf[util.ArrayList[Number]]).map(l => (l.get(0).doubleValue, l.get(1).doubleValue)),
         strategyName         = c.getString("strategy.selection"),
-        strategyConf         = c.getObject(s"strategy.${c.getString("strategy.selection")}").toConfig)
+        strategyConf         = c.getObject(s"strategy.${c.getString("strategy.selection")}").toConfig,
+        shouldDrain          = c.optBoolean("shouldDrain").contains(true))
   }
 
   assert(runType != RunType.Backtest || backtestEventDataDir.isDefined || backtestCsvDir.isDefined || backtestCandleFile.isDefined)
@@ -146,7 +147,11 @@ object BotApp extends App {
         symbol=bot.symbol,
         behaviorDsl=behaviorDsl,
         initCtx=InitCtx(Ledger()),
-        bootstrap=restGateway.drainSync(symbol=bot.symbol, dir=bot.dir, priceDeltaPct=bot.drainPriceDeltaPct, minPosition=bot.drainMinPosition))
+        setup=if (bot.shouldDrain)
+            restGateway.drainSync(symbol=bot.symbol, dir=bot.dir, priceDeltaPct=bot.drainPriceDeltaPct, minPosition=bot.drainMinPosition)
+          else
+            ()
+      )
       val actor = ActorSystem(
         Behaviors.supervise(orchestrator).onFailure[Throwable](SupervisorStrategy.restartWithBackoff(minBackoff=2.seconds, maxBackoff=30.seconds, randomFactor=0.1)),
         s"${bot.symbol}-actor")
@@ -188,4 +193,4 @@ object BotApp extends App {
   }
 }
 
-case class BotSpec(namespace: String, symbol: String, takeProfitPerc: Double, wssSubscriptions: Seq[String], dir: Dir.Value, drainPriceDeltaPct: Double, drainMinPosition: Double, tiers: Seq[(Double, Double)], strategyName: String, strategyConf: Config)
+case class BotSpec(namespace: String, symbol: String, takeProfitPerc: Double, wssSubscriptions: Seq[String], dir: Dir.Value, drainPriceDeltaPct: Double, drainMinPosition: Double, tiers: Seq[(Double, Double)], strategyName: String, strategyConf: Config, shouldDrain: Boolean)

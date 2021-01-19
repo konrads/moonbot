@@ -11,7 +11,7 @@ case class TierCalcImpl(dir: Dir.Value,
                        ) extends TierCalc {
   assert(dir == LongDir, "*NOT* catering for shorts!")
   assert(! tiers.map(_._1).exists(_ > 1.0), s"tier prices need to be < 1, tiers: $tiers")
-  val tiersAsPct = (1.0 +: tiers.map(_._1)).zip(tiers).zipWithIndex.map { case ((high, (low, qty)), tier) => Tier(tier=tier, priceHigh=high, priceLow=low, qty=qty)}.sortBy(- _.priceHigh)
+  val tiersAsPct = (1.0 +: tiers.map(_._1)).zip(tiers).zipWithIndex.map { case ((high, (low, qty)), tier) => Tier(tier=tier, priceLow=low, priceHigh=high, qty=qty)}.sortBy(- _.priceHigh)
 
   def canOpenWithQty(currPrice: Double, existingOpenPrices: Seq[Double]): Either[String, Tier] = {
     if (existingOpenPrices.isEmpty)  // no open orders yet!
@@ -37,4 +37,4 @@ case class TierCalcImpl(dir: Dir.Value,
   }
 }
 
-case class Tier(tier: Int, priceHigh: Double, priceLow: Double, qty: Double)
+case class Tier(tier: Int, priceLow: Double, priceHigh: Double, qty: Double)

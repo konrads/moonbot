@@ -13,14 +13,14 @@ import scala.util.Success
 
 
 object Behaviour {
-  def asLiveBehavior[T <: LedgerAwareCtx](restGateway: IRestGateway, metrics: Option[Metrics]=None, symbol: String, namespace: String, behaviorDsl: (T, ActorEvent, org.slf4j.Logger, String) => (T, Option[SideEffect]), initCtx: T, bootstrap: => Unit = ())(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
+  def asLiveBehavior[T <: LedgerAwareCtx](restGateway: IRestGateway, metrics: Option[Metrics]=None, symbol: String, namespace: String, behaviorDsl: (T, ActorEvent, org.slf4j.Logger, String) => (T, Option[SideEffect]), initCtx: T, setup: => Unit = ())(implicit execCtx: ExecutionContext): Behavior[ActorEvent] = {
     Behaviors.withTimers { timers =>
       // NOTE: setting up timers externally, to ensure delay starts from start of minute/hour
       // timers.startTimerAtFixedRate(On30s(None), 30.seconds)
       // timers.startTimerAtFixedRate(On1m(None),  1.minute)
 
       Behaviors.setup { actorCtx =>
-        bootstrap
+        setup
 
         def loop(ctx: T): Behavior[ActorEvent] =
           Behaviors.receiveMessage { event =>

@@ -32,7 +32,7 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
     case os:Orders =>
       os.orders.foldLeft(this)((soFar, o) => soFar.recordRest(o, relatedClOrdID))
     case hos:HealthCheckOrders =>
-      Ledger.log.info(s"Updating with healtcheck: $hos")
+      Ledger.log.info(s"Updating with healthcheck: ${if (hos.orders.isEmpty) "<empty>" else hos.orders.mkString("\n")}")
       hos.orders.foldLeft(this)((soFar, o) => soFar.recordRest(o, relatedClOrdID))
     case o: Order =>
       ledgerOrdersByID.get(o.orderID) match {
