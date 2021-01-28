@@ -22,9 +22,9 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
                   ledgerMetrics: LedgerMetrics=LedgerMetrics()) {
 
   // lazy val `_10s` = tradeRollups.withForecast(`10s`)
-  lazy val `_1m`  = tradeRollups.withForecast(`1m`)
-//  lazy val `_1h`  = tradeRollups.withForecast(`1h`)
-//  lazy val `_4h`  = tradeRollups.withForecast(`4h`)
+  // lazy val `_1m`  = tradeRollups.withForecast(`1m`)
+  // lazy val `_1h`  = tradeRollups.withForecast(`1h`)
+  // lazy val `_4h`  = tradeRollups.withForecast(`4h`)
 
   @deprecated lazy val ledgerOrders = ledgerOrdersByID.values
 
@@ -144,8 +144,9 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
     case _ => this
   }
   lazy val myOrders: Seq[LedgerOrder] = ledgerOrdersByID.values.filter(_.myOrder).toVector
-  lazy val myBuyTrades: Seq[LedgerOrder] = myOrders.filter(o => o.ordStatus == Filled && o.side == Buy)
-  lazy val mySellTrades: Seq[LedgerOrder] = myOrders.filter(o => o.ordStatus == Filled && o.side == Sell)
+  lazy val myTrades: Seq[LedgerOrder] = myOrders.filter(_.ordStatus == Filled)
+  lazy val myBuyTrades: Seq[LedgerOrder] = myTrades.filter(_.side == Buy)
+  lazy val mySellTrades: Seq[LedgerOrder] = myTrades.filter(_.side == Sell)
   lazy val isMinimallyFilled: Boolean = orderBookSummary != null
   lazy val bidPrice: Double = orderBookSummary.bid
   lazy val askPrice: Double = orderBookSummary.ask
@@ -154,12 +155,15 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
     val volume = tradeRollups.withForecast(`1m`).forecast.volume.lastOption.getOrElse(0)
     val strategyRes = strategy.strategize(this)
     val (s, m) = (strategyRes.sentiment, strategyRes.metrics)
+    val myBuyTradesCnt = myBuyTrades.size
+    val mySellTradesCnt = mySellTrades.size
     val metricsVals = Map(
       "data.price"           -> (bidPrice + askPrice)/2,
       "data.volume"          -> volume,
       "data.sentiment"       -> s.id,
-      "data.myBuyTradeCnt"   -> myBuyTrades.size,
-      "data.mySellTradeCnt"  -> mySellTrades.size,
+      "data.myTradeCnt"      -> (myBuyTradesCnt + mySellTradesCnt),
+      "data.myBuyTradeCnt"   -> myBuyTradesCnt,
+      "data.mySellTradeCnt"  -> mySellTradesCnt,
       // following will be updated if have filled myOrders since last withMetrics()
       "data.pandl.pandl"     -> ledgerMetrics.runningPandl,
       "data.pandl.delta"     -> 0.0,

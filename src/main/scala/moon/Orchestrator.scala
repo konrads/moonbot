@@ -303,7 +303,7 @@ object Orchestrator {
             (ctx2.copyBasic(ledger, relatedClOrdIds, tiers), None)
         }
       case (_, On5m(_)) =>
-        log.info(s"5min summary...\n- ${ctx.ledger.summary}\n- relatedClOrdIds: ${ctx.relatedClOrdIds.size}\n- tiers: ${ctx.tiers.size}")
+        if (log.isDebugEnabled) log.debug(s"5min summary...\n- ${ctx.ledger.summary}\n- relatedClOrdIds: ${ctx.relatedClOrdIds.size}\n- tiers: ${ctx.tiers.size}")
         (ctx, Some(HealthCheck))
       case (_, On30s(_)) =>
         (ctx, None)
