@@ -97,8 +97,15 @@
             "color": "#70dbed"
           },
           {
-            "alias": "profit",
+            "alias": "buy",
             "color": "__profit_green__",
+            "lines": false,
+            "pointradius": 4,
+            "points": true
+          },
+          {
+            "alias": "sell",
+            "color": "__loss_red__",
             "lines": false,
             "pointradius": 4,
             "points": true
@@ -117,14 +124,26 @@
             "hide": true,
             "refCount": 1,
             "refId": "B",
-            "target": "alias(derivative(keepLastValue(moon.__pair__.data.myTradeCnt)), 'profit_indicator')",
+            "target": "alias(derivative(keepLastValue(moon.__pair__.data.myBuyTradeCnt)), 'buy_indicator')",
             "textEditor": true
           },
           {
             "hide": true,
             "refCount": 1,
             "refId": "C",
-            "target": "alias(multiplySeries(#A, divideSeries(#B, #B)), 'profit')",
+            "target": "alias(derivative(keepLastValue(moon.__pair__.data.mySellTradeCnt)), 'sell_indicator')",
+            "textEditor": true
+          },
+          {
+            "refCount": 1,
+            "refId": "D",
+            "target": "alias(multiplySeries(#A, divideSeries(#B, #B)), 'buy')",
+            "textEditor": true
+          },
+          {
+            "refCount": 1,
+            "refId": "E",
+            "target": "alias(multiplySeries(#A, divideSeries(#C, #C)), 'sell')",
             "textEditor": true
           }
         ],

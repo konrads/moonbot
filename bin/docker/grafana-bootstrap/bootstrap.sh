@@ -15,6 +15,7 @@ grafana_theme=dark
 # colours
 profit_green="#7EB26D"
 loss_red="#BF1B00"
+exit_purple="#BA43A9"
 
 grafana_host=${grafana_host:-localhost}
 grafana_url=http://$grafana_host:81
@@ -42,13 +43,13 @@ curl -u $grafana_user:$grafana_pwd -d "{\"name\": \"Local Graphite\", \"type\": 
 echo
 mkdir -p $curr_dir/stage
 # log_green "Deploying dashboard $curr_dir/stage/$pair-moon-dashboard-importable.json..."
-# cat $curr_dir/moon-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-moon-dashboard-importable.json
+# cat $curr_dir/moon-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g | sed s/__exit_purple__/$exit_purple/g > $curr_dir/stage/$pair-moon-dashboard-importable.json
 # curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-moon-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
 pair=xbtusd
 log_green "Deploying dashboard $curr_dir/stage/$pair-yabol-dashboard-importable.json..."
-cat $curr_dir/moon-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-moon-dashboard-importable.json
+cat $curr_dir/moon-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g | sed s/__exit_purple__/$exit_purple/g > $curr_dir/stage/$pair-moon-dashboard-importable.json
 curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-moon-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import
 pair=ethusd
 log_green "Deploying dashboard $curr_dir/stage/$pair-yabol-dashboard-importable.json..."
-cat $curr_dir/moon-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g > $curr_dir/stage/$pair-moon-dashboard-importable.json
+cat $curr_dir/moon-dashboard-importable.json | sed s/__pair__/$pair/g | sed s/__profit_green__/$profit_green/g | sed s/__loss_red__/$loss_red/g | sed s/__exit_purple__/$exit_purple/g > $curr_dir/stage/$pair-moon-dashboard-importable.json
 curl -u $grafana_user:$grafana_pwd -d @$curr_dir/stage/$pair-moon-dashboard-importable.json -H "Content-Type: application/json" -X POST $grafana_url/api/dashboards/import

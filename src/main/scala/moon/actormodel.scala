@@ -13,15 +13,17 @@ case class On5m(nowMs: Option[Long]) extends ActorEvent
 // Context
 sealed trait LedgerAwareCtx {
   val ledger: Ledger
-  def withLedger(l: Ledger): LedgerAwareCtx
+  val relatedClOrdIds: Map[String, String]
+  val tiers: Map[String, Int]
+  def copyBasic(l: Ledger, relatedClOrdIds: Map[String, String], tiers: Map[String, Int]): LedgerAwareCtx
 }
 sealed trait Ctx extends LedgerAwareCtx {
-  def withLedger(l: Ledger): Ctx
+  def copyBasic(l: Ledger, relatedClOrdIds: Map[String, String], tiers: Map[String, Int]): Ctx
 }
-case class InitCtx(ledger: Ledger) extends Ctx { def withLedger(l: Ledger): InitCtx = copy(ledger = l) }  // entry state, ledger not warm yet
-case class IdleCtx(ledger: Ledger) extends Ctx { def withLedger(l: Ledger): IdleCtx = copy(ledger = l) }  // with warm (filled) ledger
-case class OpenPositionCtx(clOrdID: String = null, ledger: Ledger, targetPrice: Double, lifecycle: TradeLifecycle.Value) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
-case class ClosePositionCtx(openClOrdID: String, openPrice: Double, openQty: Double, takeProfitClOrdID: String, ledger: Ledger, lifecycle: TradeLifecycle.Value) extends Ctx { def withLedger(l: Ledger) = copy(ledger = l) }
+case class InitCtx(ledger: Ledger, relatedClOrdIds: Map[String, String]=Map.empty, tiers: Map[String, Int]=Map.empty) extends Ctx { def copyBasic(l: Ledger, r: Map[String, String], t: Map[String, Int]) = copy(ledger = l, relatedClOrdIds = r, tiers = t) }  // entry state, ledger not warm yet
+case class IdleCtx(ledger: Ledger, relatedClOrdIds: Map[String, String], tiers: Map[String, Int]) extends Ctx { def copyBasic(l: Ledger, r: Map[String, String], t: Map[String, Int]) = copy(ledger = l, relatedClOrdIds = r, tiers = t) }  // with warm (filled) ledger
+case class OpenPositionCtx(clOrdID: String = null, ledger: Ledger, targetPrice: Double, lifecycle: TradeLifecycle.Value, relatedClOrdIds: Map[String, String], tiers: Map[String, Int]) extends Ctx { def copyBasic(l: Ledger, r: Map[String, String], t: Map[String, Int]) = copy(ledger = l, relatedClOrdIds = r, tiers = t) }
+case class ClosePositionCtx(openClOrdID: String, openPrice: Double, openQty: Double, takeProfitClOrdID: String, ledger: Ledger, lifecycle: TradeLifecycle.Value, relatedClOrdIds: Map[String, String], tiers: Map[String, Int]) extends Ctx { def copyBasic(l: Ledger, r: Map[String, String], t: Map[String, Int]) = copy(ledger = l, relatedClOrdIds = r, tiers = t) }
 
 // External side effect, ie. communication with grafana/RestGateway
 sealed trait SideEffect

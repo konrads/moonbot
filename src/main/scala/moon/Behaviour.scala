@@ -37,10 +37,10 @@ object Behaviour {
               case AmendOrder(clOrdID, price, qty) =>
                 val fut = restGateway.amendOrderAsync(origClOrdID = Some(clOrdID), price = price, qty = qty)
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
-              case OpenInitOrder(symbol, side, Limit, clOrdID, qty, price) =>
+              case o@OpenInitOrder(symbol, side, Limit, clOrdID, qty, price) =>
                 val fut = restGateway.placeLimitOrderAsync(symbol=symbol, qty=qty, price=price.get, side=side, isReduceOnly=false, clOrdID=Some(clOrdID))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
-              case OpenInitOrder(symbol, side, Market, clOrdID, qty, price) =>
+              case o@OpenInitOrder(symbol, side, Market, clOrdID, qty, price) =>
                 val fut = restGateway.placeMarketOrderAsync(symbol=symbol, qty=qty, side=side, clOrdID=Some(clOrdID))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
               case x:OpenInitOrder =>
@@ -152,7 +152,7 @@ object Behaviour {
           val init5mTs = ts/(5*60000) * (5*60000)
           (exchangeCtx.copy(next30sTs = init30sTs + 30000, next1mTs = init1mTs + 60000, next5mTs = init5mTs + 5*60000, lastTs = ts), Nil)
         } else if (triggerTimers && ts >= exchangeCtx.next5mTs)
-          (exchangeCtx.copy(next30sTs = exchangeCtx.next5mTs + 30000, next1mTs = exchangeCtx.next5mTs + 60000, next5mTs = exchangeCtx.next5mTs + 5*60000, lastTs = ts), Seq(On30s(Some(exchangeCtx.next30sTs)), On1m(Some(exchangeCtx.next1mTs))))
+          (exchangeCtx.copy(next30sTs = exchangeCtx.next5mTs + 30000, next1mTs = exchangeCtx.next5mTs + 60000, next5mTs = exchangeCtx.next5mTs + 5*60000, lastTs = ts), Seq(On5m(Some(exchangeCtx.next5mTs)), On30s(Some(exchangeCtx.next30sTs)), On1m(Some(exchangeCtx.next1mTs))))
         else if (triggerTimers && ts >= exchangeCtx.next1mTs)
           (exchangeCtx.copy(next30sTs = exchangeCtx.next1mTs + 30000, next1mTs = exchangeCtx.next1mTs + 60000, lastTs = ts), Seq(On30s(Some(exchangeCtx.next30sTs)), On1m(Some(exchangeCtx.next1mTs))))
         else if (triggerTimers && ts >= exchangeCtx.next30sTs)
@@ -226,7 +226,7 @@ object Behaviour {
         })
         val event = RestEvent(Success(exchangeCtx2.orders(clOrdID).toRest))
         (exchangeCtx2, Seq(event))
-      case OpenInitOrder(symbol, side, ordType, clOrdID, qty, price) =>
+      case org@OpenInitOrder(symbol, side, ordType, clOrdID, qty, price) =>
         val o = ExchangeOrder(symbol=symbol, orderID=uuid, clOrdID=clOrdID, qty=qty, price=price, side=side, status=New, ordType=ordType, timestamp=new DateTime(exchangeCtx.lastTs))
         val o2 = maybeFill(o, exchangeCtx.ask, exchangeCtx.bid).getOrElse(o)
         val exchangeCtx2 = exchangeCtx.copy(orders = exchangeCtx.orders + (clOrdID -> o2))

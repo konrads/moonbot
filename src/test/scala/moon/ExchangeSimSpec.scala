@@ -43,7 +43,7 @@ class ExchangeSimSpec extends FlatSpec with Matchers with Inside {
   def runSim(initCtx: Ctx, initECtx: ExchangeCtx, strategy: TestStrategy, sentimentsAndEvents: (Sentiment.Value, String)*): (Ctx, ExchangeCtx) = {
     val behaviorDsl = Orchestrator.asDsl(
       strategy=strategy,
-      tierCalc=TierCalcImpl(dir=LongDir, tiers=Seq((0.95, 15.0), (0.9025, 13.0), (0.857, 11.0), (0.815, 8.0), (0.774, 4.0))),
+      tierCalc=TierCalcImpl(dir=LongDir, openOrdersWithTiers=Seq((0.95, 15.0), (0.9025, 13.0), (0.857, 11.0), (0.815, 8.0), (0.774, 4.0))),
       takeProfitPerc=0.001,
       dir=LongDir)
 

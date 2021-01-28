@@ -28,7 +28,7 @@ case class OrderBookSummary(table: String, timestamp: DateTime, ask: Double, bid
   def isEquivalent(that: OrderBookSummary): Boolean = that != null && that.ask == ask && that.bid == bid
 }
 
-case class OrderData(symbol: String, orderID: String, clOrdID: Option[String]=None, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Option[Double], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: DateTime, leavesQty: Option[Double]=None, cumQty: Option[Double]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends WsModel
+case class OrderData(symbol: String, orderID: String, clOrdID: Option[String]=None, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Option[Double], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: DateTime, leavesQty: Option[Double]=None, cumQty: Option[Double]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None, relatedClOrdID: Option[String]=None /*synthetic*/, tier: Option[Int]=None /*synthetic*/) extends WsModel
 object OrderData { implicit val aReads: Reads[OrderData] = Json.reads[OrderData] }
 
 case class Instrument(data: Seq[InstrumentData]) extends WsModel

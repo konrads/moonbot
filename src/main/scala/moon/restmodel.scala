@@ -14,7 +14,7 @@ sealed trait RestModel
 case class Position(account: Long, symbol: String, currency: String, leverage: Option[Double], crossMargin: Option[Boolean], rebalancedPnl: Double, currentQty: Double, avgCostPrice: Option[Double], breakEvenPrice: Option[Double], marginCallPrice: Option[Double], liquidationPrice: Option[Double], bankruptPrice: Option[Double]) extends RestModel
 object Position { implicit val aReads: Reads[Position] = Json.reads[Position] }
 
-case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Double, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None) extends RestModel
+case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Double, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None, relatedClOrdID: Option[String]=None /*synthetic*/, tier: Option[Int]=None /*synthetic*/) extends RestModel
 object Order { implicit val aReads: Reads[Order] = Json.reads[Order] }
 
 case class Positions(positions: Seq[Position]) extends RestModel

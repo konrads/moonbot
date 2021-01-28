@@ -1,5 +1,6 @@
 package moon
 
+import java.net.UnknownHostException
 import java.util.concurrent.TimeoutException
 
 import akka.actor.ActorSystem
@@ -16,7 +17,7 @@ import play.api.libs.json.{JsError, JsSuccess, Json}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 
 sealed trait HttpReply
@@ -207,7 +208,7 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, syncTimeoutMs:
     // "/api/v1/order?reverse=true&count=1000" + status.map(s => "&filter=" + java.net.URLEncoder.encode(s"""{"${s.toLowerCase}":"true"}""", "UTF-8")).getOrElse(""),
     sendReq(
       GET,
-      "/api/v1/order?symbol=$symbol&reverse=true" + status.map(s => "&filter=" + java.net.URLEncoder.encode(s"""{"${s.toLowerCase}":"true"}""", "UTF-8")).getOrElse(""),
+      s"/api/v1/order?symbol=$symbol&reverse=true" + status.map(s => "&filter=" + java.net.URLEncoder.encode(s"""{"${s.toLowerCase}":"true"}""", "UTF-8")).getOrElse(""),
       "",
       contentType = ContentTypes.`application/json`,
     ).map(_.asInstanceOf[Orders]).map(o => HealthCheckOrders(o.orders))
@@ -324,7 +325,7 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, syncTimeoutMs:
         RawHeader("api-key", apiKey),
         RawHeader("api-signature", apiSignature))
 
-    Http().singleRequest(request)
+    val resp = Http().singleRequest(request)
       .flatMap {
         case HttpResponse(StatusCodes.OK, _headers, entity, _) =>
           entity.dataBytes.runFold(ByteString(""))(_ ++ _).map(_.utf8String)
@@ -340,6 +341,8 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, syncTimeoutMs:
                 Future.failed(AccountHasInsufficientBalanceError(s"BadRequest: urlPath: $urlPath, method: $method, reqData: $data, responseStatus: $s responseBody: $bStr"))
               else if (bStr.contains("Invalid ordStatus"))
                 Future.failed(InvalidOrdStatusError(s"BadRequest: urlPath: $urlPath, method: $method, reqData: $data, responseStatus: $s responseBody: $bStr"))
+              else if (bStr.contains("Invalid origClOrdID"))  // FIXME: why does it occur???
+                Future.failed(InvalidOrigClOrdIDError(s"BadRequest: urlPath: $urlPath, method: $method, reqData: $data, responseStatus: $s responseBody: $bStr"))
               else
                 Future.failed(new Exception(s"BadRequest: urlPath: $urlPath, method: $method, reqData: $data, responseStatus: $s responseBody: ${b.utf8String}"))
           }
@@ -359,17 +362,20 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, syncTimeoutMs:
           val contentsF = entity.dataBytes.runFold(ByteString(""))(_ ++ _)
           contentsF.flatMap(bs => Future.failed(new Exception(s"Invalid status: $status, method: $method,  body: ${bs.utf8String}")))
       }
+    resp.recoverWith { case e:UnknownHostException => Future.failed(TemporarilyUnknownHostException(s"Failed to get host on urlPath: $urlPath, method: $method, reqData: $data, due to $e, stacktrace:\n${e.getStackTrace.mkString("\n")}")) }
   }
 }
 
 sealed trait BackoffRequiredError
 sealed trait RecoverableError
 case class TemporarilyUnavailableError(msg: String) extends Exception(msg) with RecoverableError with BackoffRequiredError
+case class TemporarilyUnknownHostException(msg: String) extends Exception(msg) with RecoverableError with BackoffRequiredError
 case class TimeoutError(msg: String) extends Exception(msg) with RecoverableError
 
 case class AccountHasInsufficientBalanceError(msg: String) extends Exception(msg)
 
 sealed trait IgnorableError
 case class InvalidOrdStatusError(msg: String) extends Exception(msg) with IgnorableError
+case class InvalidOrigClOrdIDError(msg: String) extends Exception(msg) with RecoverableError
 
-case class TemporarilyUnavailableOnPostError(msg: String) extends Exception(msg)
+case class TemporarilyUnavailableOnPostError(msg: String) extends Exception(msg) with RecoverableError

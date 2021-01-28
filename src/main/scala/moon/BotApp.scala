@@ -103,13 +103,12 @@ object BotApp extends App {
   if (runType == Backtest) {
     bots foreach { bot =>
       log.info(s"Instantiating ${bot.namespace} $runType on $backtestEventDataDir or $backtestCandleFile...")
-      val strategy = Strategy(name = bot.strategyName, config = conf.getObject(s"strategy.${bot.strategyName}").toConfig)
-      val tierCalc = TierCalcImpl(dir = bot.dir, tiers = bot.tiers)
+      val tierCalc = TierCalcImpl(dir = bot.dir, openOrdersWithTiers = bot.tiers)
       val sim = new ExchangeSim(
         eventDataDir = backtestEventDataDir.orNull,
         eventCsvDir = backtestCsvDir.orNull,
         candleFile = backtestCandleFile.orNull,
-        strategy = strategy,
+        strategy = Strategy(bot.strategyName, bot.strategyConf),
         tierCalc = tierCalc,
         dir = bot.dir,
         takeProfitPerc = bot.takeProfitPerc,
@@ -118,7 +117,7 @@ object BotApp extends App {
         namespace = bot.namespace,
         useSynthetics = useSynthetics)
       val (finalCtx, finalExchangeCtx) = sim.run()
-      log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} ($$${finalCtx.ledger.ledgerMetrics.runningPandl * (finalCtx.ledger.askPrice + finalCtx.ledger.bidPrice)/2}) over ${finalCtx.ledger.myTrades.size} trades")
+      log.info(s"Final Ctx running PandL: ${finalCtx.ledger.ledgerMetrics.runningPandl} ($$${finalCtx.ledger.ledgerMetrics.runningPandl * (finalCtx.ledger.askPrice + finalCtx.ledger.bidPrice)/2}) over ${finalCtx.ledger.myBuyTrades.size} buys and ${finalCtx.ledger.mySellTrades.size} sells")
     }
   } else if (runType == Dry) {
     ??? // FIXME: No implementation for dry run, had same one as live before, need to remove "trade" flag...
@@ -131,7 +130,7 @@ object BotApp extends App {
       val strategy = Strategy(
         name = bot.strategyName,
         config = bot.strategyConf)
-      val tierCalc = TierCalcImpl(dir = bot.dir, tiers = bot.tiers)
+      val tierCalc = TierCalcImpl(dir = bot.dir, openOrdersWithTiers = bot.tiers)
 
       val behaviorDsl = Orchestrator.asDsl(
         strategy = strategy,
