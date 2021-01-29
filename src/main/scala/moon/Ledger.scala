@@ -11,10 +11,9 @@ import scala.collection.immutable.ListMap
 
 case class LedgerOrder(orderID: String, clOrdID: String=null, price: Double, qty: Double, ordStatus: OrderStatus, side: OrderSide, ordType: OrderType.Value=null, ordRejReason: Option[String]=None, timestamp: DateTime, myOrder: Boolean=false, relatedClOrdID: String=null, tier: Option[Int]) {
   lazy val fullOrdID = s"$orderID / $clOrdID"
-  lazy val tierStr = tier.map(t => f"tier:$t%03d").getOrElse("")
 }
 
-case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, lastOrderID: String=null, runningPandl: Double=0)
+case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, runningPandl: Double=0)
 
 case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups=Rollups(1),
                   ledgerOrdersByID: ListMap[String, LedgerOrder]=ListMap.empty,
@@ -152,50 +151,37 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
   lazy val askPrice: Double = orderBookSummary.ask
 
   def withMetrics(makerRebate: Double=.00025, takerFee: Double=.00075, strategy: Strategy): Ledger = {
+    val currPrice = (bidPrice + askPrice)/2
     val volume = tradeRollups.withForecast(`1m`).forecast.volume.lastOption.getOrElse(0)
     val strategyRes = strategy.strategize(this)
     val (s, m) = (strategyRes.sentiment, strategyRes.metrics)
     val myBuyTradesCnt = myBuyTrades.size
     val mySellTradesCnt = mySellTrades.size
+    val buyLegClOrdIDs = mySellTrades.map(_.relatedClOrdID)
+    val (matchedBuys, unmatchedBuys) = myBuyTrades.partition(o => buyLegClOrdIDs.contains(o.clOrdID))
+    val tradePairs = mySellTrades ++ matchedBuys
+    val runningPandl = tradePairs.map {
+      case LedgerOrder(_, _, price, qty, _, Buy, Limit, _, _, true, _, _)  =>  qty / price * (1 + makerRebate)
+      case LedgerOrder(_, _, price, qty, _, Buy, _, _, _, true, _, _)      =>  qty / price * (1 - takerFee)
+      case LedgerOrder(_, _, price, qty, _, Sell, Limit, _, _, true, _, _) => -qty / price * (1 - makerRebate)
+      case LedgerOrder(_, _, price, qty, _, Sell, _, _, _, true, _, _)     => -qty / price * (1 + takerFee)
+      case _                                                               =>  0.0
+    }.sum
+    val tierPriceDelta = unmatchedBuys.map(o => o.price * o.qty).sum / (unmatchedBuys.map(_.qty).sum / unmatchedBuys.size) - currPrice
     val metricsVals = Map(
-      "data.price"           -> (bidPrice + askPrice)/2,
+      "data.price"           -> currPrice,
       "data.volume"          -> volume,
       "data.sentiment"       -> s.id,
-      "data.myTradeCnt"      -> (myBuyTradesCnt + mySellTradesCnt),
+      "data.myTradeCnt"      -> myTrades.size,
+      "data.myBuySellTradeCnt" -> (myBuyTradesCnt + mySellTradesCnt),
       "data.myBuyTradeCnt"   -> myBuyTradesCnt,
       "data.mySellTradeCnt"  -> mySellTradesCnt,
-      // following will be updated if have filled myOrders since last withMetrics()
-      "data.pandl.pandl"     -> ledgerMetrics.runningPandl,
-      "data.pandl.delta"     -> 0.0,
+      "data.tier.depth"      -> unmatchedBuys.size, // aka how many open tiers have we right now
+      "data.tier.priceDelta" -> tierPriceDelta,
+      "data.pandl.pandl"     -> runningPandl,
+      "data.pandl.delta"     -> (runningPandl - ledgerMetrics.runningPandl),
     ) ++ m
-
-    val currOrders = ledgerOrdersByID.values.filter(o => o.myOrder && o.ordStatus == Filled)
-    // FIXME: *BIG* assumption - counting filled order pairs. Probably should instead use a concept of legs/roundtrips
-    val currOrders2 = if (ledgerMetrics.lastOrderID == null)
-      currOrders
-    else
-      currOrders.dropWhile(_.orderID != ledgerMetrics.lastOrderID).drop(1)
-    val currOrders3 = if (currOrders2.size % 2 == 1) currOrders2.dropRight(1) else currOrders2
-    if (currOrders3.isEmpty)
-      copy(ledgerMetrics=ledgerMetrics.copy(metrics=metricsVals))
-    else {
-      // import Ledger.log; log.debug(s"Ledger.withMetrics: lastOrderTimestamp: ${ledgerMetrics.lastOrderTimestamp}\nledgerOrders:${ledgerOrders.toVector.map(o => s"\n- $o").mkString}\ncurrOrders3:${currOrders3.toVector.map(o => s"\n- $o").mkString}")
-      val pandlDelta = currOrders3.map {
-        case LedgerOrder(_, _, price, qty, _, Buy, Limit, _, _, true, _, _)  =>  qty / price * (1 + makerRebate)
-        case LedgerOrder(_, _, price, qty, _, Buy, _, _, _, true, _, _)      =>  qty / price * (1 - takerFee)
-        case LedgerOrder(_, _, price, qty, _, Sell, Limit, _, _, true, _, _) => -qty / price * (1 - makerRebate)
-        case LedgerOrder(_, _, price, qty, _, Sell, _, _, _, true, _, _)     => -qty / price * (1 + takerFee)
-        case _                                                               =>  0.0
-      }.sum
-
-      val runningPandl2 = ledgerMetrics.runningPandl + pandlDelta
-      val ledgerMetrics2 = ledgerMetrics.copy(
-        metrics = metricsVals + ("data.pandl.pandl" -> runningPandl2) + ("data.pandl.delta" -> pandlDelta),
-        lastOrderID = currOrders3.last.orderID,
-        runningPandl = runningPandl2
-      )
-      copy(ledgerMetrics=ledgerMetrics2)
-    }
+    copy(ledgerMetrics=ledgerMetrics.copy(metrics = metricsVals, runningPandl = runningPandl))
   }
 }
 

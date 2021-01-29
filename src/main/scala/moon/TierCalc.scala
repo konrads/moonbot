@@ -19,9 +19,11 @@ case class TierCalcImpl(dir: Dir.Value,
                        ) extends TierCalc {
   val log = Logger[TierCalc]
   assert(dir == LongDir, "*NOT* catering for shorts!")
+  assert(openOrdersWithTiers.map(_._1).size == openOrdersWithTiers.size, s"openOrdersWithTiers not unique!!!\n${openOrdersWithTiers.mkString("\n")}")
   assert(! openOrdersWithTiers.map(_._1).exists(_ > 1.0), s"tier prices need to be < 1, tiers: $openOrdersWithTiers")
-  val tiersAsPct = (1.0 +: openOrdersWithTiers.map(_._1))
-    .zip(openOrdersWithTiers.sortBy(-_._1)).zipWithIndex
+  val openOrdersWithTiers_sorted = openOrdersWithTiers.sortBy(-_._1)
+  val tiersAsPct = (1.0 +: openOrdersWithTiers_sorted.map(_._1))
+    .zip(openOrdersWithTiers_sorted).zipWithIndex
     .map { case ((high, (low, qty)), tier) => Tier(tier=tier, priceLow=low, priceHigh=high, qty=qty)}.sortBy(- _.priceHigh)
   var lastHighestOpenPrice = 0.0
   var tiersWithPrices = Seq.empty[Tier]
