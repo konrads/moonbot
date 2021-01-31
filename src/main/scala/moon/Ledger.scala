@@ -167,19 +167,19 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
       case LedgerOrder(_, _, price, qty, _, Sell, _, _, _, true, _, _)     => -qty / price * (1 + takerFee)
       case _                                                               =>  0.0
     }.sum
-    val tierPriceDelta = unmatchedBuys.map(o => o.price * o.qty).sum / (unmatchedBuys.map(_.qty).sum / unmatchedBuys.size) - currPrice
+    val positionOpen = unmatchedBuys.map(o => o.qty / o.price).sum
     val metricsVals = Map(
-      "data.price"           -> currPrice,
-      "data.volume"          -> volume,
-      "data.sentiment"       -> s.id,
-      "data.myTradeCnt"      -> myTrades.size,
+      "data.price"             -> currPrice,
+      "data.volume"            -> volume,
+      "data.sentiment"         -> s.id,
+      "data.myTradeCnt"        -> myTrades.size,
       "data.myBuySellTradeCnt" -> (myBuyTradesCnt + mySellTradesCnt),
-      "data.myBuyTradeCnt"   -> myBuyTradesCnt,
-      "data.mySellTradeCnt"  -> mySellTradesCnt,
-      "data.tier.depth"      -> unmatchedBuys.size, // aka how many open tiers have we right now
-      "data.tier.priceDelta" -> tierPriceDelta,
-      "data.pandl.pandl"     -> runningPandl,
-      "data.pandl.delta"     -> (runningPandl - ledgerMetrics.runningPandl),
+      "data.myBuyTradeCnt"     -> myBuyTradesCnt,
+      "data.mySellTradeCnt"    -> mySellTradesCnt,
+      "data.tier.depth"        -> unmatchedBuys.size, // aka how many open tiers have we right now
+      "data.tier.positionOpen" -> positionOpen,
+      "data.pandl.pandl"       -> runningPandl,
+      "data.pandl.delta"       -> (runningPandl - ledgerMetrics.runningPandl),
     ) ++ m
     copy(ledgerMetrics=ledgerMetrics.copy(metrics = metricsVals, runningPandl = runningPandl))
   }
