@@ -39,8 +39,18 @@ object Strategy {
     case "ma"            => new MAStrategy(config)
     case "alternating"   => new AlternatingStrategy(config)  // test strategy
     case "weighted"      => new WeightedStrategy(config, parentConfig)
+    case "permabull"     => new PermaBullStrategy(config)
   }
 }
+
+class PermaBullStrategy(val config: Config) extends Strategy {
+  val n = config.optInt("n").getOrElse(10)
+  log.info(s"Strategy ${this.getClass.getSimpleName}")
+  override def strategize(ledger: Ledger, mustPreserveState: Boolean=false): StrategyResult = {
+    StrategyResult(Bull, Map("data.permabull.sentiment" -> Bull.id))
+  }
+}
+
 
 // Test strategy
 class AlternatingStrategy(val config: Config) extends Strategy {
