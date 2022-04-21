@@ -160,7 +160,7 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, syncTimeoutMs:
    * - poll till filled
    */
   def drainSync(symbol: String, dir: Dir.Value, priceDeltaPct: Double, minPosition: Double): Unit = {
-    val backoff = (10_000 +: 20_000 +: 40_000 +: LazyList.continually(60_000)).iterator
+    val backoff = (10_000 +: 20_000 +: 40_000 +: 60_000 +: LazyList.continually(120_000)).iterator
     val drainSide = if (dir == LongDir) Sell else Buy
 
     // get open orders, see if they match position, if so, skip
@@ -175,7 +175,7 @@ class RestGateway(url: String, apiKey: String, apiSecret: String, syncTimeoutMs:
           log.info(s"Cancelling all orders for symbol: $symbol...")
           cancelAllOrdersSync(symbol)
 
-          val entryPrice = position.breakEvenPrice.get // breakevenPrice considers holding costs, avgCostPrice doesn't
+          val entryPrice = position.breakEvenPrice.get // breakeven price considers holding costs, avgCostPrice doesn't
           val delta = if (dir == LongDir) priceDeltaPct * entryPrice else -priceDeltaPct * entryPrice
           log.info(s"Draining $drainSide ${position.currentQty} @ ${entryPrice + delta} (avgCost $entryPrice)")
           val drainOrder = placeLimitOrderSync(

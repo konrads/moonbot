@@ -10,37 +10,55 @@ import moon.jodaDateReads
 
 sealed trait WsModel
 
-case class Info(info: String, version: String, timestamp: DateTime, docs: String) extends WsModel
+case class Info(info: String, version: String, timestamp: DateTime, docs: String) extends WsModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object Info { implicit val aReads: Reads[Info] = Json.reads[Info] }
 
-case class SuccessConfirmation(success: Boolean, subscribe: Option[String]) extends WsModel
+case class SuccessConfirmation(success: Boolean, subscribe: Option[String]) extends WsModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object SuccessConfirmation { implicit val aReads: Reads[SuccessConfirmation] = Json.reads[SuccessConfirmation] }
 
-case class OrderBookData(symbol: String, timestamp: DateTime, asks: Seq[Seq[Double]], bids: Seq[Seq[Double]]) extends WsModel
+case class OrderBookData(symbol: String, timestamp: DateTime, asks: Seq[Seq[Double]], bids: Seq[Seq[Double]]) extends WsModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object OrderBookData { implicit val aReads: Reads[OrderBookData] = Json.reads[OrderBookData] }
 
 case class OrderBook(table: String, action: String, data: Seq[OrderBookData]) extends WsModel {
   def summary = OrderBookSummary(table = table, timestamp = data.head.timestamp, ask = data.head.asks.map(_.head).min, bid = data.head.bids.map(_.head).max)
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
 }
 object OrderBook { implicit val aReads: Reads[OrderBook] = Json.reads[OrderBook] }
 
 case class OrderBookSummary(table: String, timestamp: DateTime, ask: Double, bid: Double) extends WsModel {
   def isEquivalent(that: OrderBookSummary): Boolean = that != null && that.ask == ask && that.bid == bid
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
 }
 
-case class OrderData(symbol: String, orderID: String, clOrdID: Option[String]=None, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Option[Double], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: DateTime, leavesQty: Option[Double]=None, cumQty: Option[Double]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None, relatedClOrdID: Option[String]=None /*synthetic*/, tier: Option[Int]=None /*synthetic*/) extends WsModel
+case class OrderData(symbol: String, orderID: String, clOrdID: Option[String]=None, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Option[Double], ordType: Option[OrderType.Value]=None, ordStatus: Option[OrderStatus.Value]=None, timestamp: DateTime, leavesQty: Option[Double]=None, cumQty: Option[Double]=None, side: Option[OrderSide.Value], workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None, relatedClOrdID: Option[String]=None /*synthetic*/, tier: Option[Int]=None /*synthetic*/) extends WsModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object OrderData { implicit val aReads: Reads[OrderData] = Json.reads[OrderData] }
 
-case class Instrument(data: Seq[InstrumentData]) extends WsModel
+case class Instrument(data: Seq[InstrumentData]) extends WsModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object Instrument { implicit val aReads: Reads[Instrument] = Json.reads[Instrument] }
 
-case class InstrumentData(symbol: String, lastPrice: Option[Double], lastChangePcnt: Option[Double], markPrice: Option[Double], prevPrice24h: Option[Double], timestamp: DateTime) extends WsModel
+case class InstrumentData(symbol: String, lastPrice: Option[Double], lastChangePcnt: Option[Double], markPrice: Option[Double], prevPrice24h: Option[Double], timestamp: DateTime) extends WsModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object InstrumentData { implicit val aReads: Reads[InstrumentData] = Json.reads[InstrumentData] }
 
-case class Funding(data: Seq[FundingData]) extends WsModel
+case class Funding(data: Seq[FundingData]) extends WsModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object Funding { implicit val aReads: Reads[Funding] = Json.reads[Funding] }
 
-case class FundingData(symbol: String, fundingInterval: String, fundingRate: Double, fundingRateDaily: Option[Double], timestamp: DateTime) extends WsModel
+case class FundingData(symbol: String, fundingInterval: String, fundingRate: Double, fundingRateDaily: Option[Double], timestamp: DateTime) extends WsModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object FundingData { implicit val aReads: Reads[FundingData] = Json.reads[FundingData] }
 
 case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsModel {
@@ -48,16 +66,23 @@ case class UpsertOrder(action: Option[String], data: Seq[OrderData]) extends WsM
   def containsClOrdIDs(clOrdIDs: String*): Boolean = data.exists(o => o.clOrdID.exists(clOrdIDs.contains))
   def containsOrderIDs(orderIDs: String*): Boolean = data.exists(o => orderIDs.contains(o.orderID))
   def containsAmendedOrderIDs(orderIDs: String*): Boolean = data.exists(o => orderIDs.contains(o.orderID) && o.amended.contains(true))
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
 }
 object UpsertOrder { implicit val aReads: Reads[UpsertOrder] = Json.reads[UpsertOrder] }
 
-case class TradeData(symbol: String, side: OrderSide.Value, size: Double, price: Double, tickDirection: TickDirection.Value, timestamp: DateTime) extends WsModel
+case class TradeData(symbol: String, side: OrderSide.Value, size: Double, price: Double, tickDirection: TickDirection.Value, timestamp: DateTime) extends WsModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object TradeData { implicit val aReads: Reads[TradeData] = Json.reads[TradeData] }
 
-case class Trade(data: Seq[TradeData]) extends WsModel
+case class Trade(data: Seq[TradeData]) extends WsModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object Trade { implicit val aReads: Reads[Trade] = Json.reads[Trade] }
 
-case class WsError(status: Int, error: String) extends WsModel
+case class WsError(status: Int, error: String) extends WsModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object WsError { implicit val aReads: Reads[WsError] = Json.reads[WsError] }
 
 case class Ignorable(jsVal: JsValue) extends WsModel

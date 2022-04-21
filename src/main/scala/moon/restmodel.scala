@@ -11,37 +11,51 @@ import moon.jodaDateReads
 
 sealed trait RestModel
 
-case class Position(account: Long, symbol: String, currency: String, leverage: Option[Double], crossMargin: Option[Boolean], rebalancedPnl: Double, currentQty: Double, avgCostPrice: Option[Double], breakEvenPrice: Option[Double], marginCallPrice: Option[Double], liquidationPrice: Option[Double], bankruptPrice: Option[Double]) extends RestModel
+case class Position(account: Long, symbol: String, currency: String, leverage: Option[Double], crossMargin: Option[Boolean], rebalancedPnl: Double, currentQty: Double, avgCostPrice: Option[Double], breakEvenPrice: Option[Double], marginCallPrice: Option[Double], liquidationPrice: Option[Double], bankruptPrice: Option[Double]) extends RestModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object Position { implicit val aReads: Reads[Position] = Json.reads[Position] }
 
-case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Double, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None, relatedClOrdID: Option[String]=None /*synthetic*/, tier: Option[Int]=None /*synthetic*/) extends RestModel
+case class Order(orderID: String, clOrdID: Option[String]=None, symbol: String, timestamp: DateTime, ordType: OrderType.Value, side: OrderSide.Value, price: Option[Double]=None, stopPx: Option[Double]=None, avgPx: Option[Double]=None, orderQty: Double, ordStatus: Option[OrderStatus.Value]=None, workingIndicator: Option[Boolean]=None, ordRejReason: Option[String]=None, text: Option[String]=None, amended: Option[Boolean]=None, relatedClOrdID: Option[String]=None /*synthetic*/, tier: Option[Int]=None /*synthetic*/) extends RestModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object Order { implicit val aReads: Reads[Order] = Json.reads[Order] }
 
-case class Positions(positions: Seq[Position]) extends RestModel
+case class Positions(positions: Seq[Position]) extends RestModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object Positions { implicit val aReads: Reads[Positions] = Json.reads[Positions] }
 
 case class HealthCheckOrders(orders: Seq[Order]) extends RestModel {
   def containsOrderIDs(orderIDs: String*): Boolean = orders.exists(o => orderIDs.contains(o.orderID))
   def containsClOrdIDs(clOrdIDs: String*): Boolean = orders.exists(o => o.clOrdID.exists(clOrdIDs.contains))
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
 }
 
 case class Orders(orders: Seq[Order]) extends RestModel {
   def containsOrderIDs(orderIDs: String*): Boolean = orders.exists(o => orderIDs.contains(o.orderID))
   def containsClOrdIDs(clOrdIDs: String*): Boolean = orders.exists(o => o.clOrdID.exists(clOrdIDs.contains))
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
 }
 object Orders { implicit val aReads: Reads[Orders] = Json.reads[Orders] }
 
-case class ErrorDetail(message: String, name: String) extends RestModel
+case class ErrorDetail(message: String, name: String) extends RestModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object ErrorDetail { implicit val aReads: Reads[ErrorDetail] = Json.reads[ErrorDetail] }
 
-case class Error(error: ErrorDetail) extends RestModel
+case class Error(error: ErrorDetail) extends RestModel {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object Error { implicit val aReads: Reads[Error] = Json.reads[Error] }
 
 
 case class OrderReq(orderQty: Double, side: OrderSide, ordType: OrderType.Value, symbol: Option[String]=None,
                     execInst: Option[String]=None, price: Option[Double]=None, stopPx: Option[Double]=None,
                     pegOffsetValue: Option[Double]=None, pegPriceType: Option[String]=None,
-                    clOrdID: Option[String]=None, timeInForce: String="GoodTillCancel")
+                    clOrdID: Option[String]=None, timeInForce: String="GoodTillCancel") {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object OrderReq {
   implicit val aWrites: Writes[OrderReq] = Json.writes[OrderReq]
 
@@ -65,7 +79,9 @@ object OrderReq {
   }
 }
 
-case class OrderReqs(orders: Seq[OrderReq])
+case class OrderReqs(orders: Seq[OrderReq]) {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 object OrderReqs {
   implicit val aWrites: Writes[OrderReqs] = Json.writes[OrderReqs]
 }

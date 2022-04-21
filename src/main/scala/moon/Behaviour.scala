@@ -46,10 +46,8 @@ object Behaviour {
               case x:OpenInitOrder =>
                 throw new Exception(s"Do not cater for non Limit/Market order: $x")
               case OpenTakeProfitOrder(symbol, side, qty, takeProfitClOrdID, takeProfitLimit) =>
-                val fut = restGateway.placeBulkOrdersAsync(OrderReqs(
-                  Seq(OrderReq.asLimitOrder(symbol, side, qty, takeProfitLimit, true, clOrdID = Some(takeProfitClOrdID)))))
+                val fut = restGateway.placeLimitOrderAsync(symbol, qty, takeProfitLimit, true, side, clOrdID = Some(takeProfitClOrdID))
                 fut onComplete (res => actorCtx.self ! RestEvent(res))
-
             }
             loop(ctx2)
           }

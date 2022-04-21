@@ -24,8 +24,8 @@ object Cli extends App {
     .withFallback(ConfigFactory.parseResources("application.private.conf"))
     .resolve()
 
-  val bitmexUrl         = conf.getString("bitmex.url")
-  val bitmexWsUrl       = conf.getString("bitmex.wsUrl")
+  val bitmexUrl         = conf.getString("bitmex.url").stripSuffix("/")
+  val bitmexWsUrl       = conf.getString("bitmex.wsUrl").stripSuffix("/")
   val bitmexApiKey      = conf.getString("bitmex.apiKey")
   val bitmexApiSecret   = conf.getString("bitmex.apiSecret")
   val restSyncTimeoutMs = conf.getLong("bot.restSyncTimeoutMs")

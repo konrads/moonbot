@@ -11,9 +11,13 @@ import scala.collection.immutable.ListMap
 
 case class LedgerOrder(orderID: String, clOrdID: String=null, price: Double, qty: Double, ordStatus: OrderStatus, side: OrderSide, ordType: OrderType.Value=null, ordRejReason: Option[String]=None, timestamp: DateTime, myOrder: Boolean=false, relatedClOrdID: String=null, tier: Option[Int]) {
   lazy val fullOrdID = s"$orderID / $clOrdID"
+
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
 }
 
-case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, runningPandl: Double=0)
+case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, runningPandl: Double=0) {
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
+}
 
 case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups=Rollups(1),
                   ledgerOrdersByID: ListMap[String, LedgerOrder]=ListMap.empty,
@@ -183,6 +187,8 @@ case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups
     ) ++ m
     copy(ledgerMetrics=ledgerMetrics.copy(metrics = metricsVals, runningPandl = runningPandl))
   }
+
+  override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
 }
 
 object Ledger {

@@ -31,8 +31,8 @@ object BotApp extends App {
     .withFallback(ConfigFactory.parseResources(cliConf.config()))
     .resolve()
 
-  val bitmexUrl         = conf.getString("bitmex.url")
-  val bitmexWsUrl       = conf.getString("bitmex.wsUrl")
+  val bitmexUrl         = conf.getString("bitmex.url").stripSuffix("/")
+  val bitmexWsUrl       = conf.getString("bitmex.wsUrl").stripSuffix("/")
   val bitmexApiKey      = conf.getString("bitmex.apiKey")
   val bitmexApiSecret   = conf.getString("bitmex.apiSecret")
 
