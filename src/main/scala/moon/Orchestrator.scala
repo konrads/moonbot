@@ -81,15 +81,15 @@ object Orchestrator {
         if (log.isDebugEnabled) log.debug(s"Init: WsEvent: $data")
         val ledger2 = ledger.recordWs(annotateWs(data, relatedClOrdIds, tiers))
         if (ledger2.isMinimallyFilled) {
-          log.info(
-            s"""
-              |.-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-.
-              ||                                                     |
-              ||    $symbol ledger minimally filled, ready to go!     |
-              ||                                                     |
-              |`-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-=--=-'""".stripMargin)
           openPositionOrder(ledger2, symbol, true, log) match {
             case Right((effect, tier)) =>
+              log.info(
+                s"""
+                   |.-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-.
+                   ||                                                     |
+                   ||    $symbol ledger minimally filled, ready to go!     |
+                   ||                                                     |
+                   |`-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-=--=-'""".stripMargin)
               log.info(s"$symbol Init: starting afresh with $dir order: ${effect.clOrdID}, ${effect.qty} @ ${effect.price.get} in tier: ${tier.displayFriendly}")
               val ctx2 = OpenPositionCtx(ledger = ledger2, clOrdID = effect.clOrdID, targetPrice = effect.price.get, lifecycle = IssuingNew, relatedClOrdIds = relatedClOrdIds, tiers = tiers + (effect.clOrdID -> tier.tier))
               (ctx2, Some(effect))

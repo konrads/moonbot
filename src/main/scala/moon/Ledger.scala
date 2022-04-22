@@ -19,14 +19,14 @@ case class LedgerMetrics(metrics: Map[String, Any]=Map.empty, runningPandl: Doub
   override def toString: String = pprint.apply(this, width=Int.MaxValue).toString
 }
 
-case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups=Rollups(1),
+case class Ledger(orderBookSummary: OrderBookSummary=null, tradeRollups: Rollups=Rollups(7*24),
                   ledgerOrdersByID: ListMap[String, LedgerOrder]=ListMap.empty,
                   ledgerOrdersByClOrdID: ListMap[String, LedgerOrder]=ListMap.empty,
                   ledgerMetrics: LedgerMetrics=LedgerMetrics()) {
 
   // lazy val `_10s` = tradeRollups.withForecast(`10s`)
-  // lazy val `_1m`  = tradeRollups.withForecast(`1m`)
-  // lazy val `_1h`  = tradeRollups.withForecast(`1h`)
+  lazy val `_1m`  = tradeRollups.withForecast(`1m`)
+  lazy val `_1h`  = tradeRollups.withForecast(`1h`)
   // lazy val `_4h`  = tradeRollups.withForecast(`4h`)
 
   @deprecated lazy val ledgerOrders = ledgerOrdersByID.values
