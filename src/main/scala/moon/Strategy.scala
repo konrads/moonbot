@@ -36,6 +36,7 @@ class IndecreasingStrategy(val config: Config) extends Strategy {
   val minAbsSlope = config.optDouble("minAbsSlope").getOrElse(0.0001).abs
   val maxAbsSlope = config.optDouble("maxAbsSlope").getOrElse(0.001).abs
   val maxPeriod = periods.max
+  assert(!periods.contains(1), s"Cannot run averages on period of 1, periods: $periods")
   log.info(s"Strategy ${this.getClass.getSimpleName}: periods: ${periods.mkString(", ")}, minAbsSlope: $minAbsSlope, maxAbsSlope: $maxAbsSlope, dataFreq: $dataFreq")
   override def strategize(ledger: Ledger): StrategyResult = { //cacheHitOrCalculate[StrategyResult](ledger.tradeDatas.lastOption) {
     val prices = ledger.tradeRollups.withForecast(dataFreq).vwap.takeRight(maxPeriod+1)

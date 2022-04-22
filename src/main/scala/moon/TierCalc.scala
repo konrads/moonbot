@@ -23,7 +23,7 @@ case class TierCalcImpl(dir: Dir.Value, openOrdersWithTiers: Seq[(Double /* pric
   val tiersAsPct = (Double.PositiveInfinity +: openOrdersWithTiers_sorted.map(_._1))
     .zip(openOrdersWithTiers_sorted).zipWithIndex
     .map { case ((high, (low, qty)), tier) => Tier(tier=tier, priceLow=low, priceHigh=high, qty=qty)}.sortBy(- _.priceHigh)
-  // assert(! tiersAsPct.exists(_.qty % 100.0 != 0), s"Tiers qty must be multiple of 100s, or risk getting `Invalid leavesQty` http error.... Tiers: ${tiersAsPct}")
+  assert(! tiersAsPct.exists(_.qty % 100.0 != 0), s"Tiers qty must be multiple of 100s, or risk getting `Invalid leavesQty` http error.... Tiers: ${tiersAsPct}")
   var lastHighestOpenPrice = 0.0
   var tiersWithPrices = Seq.empty[Tier]
 
