@@ -228,15 +228,16 @@ object talib {
 
   /** Find increasing/decreasing slope of eg. 10, 5, 3 (e/s)ma's */
   def indecreasingSlope(xs: Seq[Double], maPeriods: Seq[Int]=Vector(10, 5, 3)): Option[Seq[Double]] = {
-    if (xs.size < maPeriods.max)
+    val maxPeriod = maPeriods.max
+    if (xs.size < maxPeriod)
       None
     else {
-      val mas = for(p <- maPeriods) yield polyfit(xs.takeRight(p))._1
+      val avg = xs.takeRight(maxPeriod).sum / maxPeriod
+      val mas = for(p <- maPeriods) yield polyfit(xs.takeRight(p))._1 / avg
       val sortedMas = mas.sorted
-      val isUnique = mas.toSet.size == mas.size  // ensure no repetition in the sequence, ie. true increasing/decreasing
-      if (mas.forall(_ > 0) && isUnique && mas == sortedMas)
+      if (mas.forall(_ > 0) && mas == sortedMas)
         Some(mas)
-      else if (mas.forall(_ < 0) && isUnique && mas == sortedMas.reverse)
+      else if (mas.forall(_ < 0) && mas == sortedMas.reverse)
         Some(mas)
       else
         None
